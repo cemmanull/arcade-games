@@ -1,0 +1,547 @@
+/*
+  XADREZ — estilo retrô
+
+  Mesma identidade da cobrinha e do Pong: fundo quase preto, neon ciano,
+  destaque magenta, fonte monoespaçada e uma malha de CRT por cima.
+
+  O CSS GRID aparece em QUATRO níveis, e vale reparar em cada um:
+
+      1. o layout da página   (tabuleiro | painel)
+      2. o tabuleiro          (8 x 8)
+      3. cada casa            (centralizar a peça)
+      4. os blocos do painel  (botões lado a lado)
+*/
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    /* Paleta compartilhada com os outros jogos do curso */
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    --cor-suave: #5c7a85;
+
+    /* Casas: dois tons frios, escuros o bastante para o neon brilhar */
+    --casa-clara: #17323b;
+    --casa-escura: #0b1d23;
+
+    --superficie: #0a141a;
+    --borda-painel: #1d3b45;
+
+    --tamanho-do-tabuleiro: min(72vmin, 520px);
+    --tamanho-da-casa: calc(var(--tamanho-do-tabuleiro) / 8);
+    --pixel: 3px;
+}
+
+body {
+    margin: 0;
+    padding: 20px;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+/*
+  A malha de CRT: uma camada por cima de tudo, com linhas finas nas duas
+  direções. pointer-events: none deixa o mouse atravessá-la.
+*/
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.6;
+    background:
+        repeating-linear-gradient(to right,
+            rgba(0, 0, 0, .3) 0, rgba(0, 0, 0, .3) 1px,
+            transparent 1px, transparent var(--pixel)),
+        repeating-linear-gradient(to bottom,
+            rgba(0, 0, 0, .3) 0, rgba(0, 0, 0, .3) 1px,
+            transparent 1px, transparent var(--pixel));
+}
+
+header {
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+h1 {
+    margin: 0;
+    font-size: clamp(1.2rem, 4vmin, 1.9rem);
+    letter-spacing: 10px;
+    text-transform: uppercase;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+#vez {
+    margin: 6px 0 0;
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cor-suave);
+}
+
+#vez.vez-pretas {
+    color: var(--cor-destaque);
+}
+
+
+/* ============================================================
+   GRID 1 — O LAYOUT DA PÁGINA
+   ============================================================ */
+/*
+  Duas colunas dimensionadas pelo conteúdo, centralizadas.
+
+  "auto auto" com justify-content: center coloca tabuleiro e painel lado
+  a lado, cada um com a largura de que precisa. Na media query lá embaixo,
+  uma única linha transforma isso em uma coluna só, para o celular.
+*/
+main {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    align-items: start;
+    gap: 22px;
+}
+
+#area-tabuleiro {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+}
+
+
+/* ============================================================
+   GRID 2 — O TABULEIRO
+   ============================================================ */
+/*
+  ATENÇÃO À SEGUNDA LINHA. É o detalhe que mais quebra tabuleiros:
+
+      grid-template-rows: repeat(8, 1fr);
+
+  Sem ela, a altura de cada linha é "auto" — ou seja, definida pelo
+  CONTEÚDO. Fileiras com peças ficariam mais altas que fileiras vazias, e
+  as casas mudariam de tamanho conforme as peças andassem pelo tabuleiro.
+
+  Definir as oito linhas explicitamente prende o tamanho: cada casa vale
+  exatamente 1/8 da altura, tenha o que tiver dentro.
+*/
+#tabuleiro {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+
+    width: var(--tamanho-do-tabuleiro);
+    height: var(--tamanho-do-tabuleiro);
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow:
+        0 0 24px rgba(0, 240, 255, 0.28),
+        inset 0 0 60px rgba(0, 0, 0, 0.5);
+}
+
+
+/* ============================================================
+   GRID 3 — CADA CASA
+   ============================================================ */
+.casa {
+    /*
+      Centralizar com grid + place-items resolve em uma linha o que o
+      flexbox faz em três. E, ao contrário do flex, o item centralizado
+      não influencia o tamanho da caixa.
+    */
+    display: grid;
+    place-items: center;
+
+    /*
+      A dupla que impede o conteúdo de esticar a célula.
+
+      Itens de grid têm min-width/min-height "auto" por padrão, o que
+      significa "nunca menor que o conteúdo". Zerar isso devolve o
+      controle do tamanho à grade.
+    */
+    min-width: 0;
+    min-height: 0;
+
+    position: relative;   /* referência para as coordenadas nos cantos */
+    overflow: hidden;
+
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+
+    font-family: inherit;
+    font-size: calc(var(--tamanho-da-casa) * 0.68);
+    line-height: 1;
+
+    transition: filter 0.12s;
+}
+
+.casa.clara { background-color: var(--casa-clara); }
+.casa.escura { background-color: var(--casa-escura); }
+
+.casa:hover {
+    filter: brightness(1.35);
+}
+
+/*
+  AS PEÇAS.
+
+  Em vez de branco e preto, o visual retrô usa as duas cores da paleta.
+  Além de combinar com o resto do curso, isso resolve um problema real do
+  Unicode: os símbolos "brancos" (♔♕♖) são contornos vazados e sumiriam
+  sobre fundos claros. Pintando os dois lados por CSS, o desenho do
+  símbolo deixa de importar.
+*/
+.casa.peca-branca {
+    color: var(--cor-neon);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.75);
+}
+
+.casa.peca-preta {
+    color: var(--cor-destaque);
+    text-shadow: 0 0 10px rgba(255, 47, 208, 0.7);
+}
+
+/*
+  COORDENADAS NOS CANTOS.
+
+  attr() lê um atributo do HTML. Como o JavaScript só define data-fileira
+  nas casas da primeira coluna e data-coluna nas da última linha, as
+  outras recebem conteúdo vazio e nada aparece — sem nenhuma regra extra
+  para escondê-las.
+*/
+.casa::before {
+    content: attr(data-fileira);
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    font-size: calc(var(--tamanho-da-casa) * 0.17);
+    color: var(--cor-suave);
+    letter-spacing: 0;
+    pointer-events: none;
+}
+
+.casa::after {
+    content: attr(data-coluna);
+    position: absolute;
+    bottom: 1px;
+    right: 4px;
+    font-size: calc(var(--tamanho-da-casa) * 0.17);
+    color: var(--cor-suave);
+    letter-spacing: 0;
+    pointer-events: none;
+}
+
+
+/* ============================================================
+   DESTAQUES
+   ============================================================
+   A ordem importa: quem vem depois vence o empate de especificidade.
+*/
+
+.casa.ultimo-lance {
+    background-color: #1d4450;
+}
+
+/*
+  Marcador de destino livre: uma bolinha no centro.
+
+  Feita com background-image (um degradê radial) em vez de um
+  pseudo-elemento, porque ::before e ::after já estão ocupados pelas
+  coordenadas. Um degradê é desenhado por cima da cor de fundo sem
+  substituí-la.
+*/
+.casa.destino {
+    background-image: radial-gradient(
+        circle at center,
+        rgba(0, 240, 255, 0.55) 0 18%,
+        transparent 19%
+    );
+}
+
+/* Destino ocupado: um anel, para a peça alvo continuar visível. */
+.casa.captura {
+    box-shadow: inset 0 0 0 var(--pixel) var(--cor-destaque);
+}
+
+.casa.em-xeque {
+    background-color: #6b1f2e;
+    box-shadow: inset 0 0 22px rgba(255, 60, 90, 0.7);
+}
+
+.casa.selecionada {
+    background-color: #2b5f6e;
+    box-shadow: inset 0 0 0 var(--pixel) var(--cor-neon);
+}
+
+/*
+  Nunca remova o contorno de foco sem colocar outro no lugar: sem ele,
+  quem joga por teclado não sabe em que casa está.
+*/
+.casa:focus-visible {
+    outline: var(--pixel) solid #ffe066;
+    outline-offset: calc(var(--pixel) * -1);
+    z-index: 2;
+}
+
+
+/* ============================================================
+   STATUS
+   ============================================================ */
+.status {
+    margin: 0;
+    padding: 10px 14px;
+    width: var(--tamanho-do-tabuleiro);
+    text-align: center;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+
+    background: var(--superficie);
+    border: 1px solid var(--borda-painel);
+    color: var(--cor-suave);
+}
+
+.status.xeque {
+    color: var(--cor-destaque);
+    border-color: var(--cor-destaque);
+    text-shadow: 0 0 10px rgba(255, 47, 208, 0.6);
+}
+
+.status.fim {
+    color: var(--cor-neon);
+    border-color: var(--cor-neon);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+
+.status.pensando {
+    color: #ffe066;
+    border-color: #6b5a1f;
+}
+
+
+/* ============================================================
+   GRID 4 — O PAINEL
+   ============================================================ */
+#painel {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    width: 250px;
+}
+
+/*
+  Cada bloco também é uma grade. "1fr 1fr" põe os botões em duas colunas
+  iguais, e o título ocupa a linha inteira com grid-column: 1 / -1.
+
+  "1 / -1" quer dizer "da primeira até a última linha vertical da grade" —
+  o jeito de dizer "ocupe a largura toda" sem saber quantas colunas existem.
+*/
+.bloco {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+
+    background: var(--superficie);
+    border: 1px solid var(--borda-painel);
+    padding: 12px;
+}
+
+.bloco h2 {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cor-suave);
+}
+
+/* Itens que devem ocupar a linha inteira do painel. */
+.bloco label,
+.bloco select,
+.bloco .largura-total {
+    grid-column: 1 / -1;
+}
+
+button,
+select {
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 10px 8px;
+
+    background: transparent;
+    border: 1px solid var(--cor-neon);
+    color: var(--cor-neon);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+button:hover:not(:disabled),
+select:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+}
+
+button:active:not(:disabled) {
+    transform: translateY(2px);
+}
+
+/*
+  Um botão desativado precisa PARECER desativado. Sem isto o usuário
+  clica, nada acontece, e ele conclui que a página está quebrada.
+*/
+button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: var(--borda-painel);
+    color: var(--cor-suave);
+}
+
+#novo-jogo {
+    border-color: var(--cor-destaque);
+    color: var(--cor-destaque);
+}
+
+#novo-jogo:hover {
+    background: var(--cor-destaque);
+    color: var(--cor-fundo);
+}
+
+.bloco label {
+    font-size: 0.62rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cor-suave);
+    margin-top: 2px;
+}
+
+button:focus-visible,
+select:focus-visible {
+    outline: 2px solid #ffe066;
+    outline-offset: 2px;
+}
+
+#capturadas {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.4;
+    word-break: break-all;
+    color: var(--cor-texto);
+    min-height: 1.4em;
+}
+
+/*
+  A LISTA DE LANCES, que cresce a partida inteira.
+
+  ATENÇÃO AO min-height: 0 — sem ele, nada disto funciona.
+
+  #lances é um item de grid (o pai .bloco é display: grid), e itens de
+  grid nascem com min-height: auto, que significa "nunca menor que o
+  conteúdo". No CSS, um mínimo SEMPRE vence um máximo — então o
+  max-height é simplesmente ignorado, a caixa cresce sem parar e o
+  overflow nunca chega a acontecer.
+
+  É a mesma armadilha que prendia o tamanho das casas do tabuleiro,
+  com outra roupa. A regra prática:
+
+      max-height + overflow dentro de um grid ou flex
+      pede min-height: 0 junto.
+
+  (Em containers flex na horizontal, o equivalente é min-width: 0 —
+  é o que faz textos longos pararem de esticar a caixa.)
+*/
+#lances {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding-left: 22px;
+
+    min-height: 0;
+    max-height: 190px;
+    overflow-y: auto;      /* rola sozinho quando passa da altura */
+    overscroll-behavior: contain;   /* rolar até o fim não arrasta a página junto */
+
+    font-size: 0.72rem;
+    font-weight: normal;
+    color: var(--cor-suave);
+}
+
+/*
+  Uma barra de rolagem discreta, no tom do painel. Sem isto o navegador
+  desenha a barra clara padrão, que destoa do resto no tema escuro.
+*/
+#lances::-webkit-scrollbar {
+    width: 8px;
+}
+
+#lances::-webkit-scrollbar-track {
+    background: var(--cor-fundo);
+}
+
+#lances::-webkit-scrollbar-thumb {
+    background: var(--borda-painel);
+}
+
+#lances::-webkit-scrollbar-thumb:hover {
+    background: var(--cor-suave);
+}
+
+/* Firefox usa propriedades padronizadas em vez dos pseudo-elementos. */
+#lances {
+    scrollbar-width: thin;
+    scrollbar-color: var(--borda-painel) var(--cor-fundo);
+}
+
+#lances li {
+    padding: 1px 0;
+}
+
+footer {
+    margin-top: 22px;
+    text-align: center;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    color: var(--cor-suave);
+}
+
+
+/* ============================================================
+   TELAS PEQUENAS
+   ============================================================ */
+@media (max-width: 760px) {
+    :root {
+        --tamanho-do-tabuleiro: min(92vw, 460px);
+    }
+
+    body {
+        padding: 12px;
+    }
+
+    /*
+      Uma linha desmonta o layout de duas colunas.
+      É toda a diferença entre a versão de desktop e a de celular.
+    */
+    main {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    #painel {
+        width: var(--tamanho-do-tabuleiro);
+    }
+
+    h1 {
+        letter-spacing: 6px;
+    }
+}

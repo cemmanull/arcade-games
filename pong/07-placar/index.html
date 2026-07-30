@@ -1,0 +1,64 @@
+<!--
+  PONG — PASSO 7: O PLACAR
+
+  O HTML cresce pela primeira vez desde o passo 1. E repare no que os
+  elementos novos têm em comum: são TEXTO.
+
+  Nada disso foi desenhado no canvas, embora tudo apareça em volta ou
+  por cima dele. Texto de verdade pode ser selecionado, traduzido,
+  ampliado e lido em voz alta por um leitor de tela. O que é pintado no
+  canvas é só uma imagem muda.
+
+      Se é TEXTO, use HTML. Se é GRÁFICO, use canvas.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong — passo 7</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pong</h1>
+
+    <div id="jogo-container">
+
+        <div id="placar">
+            <span id="pontos-esquerda">0</span>
+            <span id="separador">—</span>
+            <span id="pontos-direita">0</span>
+        </div>
+
+        <div id="tela">
+            <!-- position: relative — o ponto de referência da camada de mensagem. -->
+
+            <canvas id="jogo" width="160" height="96">
+                Seu navegador não suporta canvas.
+            </canvas>
+
+            <div id="camada-mensagem" hidden>
+                <p id="mensagem-titulo">Fim de jogo</p>
+                <p id="mensagem-texto"></p>
+                <!--
+                  Esta camada JÁ EXISTE na página, escondida pelo atributo
+                  hidden. Terminar o jogo é só removê-lo.
+
+                  Mostrar algo que já existe é mais simples do que criar
+                  elementos por código: menos passos, menos como errar.
+                -->
+            </div>
+        </div>
+
+    </div>
+
+    <p id="ajuda">
+        <span>Esquerda: W / S</span>
+        <span>Direita: ↑ / ↓</span>
+        <span>Recarregue a página para jogar de novo</span>
+    </p>
+</body>
+</html>

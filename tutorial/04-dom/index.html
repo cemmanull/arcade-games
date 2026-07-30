@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lição 4 — DOM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>DOM</h1>
+    <p class="subtitulo">O JavaScript mexendo na página, ao vivo.</p>
+
+    <main>
+
+        <section>
+            <h2>1. Ler e escrever texto</h2>
+            <p>Contador: <strong id="contador">0</strong></p>
+            <button id="botao-somar" type="button">Somar 1</button>
+            <button id="botao-zerar" type="button">Zerar</button>
+        </section>
+
+        <section>
+            <h2>2. Mudar o estilo</h2>
+            <p id="alvo-estilo">Este parágrafo muda de aparência.</p>
+            <button id="botao-classe" type="button">Ligar/desligar destaque</button>
+            <button id="botao-cor" type="button">Cor aleatória</button>
+        </section>
+
+        <section>
+            <h2>3. Mostrar e esconder</h2>
+            <p id="segredo" hidden>Você me encontrou.</p>
+            <button id="botao-segredo" type="button">Mostrar/esconder</button>
+        </section>
+
+        <section>
+            <h2>4. Criar elementos</h2>
+            <form id="formulario">
+                <label for="campo-item">Novo item:</label>
+                <input type="text" id="campo-item" placeholder="digite e aperte Enter">
+                <button type="submit">Adicionar</button>
+            </form>
+
+            <ul id="lista"></ul>
+            <!-- Começa vazia: tudo aqui dentro será criado por JavaScript. -->
+
+            <p class="nota" id="contagem-itens">Nenhum item ainda.</p>
+        </section>
+
+        <section>
+            <h2>5. Eventos ao vivo</h2>
+
+            <p>
+                <label for="campo-espelho">Digite algo:</label>
+                <input type="text" id="campo-espelho" placeholder="vai aparecer abaixo">
+            </p>
+            <p>Você digitou: <strong id="espelho">(nada)</strong></p>
+
+            <p>
+                <label for="controle-tamanho">Tamanho do texto:</label>
+                <input type="range" id="controle-tamanho" min="12" max="48" value="16">
+                <span id="valor-tamanho">16px</span>
+            </p>
+
+            <div id="area-mouse">Mova o mouse aqui dentro</div>
+            <p class="nota">Última tecla pressionada: <strong id="ultima-tecla">(nenhuma)</strong></p>
+        </section>
+
+    </main>
+
+    <footer>
+        <p><small>Fim da lição 4. Abra o console (F12) — algumas coisas são explicadas lá.</small></p>
+    </footer>
+</body>
+</html>

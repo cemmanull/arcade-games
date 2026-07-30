@@ -1,0 +1,33 @@
+<!--
+  PONG — PASSO 1: A TELA
+
+  Nada se move ainda. O objetivo aqui é só colocar as três peças do jogo
+  no lugar e reencontrar o canvas com um olhar novo.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pong</h1>
+
+    <canvas id="jogo" width="160" height="96">
+        Seu navegador não suporta canvas.
+        <!--
+          160 por 96 é a RESOLUÇÃO de desenho, não o tamanho na tela.
+          O CSS amplia isso 4 vezes (para 640x384).
+
+          Repare na proporção: 160/96 é o mesmo que 5/3, uma tela deitada.
+          A cobrinha era quadrada porque o tabuleiro era quadrado; aqui a
+          quadra é larga, porque o jogo acontece de um lado ao outro.
+        -->
+    </canvas>
+</body>
+</html>

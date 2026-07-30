@@ -1,0 +1,39 @@
+<!--
+  PASSO 3 — DESENHO
+  O HTML mudou UMA linha de novo: a que carrega o JavaScript.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Cobrinha</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="script.js" defer></script>
+    <!--
+      NOVO. Carrega o JavaScript.
+
+      "defer" significa: espere o HTML terminar de carregar antes de rodar.
+      Sem ele, o script rodaria AGORA, no meio do <head>, quando o <canvas>
+      lá embaixo ainda não existe. O JavaScript procuraria o canvas, não
+      acharia nada, e o jogo quebraria com uma mensagem obscura.
+
+      Se um dia um script seu reclamar de "null", desconfie desta palavra.
+    -->
+</head>
+
+<body>
+    <h1>Cobrinha</h1>
+
+    <canvas id="jogo" width="400" height="400">
+        Seu navegador não suporta canvas.
+    </canvas>
+    <!--
+      O id="jogo" finalmente vai ser usado: é por ele que o JavaScript
+      encontra este elemento no meio da página.
+    -->
+</body>
+</html>

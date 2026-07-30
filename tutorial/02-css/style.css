@@ -1,0 +1,416 @@
+/*
+  LIÇÃO 2 — CSS
+
+  Toda regra tem a mesma forma:
+
+      seletor {
+          propriedade: valor;
+      }
+
+  Comentários em CSS ficam entre barra-asterisco, como este.
+*/
+
+
+/* ============================================================
+   VARIÁVEIS
+   ============================================================ */
+/*
+  :root é o elemento raiz da página (o <html>).
+  Variáveis declaradas aqui valem para o documento inteiro.
+
+  Por que usá-las? Para cada valor existir em UM lugar só.
+  Mudar o tema vira mudar cinco linhas, não cinquenta.
+*/
+:root {
+    --cor-fundo: #ffffff;
+    --cor-texto: #1a1a2e;
+    --cor-principal: #2563eb;
+    --cor-suave: #eef2ff;
+    --cor-borda: #d5d9e8;
+    --espaco: 16px;
+    --arredondamento: 8px;
+}
+
+
+/* ============================================================
+   BASE
+   ============================================================ */
+/*
+  O SELETOR UNIVERSAL (*) pega todos os elementos.
+
+  box-sizing: border-box muda como a largura é calculada:
+      content-box (padrão) -> width é só o conteúdo; padding e borda SOMAM
+      border-box           -> width é o total, já incluindo padding e borda
+
+  Com o padrão, uma caixa de width:100px com 20px de padding ocupa 140px —
+  e ninguém quer isso. Estas três linhas são a primeira coisa que se escreve
+  em praticamente todo projeto CSS do mundo.
+*/
+* {
+    box-sizing: border-box;
+}
+
+body {
+    /*
+      Propriedades de TEXTO são HERDADAS: definidas aqui, valem para todos os
+      elementos de dentro. É por isso que não repetimos a fonte em cada regra.
+      (Já propriedades de caixa, como border, não são herdadas — senão cada
+      elemento interno repetiria a borda do pai.)
+    */
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    /*
+      Uma PILHA DE FONTES: o navegador tenta a primeira; se não tiver,
+      passa para a próxima. "system-ui" usa a fonte do sistema operacional —
+      carrega instantaneamente porque já está no computador.
+    */
+
+    line-height: 1.6;
+    /*
+      Altura da linha, sem unidade = múltiplo do tamanho da fonte.
+      Entre 1.4 e 1.7 é o intervalo confortável para leitura. Textos com
+      linhas grudadas cansam a vista mais do que se imagina.
+    */
+
+    color: var(--cor-texto);
+    background-color: var(--cor-fundo);
+
+    max-width: 800px;
+    /*
+      Linhas muito largas são difíceis de ler: o olho se perde ao voltar
+      para o começo da linha seguinte. Entre 60 e 80 caracteres é o ideal.
+    */
+
+    margin: 0 auto;
+    /*
+      Dois valores: 0 em cima/embaixo, "auto" nas laterais.
+      "auto" divide o espaço que sobra igualmente entre esquerda e direita —
+      é o jeito clássico de centralizar um bloco com largura definida.
+    */
+
+    padding: var(--espaco);
+}
+
+h1, h2, h3 {
+    line-height: 1.2;  /* títulos pedem linhas mais justas que o corpo de texto */
+}
+
+h2 {
+    /*
+      Uma borda só de um lado. Você pode especificar cada lado:
+      border-top, border-right, border-bottom, border-left.
+    */
+    border-bottom: 2px solid var(--cor-suave);
+    padding-bottom: 8px;
+    margin-top: 48px;
+}
+
+code {
+    background: var(--cor-suave);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "Courier New", monospace;
+    font-size: 0.9em;
+    /*
+      "em" é relativo ao tamanho da fonte do PAI: 0.9em = 90% do texto ao redor.
+      "rem" é relativo à raiz (<html>), ou seja, sempre o mesmo.
+      Use rem quando quiser uma escala previsível; em quando quiser
+      acompanhar o contexto — como aqui.
+    */
+}
+
+.nota {
+    color: #6b7280;
+    font-size: 0.9em;
+}
+
+
+/* ============================================================
+   1. SELETORES
+   ============================================================ */
+/*
+  Os três básicos:
+
+      p          -> pela TAG
+      .destaque  -> pela CLASSE  (ponto)  — pode repetir na página
+      #unico     -> pelo ID      (jogo da velha) — único na página
+
+  ESPECIFICIDADE — quem vence quando duas regras disputam o mesmo elemento:
+
+      id (#) > classe (.) > tag
+
+  Em caso de empate, vence a que estiver mais ABAIXO no arquivo.
+
+  Quando um estilo "não funciona", quase sempre ele está funcionando e sendo
+  derrotado. Aperte F12, aba Styles: as regras vencidas aparecem RISCADAS.
+
+  Regra prática: use classes para quase tudo. Ids têm especificidade alta
+  demais e viram uma briga de escalada difícil de desfazer depois.
+*/
+.destaque {
+    background: var(--cor-suave);
+    padding: 8px 12px;
+    border-left: 4px solid var(--cor-principal);
+}
+
+#unico {
+    color: var(--cor-principal);
+    font-weight: bold;
+}
+
+.grande {
+    font-size: 1.2em;
+}
+/*
+  O parágrafo com class="destaque grande" recebe AS DUAS regras.
+  Classes se acumulam — é assim que se combinam estilos pequenos e reusáveis,
+  em vez de escrever uma regra gigante para cada elemento.
+*/
+
+
+/* ============================================================
+   2. BOX MODEL
+   ============================================================ */
+/*
+  Toda caixa tem quatro camadas, de dentro para fora:
+
+      conteúdo -> padding -> border -> margin
+
+  padding empurra o CONTEÚDO para dentro (fica dentro do fundo colorido)
+  margin  empurra os VIZINHOS para longe (fica fora, transparente)
+
+  Confundir os dois é a causa de metade dos problemas de espaçamento.
+*/
+.demo-caixas {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    background: repeating-linear-gradient(
+        45deg, #f8f8f8, #f8f8f8 10px, #eee 10px, #eee 20px
+    );  /* fundo listrado só para as margens ficarem visíveis */
+}
+
+.caixa {
+    background: var(--cor-suave);
+    border: 2px solid var(--cor-principal);
+}
+
+.com-padding {
+    padding: 20px;   /* cresce por dentro: o fundo colorido aumenta */
+}
+
+.com-margem {
+    margin: 20px;    /* afasta os vizinhos: o fundo colorido NÃO aumenta */
+}
+
+
+/* ============================================================
+   3. FLEXBOX
+   ============================================================ */
+/*
+  Flexbox organiza os filhos em UMA direção — uma linha ou uma coluna.
+
+  Ponto que confunde todo mundo: as propriedades vão no PAI, mas o efeito
+  aparece nos FILHOS.
+
+      flex-direction   -> row (padrão) ou column: escolhe o eixo principal
+      justify-content  -> alinha AO LONGO do eixo principal
+      align-items      -> alinha no eixo PERPENDICULAR
+      gap              -> espaço entre os filhos
+      flex-wrap        -> deixa quebrar para a linha de baixo quando não couber
+
+  Se você trocar row por column, justify-content e align-items TROCAM de eixo.
+  A regra é: justify-content sempre segue a direção que você escolheu.
+*/
+.demo-flex {
+    display: flex;
+    justify-content: space-between;  /* joga um item para cada ponta */
+    align-items: center;
+    gap: var(--espaco);
+    padding: var(--espaco);
+    background: var(--cor-suave);
+    border-radius: var(--arredondamento);
+}
+
+.item {
+    background: var(--cor-principal);
+    color: white;
+    padding: var(--espaco);
+    border-radius: var(--arredondamento);
+    text-align: center;
+}
+
+
+/* ============================================================
+   4. GRID
+   ============================================================ */
+/*
+  Grid organiza em DUAS direções: linhas e colunas ao mesmo tempo.
+
+      grid-template-columns: repeat(3, 1fr)
+      -> três colunas de tamanho igual
+
+  "fr" é uma unidade nova, de FRAÇÃO do espaço disponível.
+  1fr 2fr = a segunda coluna fica com o dobro da primeira.
+
+  Quando usar cada um?
+      flexbox -> uma fileira de coisas (menu, barra de botões, lista)
+      grid    -> um layout de verdade (galeria, painel, página inteira)
+*/
+.demo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--espaco);
+}
+
+.largo {
+    grid-column: span 2;  /* este item ocupa duas colunas */
+}
+
+
+/* ============================================================
+   5. ESTADOS (pseudo-classes)
+   ============================================================ */
+/*
+  Pseudo-classes começam com dois-pontos e descrevem um ESTADO temporário:
+
+      :hover   -> o mouse está em cima
+      :active  -> está sendo pressionado agora
+      :focus   -> tem o foco do teclado
+      :disabled, :checked, :first-child, :last-child, :nth-child(2)...
+*/
+.botao {
+    background: var(--cor-principal);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: var(--arredondamento);
+    font: inherit;  /* botões ignoram a fonte herdada; isto devolve a do body */
+    cursor: pointer;
+
+    /*
+      TRANSITION suaviza a mudança entre estados.
+      Sem ela, a cor pula; com ela, desliza em 0.2 segundos.
+      Escreva sempre no estado NORMAL, não no :hover — assim a animação
+      acontece tanto na ida quanto na volta.
+    */
+    transition: background 0.2s, transform 0.1s;
+}
+
+.botao:hover {
+    background: #1d4ed8;
+}
+
+.botao:active {
+    transform: translateY(2px);  /* afunda ao ser pressionado */
+}
+
+.link-demo {
+    color: var(--cor-principal);
+    margin-left: var(--espaco);
+}
+
+/*
+  :focus-visible aparece quando o elemento recebe foco pelo TECLADO (Tab),
+  mas não quando é clicado com o mouse.
+
+  Nunca escreva "outline: none" sem colocar outro indicador no lugar:
+  quem navega por teclado ficaria sem saber onde está na página.
+*/
+input:focus-visible,
+.botao:focus-visible,
+.link-demo:focus-visible {
+    outline: 3px solid var(--cor-principal);
+    outline-offset: 2px;
+}
+
+input {
+    padding: 8px 12px;
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--arredondamento);
+    font: inherit;
+}
+
+
+/* ============================================================
+   6. POSICIONAMENTO
+   ============================================================ */
+/*
+      static   -> o padrão: o elemento fica onde o fluxo do texto o colocou
+      relative -> igual ao static, mas vira REFERÊNCIA para filhos absolutos
+      absolute -> sai do fluxo e se posiciona pelo ancestral posicionado
+                  mais próximo
+      fixed    -> preso à janela; não rola com a página
+      sticky   -> normal até chegar num limite, e então gruda
+
+  A dupla relative (no pai) + absolute (no filho) é o padrão para
+  sobrepor camadas: etiquetas, distintivos, legendas, modais.
+
+  Sem o relative no pai, o filho absoluto se posiciona em relação à PÁGINA
+  inteira — e é assim que ele vai parar no canto errado da tela. Essa é a
+  explicação para 90% dos "meu absolute foi para o lugar errado".
+*/
+.demo-posicao {
+    position: relative;   /* o ponto de referência */
+    padding: var(--espaco);
+    background: var(--cor-suave);
+    border-radius: var(--arredondamento);
+}
+
+.etiqueta {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--cor-principal);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 999px;  /* um raio absurdo vira uma cápsula perfeita */
+    font-size: 0.8em;
+}
+
+
+/* ============================================================
+   7. RESPONSIVO
+   ============================================================ */
+.demo-cartas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;  /* duas colunas, em telas largas */
+    gap: var(--espaco);
+}
+
+.carta {
+    padding: var(--espaco);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--arredondamento);
+}
+
+.carta h3 {
+    margin-top: 0;
+}
+
+/*
+  MEDIA QUERY: um bloco de regras que só vale sob certas condições.
+
+  "max-width: 600px" = aplique isto quando a janela tiver ATÉ 600px.
+
+  A ordem recomendada é MOBILE FIRST: escreva primeiro o estilo do celular
+  (sem media query) e use min-width para adicionar o que telas maiores
+  ganham. Aqui fizemos o contrário de propósito, porque é mais fácil de
+  enxergar em uma demonstração — estreite a janela e veja o layout mudar.
+*/
+@media (max-width: 600px) {
+    body {
+        background-color: #fff8e1;  /* muda o fundo, só para você ver disparar */
+    }
+
+    .demo-cartas {
+        grid-template-columns: 1fr;  /* uma coluna: as cartas empilham */
+    }
+
+    .demo-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
+}

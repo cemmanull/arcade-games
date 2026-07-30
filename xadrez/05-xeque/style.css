@@ -1,0 +1,289 @@
+/*
+  XADREZ — estilo retrô
+
+  Mesma identidade da cobrinha e do Pong: fundo quase preto, neon ciano,
+  destaque magenta, fonte monoespaçada e uma malha de CRT por cima.
+
+  A estrela deste arquivo é o CSS GRID, usado em três níveis:
+    - o layout da página
+    - o tabuleiro (8x8)
+    - a moldura com as coordenadas
+*/
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    /* Paleta compartilhada com os outros jogos do curso */
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    --cor-suave: #5c7a85;
+
+    /* Casas: dois tons frios, escuros o bastante para o neon brilhar */
+    --casa-clara: #17323b;
+    --casa-escura: #0b1d23;
+
+    --borda-painel: #1d3b45;
+    --superficie: #0b141a;
+
+    /*
+      vmin = 1% do MENOR lado da janela. O tabuleiro cabe tanto num
+      celular em pé quanto num monitor deitado, sem media query.
+    */
+    --tamanho-do-tabuleiro: min(76vmin, 520px);
+    --tamanho-da-casa: calc(var(--tamanho-do-tabuleiro) / 8);
+    --pixel: 3px;
+}
+
+body {
+    /*
+      GRID Nº 1 — o layout da página.
+
+      Uma coluna só, com as faixas dimensionadas pelo conteúdo. Poderia
+      ser flex; usamos grid porque no passo 7, quando entra o painel
+      lateral, basta mudar esta linha para "auto 1fr" e nada mais.
+    */
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 18px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/*
+  A malha de CRT: uma camada por cima de tudo, com linhas finas nas duas
+  direções. pointer-events: none deixa o mouse atravessá-la.
+*/
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.6;
+    background:
+        repeating-linear-gradient(to right,
+            rgba(0, 0, 0, .3) 0, rgba(0, 0, 0, .3) 1px,
+            transparent 1px, transparent var(--pixel)),
+        repeating-linear-gradient(to bottom,
+            rgba(0, 0, 0, .3) 0, rgba(0, 0, 0, .3) 1px,
+            transparent 1px, transparent var(--pixel));
+}
+
+h1 {
+    margin: 0;
+    font-size: clamp(1.2rem, 4vmin, 1.9rem);
+    letter-spacing: 10px;
+    text-transform: uppercase;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+
+/* ============================================================
+   O TABULEIRO
+   ============================================================ */
+/*
+  GRID Nº 2 — as 64 casas.
+
+  ATENÇÃO À SEGUNDA LINHA, e este é o detalhe que mais quebra tabuleiros:
+
+      grid-template-rows: repeat(8, 1fr);
+
+  Sem ela, a altura de cada linha é "auto" — ou seja, definida pelo
+  CONTEÚDO. Fileiras com peças ficariam mais altas que fileiras vazias, e
+  as casas mudariam de tamanho conforme o jogo andasse.
+
+  Definir as oito linhas explicitamente prende o tamanho: cada casa passa
+  a valer exatamente 1/8 da altura, tenha o que tiver dentro.
+*/
+#tabuleiro {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+
+    width: var(--tamanho-do-tabuleiro);
+    height: var(--tamanho-do-tabuleiro);
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow:
+        0 0 24px rgba(0, 240, 255, 0.28),
+        inset 0 0 60px rgba(0, 0, 0, 0.5);
+}
+
+.casa {
+    /*
+      GRID Nº 3 — dentro de cada casa.
+
+      Centralizar com grid + place-items resolve em uma linha o que o
+      flexbox faz em três. E, ao contrário do flex, o item centralizado
+      não influencia o tamanho da caixa.
+    */
+    display: grid;
+    place-items: center;
+
+    /*
+      A dupla que impede o conteúdo de esticar a célula.
+
+      Itens de grid têm min-width/min-height "auto" por padrão, o que
+      significa "nunca menor que o conteúdo". Um símbolo grande poderia
+      empurrar a célula. Zerar isso devolve o controle à grade.
+    */
+    min-width: 0;
+    min-height: 0;
+
+    position: relative;   /* referência para as coordenadas nos cantos */
+    overflow: hidden;
+
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+
+    font-family: inherit;
+    /* O tamanho da peça acompanha o da casa: nada quebra ao encolher. */
+    font-size: calc(var(--tamanho-da-casa) * 0.68);
+    line-height: 1;
+
+    transition: filter 0.12s;
+}
+
+.casa.clara { background-color: var(--casa-clara); }
+.casa.escura { background-color: var(--casa-escura); }
+
+.casa:hover {
+    filter: brightness(1.35);
+}
+
+/*
+  COORDENADAS NOS CANTOS.
+
+  attr() lê um atributo do HTML. Como o JavaScript só define data-fileira
+  nas casas da primeira coluna e data-coluna nas da última linha, as
+  outras recebem conteúdo vazio e nada aparece — sem precisar de nenhuma
+  regra extra para escondê-las.
+*/
+.casa::before {
+    content: attr(data-fileira);
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    font-size: calc(var(--tamanho-da-casa) * 0.17);
+    color: var(--cor-suave);
+    letter-spacing: 0;
+    pointer-events: none;
+}
+
+.casa::after {
+    content: attr(data-coluna);
+    position: absolute;
+    bottom: 1px;
+    right: 4px;
+    font-size: calc(var(--tamanho-da-casa) * 0.17);
+    color: var(--cor-suave);
+    letter-spacing: 0;
+    pointer-events: none;
+}
+
+/*
+  Nunca remova o contorno de foco sem colocar outro no lugar: sem ele,
+  quem navega por teclado não sabe em que casa está. Aperte Tab e veja.
+*/
+.casa:focus-visible {
+    outline: var(--pixel) solid var(--cor-destaque);
+    outline-offset: calc(var(--pixel) * -1);
+    z-index: 2;
+}
+
+#legenda {
+    margin: 0;
+    color: var(--cor-suave);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+/* ============================================================
+   AS PEÇAS
+   ============================================================ */
+/*
+  Em vez de branco e preto, o visual retrô usa as duas cores da paleta:
+  ciano para um lado, magenta para o outro. Além de combinar com o resto
+  do curso, isso resolve um problema real do Unicode — os símbolos
+  "brancos" (♔♕♖) são contornos vazados e somem sobre fundos claros.
+  Pintando os dois lados por CSS, o desenho do símbolo deixa de importar.
+*/
+.casa.peca-branca {
+    color: var(--cor-neon);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.75);
+}
+
+.casa.peca-preta {
+    color: var(--cor-destaque);
+    text-shadow: 0 0 10px rgba(255, 47, 208, 0.7);
+}
+/* ============================================================
+   DESTAQUES
+   ============================================================
+   A aparência mora aqui; o JavaScript só decide QUANDO aplicar cada
+   classe. A ordem das regras importa: quem vem depois vence o empate
+   de especificidade.
+*/
+
+/* Casa de onde e para onde foi o último lance. */
+.casa.ultimo-lance {
+    background-color: #1d4450;
+}
+
+/*
+  Marcador de destino livre: uma bolinha no centro.
+
+  Feita com background-image (um degradê radial) em vez de um
+  pseudo-elemento, porque ::before e ::after já estão ocupados pelas
+  coordenadas dos cantos. Um degradê pode ser desenhado por cima da cor
+  de fundo sem substituí-la.
+*/
+.casa.destino {
+    background-image: radial-gradient(
+        circle at center,
+        rgba(0, 240, 255, 0.55) 0 18%,
+        transparent 19%
+    );
+}
+
+/* Destino ocupado: um anel, para a peça alvo continuar visível. */
+.casa.captura {
+    box-shadow: inset 0 0 0 var(--pixel) var(--cor-destaque);
+}
+
+.casa.selecionada {
+    background-color: #2b5f6e;
+    box-shadow: inset 0 0 0 var(--pixel) var(--cor-neon);
+}
+/* Rei em xeque: destaque vermelho, o único alarme do tabuleiro. */
+.casa.em-xeque {
+    background-color: #6b1f2e;
+    box-shadow: inset 0 0 22px rgba(255, 60, 90, 0.7);
+}
+
+#legenda.alerta {
+    color: var(--cor-destaque);
+    text-shadow: 0 0 10px rgba(255, 47, 208, 0.6);
+}
+
+#legenda.fim {
+    color: var(--cor-neon);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}

@@ -1,0 +1,35 @@
+<!--
+  XADREZ — PASSO 1: O TABULEIRO
+
+  A primeira decisão deste módulo já aparece aqui, e ela é sobre o que
+  NÃO vamos usar: não há <canvas> nenhum.
+
+  Cobrinha e Pong pintavam pixels. Um tabuleiro de xadrez é outra coisa:
+  são 64 casas discretas, que se clicam uma a uma. Isso é HTML.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xadrez — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Xadrez</h1>
+
+    <div id="tabuleiro"></div>
+    <!--
+      Vazio de propósito. As 64 casas são criadas pelo JavaScript.
+
+      Escrever 64 <div> à mão seria possível — e insuportável de manter.
+      Sempre que um HTML fica repetitivo, é sinal de que ele deveria ser
+      gerado por código.
+    -->
+
+    <p id="legenda">64 casas, criadas por código.</p>
+</body>
+</html>

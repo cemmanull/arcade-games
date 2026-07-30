@@ -1,0 +1,168 @@
+/*
+  PONG — estilo
+
+  Mesma identidade visual da cobrinha: baixa resolução ampliada por um
+  número inteiro, com as bordas duras.
+*/
+
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+
+    /*
+      A ESCALA DO PIXEL, em um lugar só.
+      O canvas tem 160x96 pixels de desenho; 4x = 640x384 na tela.
+      Precisa ser um número INTEIRO: com 2.5 um pixel viraria dois e meio,
+      e como meio pixel não existe o navegador borraria tudo para disfarçar.
+    */
+    --pixel: 4px;
+    --largura-da-tela: 640px;   /* 160 x 4 — a altura o canvas deduz sozinho */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 12px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+#jogo-container {
+    width: fit-content;
+}
+
+#placar {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 12px;
+    font-size: 32px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.6);
+}
+
+#separador {
+    opacity: 0.4;
+}
+
+/*
+  position: relative marca o ponto de referência para a camada de
+  mensagem, que é absolute. Sem isto ela se posicionaria em relação à
+  página inteira.
+*/
+#tela {
+    position: relative;
+    line-height: 0;   /* remove o espacinho de texto embaixo do canvas */
+}
+
+canvas {
+    display: block;
+
+    /*
+      O canvas tem 160x96 pixels de desenho e é exibido com 4x o tamanho.
+      "pixelated" manda repetir cada pixel tal e qual, em vez de misturar
+      os vizinhos para suavizar — é o que mantém as bordas duras.
+    */
+    width: var(--largura-da-tela);
+    image-rendering: pixelated;
+
+    /*
+      Em telas estreitas, encolher é melhor do que vazar para fora.
+      Com "height: auto", o canvas mantém sozinho a proporção 160:96 —
+      não precisamos escrever a altura em lugar nenhum.
+    */
+    max-width: 92vw;
+    height: auto;
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+}
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;   /* cola nos quatro lados do pai */
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    background: rgba(6, 7, 13, 0.85);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+/*
+  PEGADINHA: o atributo hidden funciona porque o navegador aplica
+  display:none. Como a regra acima define display:flex — mais específica —
+  ela venceria a cascata e o elemento apareceria mesmo "escondido".
+  Sempre que definir display num elemento que usa hidden, escreva também
+  a regra do [hidden].
+*/
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 6px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    font-size: 13px;
+    color: var(--cor-texto);
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 24px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #5c7a85;
+}
+
+@media (max-width: 700px) {
+    h1 {
+        font-size: 22px;
+        letter-spacing: 8px;
+    }
+
+    #placar {
+        font-size: 24px;
+    }
+}

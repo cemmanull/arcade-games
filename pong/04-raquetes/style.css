@@ -1,0 +1,69 @@
+/*
+  PONG — PASSO 1: estilo
+
+  A ampliação por número inteiro, igual à do passo final da cobrinha.
+*/
+
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-texto: #d8f6ff;
+
+    /*
+      O canvas tem 160x96 pixels de desenho; 4x = 640px de largura.
+      Precisa ser INTEIRO: com 2.5 um pixel viraria dois e meio, e como
+      meio pixel não existe o navegador borraria tudo para disfarçar.
+    */
+    --pixel: 4px;
+    --largura-da-tela: 640px;   /* 160 x 4 — a altura o canvas deduz sozinho */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 12px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+canvas {
+    display: block;
+
+    /*
+      "pixelated" manda o navegador repetir cada pixel tal e qual ao
+      ampliar, em vez de misturar os vizinhos para suavizar. É o que
+      mantém as bordas duras.
+    */
+    width: var(--largura-da-tela);
+    image-rendering: pixelated;
+
+    /* Em telas estreitas, encolher é melhor do que vazar para fora. */
+    max-width: 92vw;
+    height: auto;   /* mantém sozinho a proporção 160:96 */
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+}

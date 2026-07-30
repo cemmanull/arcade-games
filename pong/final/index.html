@@ -1,0 +1,69 @@
+<!--
+  PONG
+
+  Se você vem da cobrinha, repare na diferença fundamental:
+  lá tudo andava de casa em casa, numa grade. Aqui as coisas ocupam
+  posições fracionárias e se movem um pouquinho a cada quadro, 60 vezes
+  por segundo. Isso muda o movimento, a colisão e o loop inteiro.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pong</h1>
+
+    <div id="jogo-container">
+
+        <div id="placar">
+            <span id="pontos-esquerda">0</span>
+            <span id="separador">—</span>
+            <span id="pontos-direita">0</span>
+            <!--
+              O placar é HTML, não desenho no canvas: texto de verdade pode
+              ser lido em voz alta, ampliado e selecionado. Só o que é
+              gráfico vai para o canvas.
+            -->
+        </div>
+
+        <div id="tela">
+            <!-- position: relative — o ponto de referência da camada de mensagem. -->
+
+            <canvas id="jogo" width="160" height="96">
+                Seu navegador não suporta canvas.
+                <!--
+                  160x96 é a RESOLUÇÃO de desenho, não o tamanho na tela.
+                  O CSS amplia isso 4 vezes (para 640x384) e usa
+                  image-rendering: pixelated, para cada pixel virar um bloco
+                  4x4 nítido em vez de ser borrado.
+                -->
+            </canvas>
+
+            <div id="camada-mensagem">
+                <p id="mensagem-titulo">Pong</p>
+                <p id="mensagem-texto">Primeiro a 5 pontos vence.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="controles">
+        <button id="botao-iniciar" type="button">Iniciar</button>
+        <button id="botao-modo" type="button">Modo: 1 jogador</button>
+        <button id="botao-som" type="button">Som: ligado</button>
+    </div>
+
+    <p id="ajuda">
+        <span id="ajuda-jogador1">Esquerda: W / S</span>
+        <span id="ajuda-jogador2">Direita: ↑ / ↓</span>
+        <span>P: pausar</span>
+    </p>
+</body>
+</html>

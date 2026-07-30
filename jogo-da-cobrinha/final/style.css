@@ -1,0 +1,291 @@
+/*
+  ============================================================
+  CSS = APARÊNCIA (como o esqueleto do HTML se veste)
+  ============================================================
+
+  Toda regra CSS tem a mesma forma:
+
+      seletor {
+          propriedade: valor;
+      }
+
+  O SELETOR escolhe QUAIS elementos serão afetados:
+      body      -> todo elemento <body>        (pelo nome da tag)
+      #placar   -> o elemento com id="placar"  (# = id, é único)
+      .item     -> todos com class="item"      (. = classe, pode repetir)
+      button:hover -> botões, mas só com o mouse em cima
+
+  "CSS" = Cascading Style Sheets — Folhas de Estilo em CASCATA.
+  Cascata significa: se duas regras disputam o mesmo elemento, vence
+  a mais ESPECÍFICA (#id > .classe > tag) e, em caso de empate,
+  a que estiver mais ABAIXO no arquivo.
+*/
+
+
+/*
+  :root = o elemento raiz (<html>), o "ancestral de todos".
+  Serve para declarar VARIÁVEIS (nomes que começam com --).
+
+  Por que variáveis? Para a cor existir em um lugar só.
+  Trocar o tema inteiro vira trocar 4 linhas, não 40.
+*/
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    /* Cores em hexadecimal: #RRGGBB — dois dígitos de vermelho, verde e azul. */
+
+    /*
+      A ESCALA DO PIXEL, em um lugar só.
+      O canvas tem 160x160 pixels de desenho (veja o index.html).
+      160 × 3 = 480px na tela: cada pixel desenhado vira um bloco de 3x3.
+
+      Use sempre um número INTEIRO. Com 2.5, um pixel viraria 2 pixels e meio
+      na tela — e meio pixel não existe, então o navegador borraria a imagem
+      para disfarçar. É exatamente isso que arruína pixel art.
+    */
+    --pixel: 3px;
+    --lado-da-tela: 480px;  /* 160 × 3 */
+}
+
+body {
+    /*
+      FLEXBOX — o jeito moderno de alinhar elementos.
+      "display: flex" transforma este elemento em um CONTÊINER flexível
+      e passa a comandar como os FILHOS dele se organizam.
+    */
+    display: flex;
+    flex-direction: column;  /* empilha os filhos de cima para baixo */
+    align-items: center;     /* centraliza na horizontal (eixo transversal) */
+    justify-content: center; /* centraliza na vertical (eixo principal) */
+    gap: 24px;               /* espaço entre os filhos, sem precisar de margens */
+
+    min-height: 100vh;  /* pelo menos a altura da janela. "vh" = viewport height. */
+    margin: 0;          /* o navegador põe margem no body por padrão; removemos. */
+
+    background-color: var(--cor-fundo);  /* var() lê a variável do :root */
+    color: var(--cor-texto);             /* "color" é sempre a cor do TEXTO */
+
+    /*
+      Propriedades de texto são HERDADAS: definidas aqui no body,
+      valem para todos os elementos dentro dele, sem repetir.
+    */
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/*
+  PSEUDO-ELEMENTO (::after) — cria uma "camada extra" que não existe no HTML.
+  Aqui ela desenha uma grade fina por cima de tudo, imitando a máscara de
+  pontos de um monitor antigo.
+*/
+body::after {
+    content: "";        /* obrigatório: sem content, o pseudo-elemento não nasce */
+    position: fixed;    /* posiciona em relação à JANELA, não à página */
+    inset: 0;           /* atalho para top/right/bottom/left: 0 -> cobre tudo */
+    pointer-events: none;  /* deixa o mouse "atravessar" a camada */
+
+    /*
+      Dois degradês repetidos, um em cada direção, sobrepostos:
+      linhas verticais + horizontais formam a malha.
+
+      O período é var(--pixel) — o MESMO tamanho de um pixel do jogo.
+      Isso não é decoração: períodos diferentes (3px do jogo contra 4px da
+      malha) criariam faixas de interferência, o efeito moiré, aquele
+      chuvisco que aparece em foto de tela. Casando os dois, a malha cai
+      exatamente sobre as bordas dos pixels.
+
+      Uma mesma propriedade pode receber VÁRIAS camadas separadas por
+      vírgula; a primeira da lista fica por cima.
+    */
+    background:
+        repeating-linear-gradient(
+            to right,
+            rgba(0, 0, 0, .25) 0,
+            rgba(0, 0, 0, .25) 1px,
+            transparent 1px,
+            transparent var(--pixel)
+        ),
+        repeating-linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, .25) 0,
+            rgba(0, 0, 0, .25) 1px,
+            transparent 1px,
+            transparent var(--pixel)
+        );
+    /* rgba() = vermelho, verde, azul e ALFA (0 = invisível, 1 = opaco). */
+
+    opacity: .75;   /* transparência do elemento inteiro, camadas incluídas */
+    z-index: 9999;  /* ordem de empilhamento: número maior fica na frente */
+}
+
+h1 {
+    margin: 0;
+    font-size: 34px;
+    letter-spacing: 10px;
+    color: var(--cor-neon);
+
+    /* text-shadow: deslocamentoX deslocamentoY desfoque cor.
+       Duas sombras sem deslocamento e muito desfoque = efeito de brilho neon. */
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+/*
+  "fit-content" faz a caixa encolher até a largura do seu maior filho —
+  ou seja, a largura do canvas. Assim o placar acima sabe qual largura ocupar.
+*/
+#jogo-container {
+    width: fit-content;
+}
+
+#placar {
+    display: flex;
+    justify-content: space-between;  /* joga um filho para cada ponta */
+    width: 100%;                     /* 100% do pai = a largura do canvas */
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--cor-destaque);
+}
+
+/*
+  Seletor DESCENDENTE: "#placar p" = todo <p> que esteja dentro de #placar.
+  Assim o zero de margem não vaza para os outros parágrafos da página.
+*/
+#placar p {
+    margin: 0;
+}
+
+/*
+  EMPILHAMENTO DE CAMADAS — o par relative/absolute.
+
+  Um filho com position: absolute se posiciona em relação ao ancestral mais
+  próximo que NÃO seja "static" (o padrão). Marcar o pai como "relative" é
+  dizer: "é a partir daqui que meus filhos absolutos medem as distâncias".
+
+  Sem este relative, o aviso de fim de jogo se posicionaria em relação à
+  página inteira e apareceria em qualquer lugar, menos sobre o canvas.
+*/
+#tela {
+    position: relative;
+    line-height: 0;  /* remove o espacinho de linha de texto embaixo do canvas */
+}
+
+canvas {
+    /*
+      Elementos como <canvas> e <img> são "inline" por padrão: o navegador
+      os trata como letras. "display: block" tira esse comportamento.
+    */
+    display: block;
+
+    /*
+      AQUI ACONTECE A MÁGICA DO PIXELADO.
+
+      O canvas tem 160x160 pixels de desenho e é exibido com 480px de lado:
+      uma ampliação de exatamente 3 vezes.
+
+      Ao ampliar uma imagem, o navegador normalmente INVENTA os pixels que
+      faltam, misturando os vizinhos — ótimo para fotos, péssimo aqui, pois
+      deixa tudo desfocado. "image-rendering: pixelated" manda repetir o pixel
+      original tal e qual, mantendo as bordas duras.
+
+      É esta linha que transforma 160 pixels borrados em pixel art nítida.
+    */
+    width: var(--lado-da-tela);
+    height: var(--lado-da-tela);
+    image-rendering: pixelated;
+
+    /*
+      Em telas estreitas, encolher é melhor do que vazar para fora.
+      A escala deixa de ser um número redondo e o desenho perde um pouco da
+      nitidez — é a troca consciente entre pixel perfeito e caber no celular.
+    */
+    max-width: 92vw;
+    max-height: 92vw;
+
+    border: var(--pixel) solid var(--cor-neon);  /* borda com a espessura de 1 pixel do jogo */
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);  /* brilho ao redor */
+}
+
+/*
+  A camada de fim de jogo, esticada por cima do canvas.
+  inset: 0 com position: absolute = "cole nos quatro lados do pai".
+*/
+#fim-de-jogo {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+
+    background: rgba(6, 7, 13, 0.82);  /* escurece o jogo sem escondê-lo */
+    line-height: 1.2;  /* desfaz o line-height: 0 herdado de #tela */
+}
+
+/*
+  PEGADINHA CLÁSSICA, e vale memorizar:
+  o atributo "hidden" do HTML funciona porque o navegador aplica
+  "display: none" a ele. Mas a regra acima diz "display: flex" — e ela é mais
+  específica, então VENCE a cascata e o elemento aparece mesmo escondido.
+
+  A solução é dizer explicitamente o que fazer quando ele estiver escondido.
+  Sempre que você definir "display" em um elemento que usa "hidden",
+  lembre-se desta regra.
+*/
+#fim-de-jogo[hidden] {
+    display: none;
+}
+
+#fim-titulo {
+    margin: 0;
+    font-size: 32px;
+    letter-spacing: 4px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 12px rgba(255, 47, 208, 0.7);
+}
+
+#fim-pontos {
+    margin: 0;
+    font-size: 16px;
+    color: var(--cor-texto);
+}
+
+button {
+    /*
+      BOX MODEL — todo elemento é uma caixa de 4 camadas, de dentro para fora:
+          conteúdo -> padding (recheio) -> border (borda) -> margin (afastamento)
+      "padding: 14px 28px" = 14px em cima e embaixo, 28px nas laterais.
+    */
+    padding: 14px 28px;
+    border: var(--pixel) solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+
+    /* Botões ignoram a fonte herdada; "font: inherit" manda usar a do body. */
+    font: inherit;
+    font-size: 14px;
+
+    cursor: pointer;  /* muda o ponteiro para a mãozinha: sinaliza "clicável" */
+    text-shadow: 0 0 8px var(--cor-neon);
+}
+
+/*
+  PSEUDO-CLASSES: estilos para ESTADOS temporários do elemento.
+  :hover  -> o mouse está em cima
+  :active -> o botão está sendo pressionado agora
+*/
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+    text-shadow: none;
+}
+
+button:active {
+    /* Afunda exatamente 1 pixel do jogo — o movimento acompanha a escala. */
+    transform: translateY(var(--pixel));
+}

@@ -1,0 +1,140 @@
+<!--
+  ============================================================
+  HTML = ESTRUTURA (o esqueleto da página)
+  ============================================================
+  Três linguagens, três papéis — nunca misture:
+    HTML -> o QUE existe na página   (este arquivo)
+    CSS  -> COMO isso aparece        (style.css)
+    JS   -> o QUE acontece           (script.js)
+
+  HTML é feito de TAGS. Quase toda tag tem abertura e fechamento:
+      <h1>Cobrinha</h1>
+       ^abre  ^conteúdo  ^fecha
+
+  Tags podem conter outras tags. Isso cria uma ÁRVORE:
+  <html> é a raiz, <body> é filho dela, <h1> é filho de <body>.
+  Essa árvore é o que o JavaScript enxerga — chama-se DOM.
+-->
+<!DOCTYPE html>
+<!-- Diz ao navegador: "isto é HTML moderno". Sempre a primeira linha. -->
+
+<html lang="pt-BR">
+<!-- lang="pt-BR" informa o idioma: ajuda leitores de tela e tradutores. -->
+
+<head>
+    <!--
+      <head> = informações SOBRE a página. Nada aqui aparece na tela.
+      Ex.: título da aba, codificação de texto, links para CSS e JS.
+    -->
+
+    <meta charset="UTF-8">
+    <!-- Sem isto, acentos viram símbolos estranhos: "Pontuação" -> "PontuaÃ§Ã£o". -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Faz o celular usar a largura real da tela em vez de fingir ser um desktop. -->
+
+    <title>Jogo da Cobrinha</title>
+    <!-- Texto que aparece na aba do navegador. -->
+
+    <link rel="stylesheet" href="style.css">
+    <!-- Carrega o CSS. "rel" diz o TIPO de relação, "href" diz ONDE está o arquivo. -->
+
+    <script src="script.js" defer></script>
+    <!--
+      Carrega o JavaScript.
+      "defer" = espere o HTML terminar de carregar antes de rodar o script.
+      Sem defer, o JS rodaria antes dos elementos existirem e não acharia nada.
+    -->
+</head>
+
+<body>
+    <!-- <body> = o conteúdo VISÍVEL da página. -->
+
+    <h1>Cobrinha</h1>
+    <!--
+      Títulos vão de <h1> (mais importante) até <h6> (menos importante).
+      Use pela HIERARQUIA do conteúdo, não pelo tamanho da letra —
+      tamanho é trabalho do CSS.
+    -->
+
+    <div id="jogo-container" hidden>
+        <!--
+          <div> = caixa genérica, só para AGRUPAR coisas relacionadas.
+          Não tem significado próprio nem aparência própria.
+
+          id="jogo-container" = nome ÚNICO deste elemento na página.
+          É a etiqueta pela qual o CSS e o JS conseguem encontrá-lo.
+
+          "hidden" = atributo que esconde o elemento.
+          Começa escondido; o JS remove isso quando o jogo inicia.
+        -->
+
+        <div id="placar">
+            <p id="pontos">Pontos: 0</p>
+            <p id="tempo">Tempo: 60s</p>
+            <!--
+              <p> = parágrafo de texto.
+              O texto escrito aqui é só o valor INICIAL —
+              o JavaScript o reescreve a cada segundo.
+            -->
+        </div>
+
+        <div id="tela">
+            <!--
+              Esta div existe só para EMPILHAR duas camadas:
+              o canvas embaixo e o aviso de fim de jogo por cima.
+              O CSS faz isso com position: relative (aqui) + absolute (no filho).
+            -->
+
+            <canvas id="jogo" width="160" height="160">
+                Seu navegador não suporta canvas.
+                <!--
+                  <canvas> = uma folha de papel em branco onde o JS DESENHA pixels.
+
+                  É diferente de todo o resto do HTML:
+                    - uma <div> você estiliza com CSS;
+                    - um <canvas> você pinta com JavaScript, ponto a ponto.
+
+                  ATENÇÃO AO NÚMERO 160 — é o segredo do visual pixelado.
+
+                  width/height NÃO são o tamanho na tela: são a RESOLUÇÃO,
+                  quantos pixels de desenho existem. 160 = uma grade de
+                  20 células × 8 pixels por célula. É uma tela minúscula,
+                  do tamanho de um videogame portátil dos anos 90.
+
+                  O CSS depois amplia essa telinha 3 vezes (para 480px) e usa
+                  image-rendering: pixelated para que cada pixel desenhado vire
+                  um bloco 3×3 bem nítido, em vez de ser borrado.
+
+                  É por isso que se desenha PEQUENO e amplia: pixel art de
+                  verdade é feita de poucos pixels grandes, não de muitos
+                  pixels pequenos.
+                -->
+            </canvas>
+
+            <div id="fim-de-jogo" hidden>
+                <p id="fim-titulo">Game Over</p>
+                <p id="fim-pontos">Pontos: 0</p>
+                <!--
+                  O aviso de fim de jogo é HTML, não desenho no canvas.
+
+                  Por quê? Texto de verdade pode ser selecionado, traduzido,
+                  ampliado e lido em voz alta por um leitor de tela.
+                  O que é pintado no canvas é apenas uma imagem: ninguém
+                  além dos olhos consegue lê-lo.
+
+                  Regra prática: se é TEXTO, use HTML. Se é GRÁFICO, use canvas.
+                -->
+            </div>
+        </div>
+    </div>
+
+    <button id="iniciar" type="button">Iniciar Jogo</button>
+    <!--
+      Repare que NÃO existe onclick="..." aqui.
+      O que o botão FAZ é comportamento, e comportamento mora no JavaScript.
+      O HTML apenas declara: "existe um botão chamado iniciar".
+      O script.js conecta o clique à função.
+    -->
+</body>
+</html>

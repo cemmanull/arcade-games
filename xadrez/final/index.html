@@ -1,0 +1,99 @@
+<!--
+  XADREZ
+
+  Repare no que este jogo NÃO tem: um <canvas>.
+  O tabuleiro é feito de 64 <button> numa grade de CSS — porque um
+  tabuleiro é uma grade, e porque casas clicáveis e anunciáveis por
+  leitores de tela são elementos de verdade, não pintura.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xadrez</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!--
+      TRÊS ARQUIVOS, NESTA ORDEM. Cada um tem uma responsabilidade:
+
+          regras.js       o que é permitido no xadrez
+          computador.js   como escolher um bom lance
+          interface.js    o que se vê e o que se clica
+
+      A ordem importa: interface.js usa funções dos outros dois, então
+      eles precisam estar carregados antes. Com "defer", os scripts
+      executam na ordem em que aparecem aqui, depois que o HTML terminar.
+
+      (Não usamos módulos ES com import/export porque eles exigem um
+      servidor: abrindo o arquivo direto do disco, o navegador os bloqueia
+      por segurança. Scripts clássicos funcionam com um duplo clique.)
+    -->
+    <script src="regras.js" defer></script>
+    <script src="computador.js" defer></script>
+    <script src="interface.js" defer></script>
+</head>
+
+<body>
+    <header>
+        <h1>Xadrez</h1>
+        <p id="vez">Vez das brancas</p>
+    </header>
+
+    <main>
+        <div id="area-tabuleiro">
+            <div id="tabuleiro" role="grid" aria-label="Tabuleiro de xadrez"></div>
+            <!-- Vazio: os 64 botões são criados pelo JavaScript. -->
+            <p id="status" class="status">Partida em andamento.</p>
+        </div>
+
+        <aside id="painel">
+            <section class="bloco">
+                <h2>Partida</h2>
+                <button type="button" id="novo-jogo">Novo jogo</button>
+                <button type="button" id="desfazer">Desfazer</button>
+            </section>
+
+            <section class="bloco">
+                <h2>Ajustes</h2>
+                <button type="button" id="modo">Contra o computador</button>
+                <button type="button" id="lado">Jogo de brancas</button>
+                <button type="button" id="virar">Virar tabuleiro</button>
+
+                <label for="nivel">Dificuldade</label>
+                <select id="nivel">
+                    <option value="facil">Fácil (vê 2 lances)</option>
+                    <option value="medio" selected>Médio (vê 3 lances)</option>
+                    <option value="dificil">Difícil (vê 4 lances)</option>
+                </select>
+
+                <label for="promocao">Promover peão a</label>
+                <select id="promocao">
+                    <option value="dama" selected>Dama</option>
+                    <option value="torre">Torre</option>
+                    <option value="bispo">Bispo</option>
+                    <option value="cavalo">Cavalo</option>
+                </select>
+            </section>
+
+            <section class="bloco">
+                <h2>Capturadas</h2>
+                <p id="capturadas">—</p>
+            </section>
+
+            <section class="bloco">
+                <h2>Lances</h2>
+                <ol id="lances"></ol>
+            </section>
+        </aside>
+    </main>
+
+    <footer>
+        <p>
+            Clique numa peça para ver seus lances legais e clique no destino.
+            Roque: mova o rei duas casas.
+        </p>
+    </footer>
+</body>
+</html>

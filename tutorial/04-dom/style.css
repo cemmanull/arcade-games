@@ -1,0 +1,119 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --cor-principal: #2563eb;
+    --cor-suave: #eef2ff;
+    --cor-borda: #d5d9e8;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 24px;
+    color: #1a1a2e;
+}
+
+h1 {
+    margin-bottom: 0;
+}
+
+.subtitulo {
+    margin-top: 4px;
+    color: #6b7280;
+}
+
+section {
+    margin: 32px 0;
+    padding: 20px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 8px;
+}
+
+section h2 {
+    margin-top: 0;
+    font-size: 1.2em;
+}
+
+button {
+    background: var(--cor-principal);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #1d4ed8;
+}
+
+.botao-pequeno {
+    padding: 2px 10px;
+    font-size: 0.8em;
+    margin-left: 12px;
+    background: #9ca3af;
+}
+
+.botao-pequeno:hover {
+    background: #ef4444;
+}
+
+input {
+    padding: 8px 12px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 6px;
+    font: inherit;
+}
+
+:focus-visible {
+    outline: 3px solid var(--cor-principal);
+    outline-offset: 2px;
+}
+
+/*
+  A classe que o JavaScript liga e desliga com classList.toggle.
+  Repare que a aparência está AQUI, no CSS — o JavaScript só decide quando.
+*/
+.destaque {
+    background: #fef08a;
+    padding: 8px 12px;
+    border-left: 4px solid #f59e0b;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+ul {
+    padding-left: 20px;
+}
+
+li {
+    margin: 6px 0;
+}
+
+#area-mouse {
+    margin-top: 16px;
+    padding: 32px;
+    background: var(--cor-suave);
+    border-radius: 8px;
+    text-align: center;
+    font-family: "Courier New", monospace;
+    cursor: crosshair;
+}
+
+.nota {
+    color: #6b7280;
+    font-size: 0.9em;
+}
+
+code {
+    background: var(--cor-suave);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "Courier New", monospace;
+}

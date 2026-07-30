@@ -1,0 +1,113 @@
+/*
+  PASSO 2 — ESTILO
+
+  Toda regra CSS tem a mesma forma:
+
+      seletor {
+          propriedade: valor;
+      }
+
+  O SELETOR escolhe QUAIS elementos serão afetados.
+  A DECLARAÇÃO (propriedade: valor) diz o que fazer com eles.
+*/
+
+
+/*
+  :root = o elemento raiz da página (o <html>), o ancestral de todos.
+  Serve para declarar VARIÁVEIS — nomes que começam com dois hifens.
+
+  Por que variáveis? Para cada cor existir em UM lugar só.
+  Trocar o tema inteiro vira trocar quatro linhas, não quarenta.
+*/
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    /*
+      Cores em hexadecimal: #RRGGBB — dois dígitos de vermelho, dois de verde
+      e dois de azul, de 00 (nada) a ff (o máximo).
+      #06070d é quase preto. #00f0ff é ciano puro e berrante.
+    */
+}
+
+/*
+  SELETOR DE TAG: vale para o elemento <body>.
+*/
+body {
+    /*
+      FLEXBOX — o jeito moderno de alinhar coisas.
+      "display: flex" transforma este elemento em um CONTÊINER flexível e
+      passa a comandar como os FILHOS dele se organizam.
+
+      Preste atenção nisto: as quatro linhas abaixo não mudam nada no body.
+      Elas mudam a posição do <h1> e do <canvas>. Um pai flex organiza
+      os filhos — é sempre no pai que se mexe.
+    */
+    display: flex;
+    flex-direction: column;   /* empilha os filhos de cima para baixo */
+    align-items: center;      /* centraliza na horizontal */
+    justify-content: center;  /* centraliza na vertical */
+    gap: 24px;                /* espaço entre os filhos, sem precisar de margens */
+
+    min-height: 100vh;  /* pelo menos a altura da janela. vh = viewport height. */
+    margin: 0;          /* o navegador põe uma margem no body por padrão; tiramos. */
+
+    background-color: var(--cor-fundo);  /* var() lê a variável lá do :root */
+    color: var(--cor-texto);             /* "color" é sempre a cor do TEXTO */
+
+    /*
+      Propriedades de texto são HERDADAS: definidas aqui no body, valem para
+      todos os elementos dentro dele, sem precisar repetir em cada um.
+      É por isso que o <h1> já nasce com esta fonte.
+    */
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;  /* títulos também vêm com margem de fábrica */
+    font-size: 34px;
+    letter-spacing: 10px;
+
+    color: var(--cor-neon);
+    /*
+      Esta linha vence a cor herdada do body. Duas regras disputavam a cor
+      do <h1> e a mais específica ganhou — isso é a CASCATA em ação,
+      o "C" de CSS.
+    */
+
+    /*
+      text-shadow: deslocamentoX deslocamentoY desfoque cor.
+      Sem deslocamento e com muito desfoque, a sombra vira um brilho ao redor
+      da letra. Duas sombras empilhadas dão o efeito de neon.
+    */
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+canvas {
+    /*
+      Elementos como <canvas> e <img> são "inline" por padrão: o navegador os
+      trata como se fossem letras de um texto, e reserva um espacinho embaixo
+      para o pé do "p" e do "g". "display: block" remove esse espaço fantasma.
+    */
+    display: block;
+
+    background-color: var(--cor-fundo);
+    /*
+      AGORA VOCÊ O VÊ. No passo 1 o canvas era transparente; a única coisa
+      que mudou foi ele ganhar uma cor de fundo.
+    */
+
+    /*
+      BOX MODEL — toda caixa tem 4 camadas, de dentro para fora:
+          conteúdo -> padding (recheio) -> border (borda) -> margin (afastamento)
+      Aqui usamos só a borda: espessura, estilo e cor.
+    */
+    border: 2px solid var(--cor-neon);
+
+    /* box-shadow tem a mesma lógica do text-shadow, mas para a caixa inteira. */
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
+}

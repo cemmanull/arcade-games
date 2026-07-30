@@ -1,0 +1,278 @@
+<!--
+  LIÇÃO 1 — HTML
+
+  Este arquivo é uma amostra das tags que você vai usar em 95% das páginas.
+  Não tem nenhum CSS: tudo o que você vê é a aparência PADRÃO do navegador.
+
+  Feio? É de propósito. Você precisa saber o que é o HTML sozinho, antes de
+  vesti-lo. Toda página do mundo começa parecida com esta.
+
+  Comentários em HTML ficam entre <!-- e -->. Eles não aparecem na página.
+-->
+<!DOCTYPE html>
+<!-- Declara: "isto é HTML moderno". Sempre a primeira linha do arquivo. -->
+
+<html lang="pt-BR">
+<!-- lang informa o idioma da página: ajuda leitores de tela e tradutores. -->
+
+<head>
+    <!-- <head> = informações SOBRE a página. Nada aqui aparece na tela. -->
+
+    <meta charset="UTF-8">
+    <!-- Diz que o arquivo usa UTF-8. Sem isto, "coração" vira "coraÃ§Ã£o". -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Faz o celular usar a largura real da tela em vez de fingir ser um desktop. -->
+
+    <meta name="description" content="Amostra das principais tags do HTML.">
+    <!-- Este texto é o que aparece embaixo do link nos resultados do Google. -->
+
+    <title>Lição 1 — HTML</title>
+    <!-- O texto da aba do navegador. -->
+</head>
+
+<body>
+    <!-- <body> = o conteúdo VISÍVEL. -->
+
+    <!-- ============================================================
+         TÍTULOS
+         ============================================================ -->
+    <h1>Os elementos do HTML</h1>
+    <!--
+      Existem 6 níveis, de <h1> a <h6>.
+      Use-os pela HIERARQUIA do conteúdo, nunca pelo tamanho da letra —
+      tamanho é trabalho do CSS.
+
+      Regra: um <h1> por página, e não pule níveis (não vá de h2 para h4).
+      Leitores de tela navegam pelos títulos como um sumário; pular níveis é
+      como arrancar páginas do índice de um livro.
+    -->
+
+    <h2>Texto</h2>
+
+    <p>
+        Este é um parágrafo. O HTML <strong>ignora</strong> as quebras de
+        linha que você escreve no arquivo: pode escrever tudo numa linha só
+        ou quebrar como quiser, que o resultado é o mesmo. Quem decide onde
+        o texto quebra é a largura da janela.
+    </p>
+
+    <p>
+        Dentro de um parágrafo dá para marcar trechos:
+        <strong>strong</strong> para o que é importante,
+        <em>em</em> para ênfase,
+        <code>code</code> para código,
+        <mark>mark</mark> para destacar,
+        <small>small</small> para letra miúda,
+        e <a href="https://developer.mozilla.org/pt-BR/">um link</a> para
+        outra página.
+        <!--
+          Note a diferença: <strong> e <em> têm SIGNIFICADO (importante,
+          enfático) e são anunciados por leitores de tela. As tags antigas
+          <b> e <i> só mudavam a aparência. Prefira as com significado.
+        -->
+    </p>
+
+    <p>
+        Um link precisa do atributo <code>href</code>, que diz para onde ele
+        vai. Pode ser um site inteiro, um arquivo ao lado
+        (<a href="../02-css/index.html">como a próxima lição</a>)
+        ou um ponto dentro da própria página
+        (<a href="#formularios">como este, que pula para os formulários</a>).
+    </p>
+
+    <blockquote>
+        Uma citação. Note que o navegador já a afasta das margens sozinho —
+        cada tag vem com uma aparência de fábrica.
+    </blockquote>
+
+    <hr>
+    <!-- Uma linha divisória. Tag sem conteúdo, por isso não fecha. -->
+
+    <!-- ============================================================
+         LISTAS
+         ============================================================ -->
+    <h2>Listas</h2>
+
+    <h3>Sem ordem (ul)</h3>
+    <ul>
+        <li>Um item</li>
+        <li>Outro item</li>
+        <li>
+            Um item com lista dentro:
+            <ul>
+                <li>listas podem ser aninhadas</li>
+                <li>quantas vezes você quiser</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>Com ordem (ol)</h3>
+    <ol>
+        <li>Primeiro</li>
+        <li>Segundo</li>
+        <li>Terceiro</li>
+        <!-- Os números são gerados pelo navegador. Nunca digite "1." à mão. -->
+    </ol>
+
+    <!-- ============================================================
+         IMAGENS
+         ============================================================ -->
+    <h2>Imagens</h2>
+
+    <img src="nao-existe.png" alt="Uma foto de exemplo que não foi encontrada" width="200">
+    <!--
+      <img> não tem fechamento: ela não contém nada, só aponta para um arquivo.
+
+      O atributo alt é OBRIGATÓRIO e descreve a imagem em palavras. Ele é lido
+      em voz alta por leitores de tela e aparece quando a imagem não carrega —
+      que é exatamente o que está acontecendo aqui, de propósito.
+
+      Uma imagem decorativa, sem informação, leva alt="" (vazio, mas presente),
+      para que o leitor de tela a ignore em vez de ler o nome do arquivo.
+    -->
+
+    <figure>
+        <img src="tambem-nao-existe.png" alt="Outro exemplo" width="150">
+        <figcaption>figure + figcaption: a imagem e a sua legenda, juntas.</figcaption>
+    </figure>
+
+    <!-- ============================================================
+         TABELAS
+         ============================================================ -->
+    <h2>Tabelas</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Tag</th>
+                <th>Para que serve</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>tr</td>
+                <td>uma linha (table row)</td>
+            </tr>
+            <tr>
+                <td>th</td>
+                <td>célula de cabeçalho (table header)</td>
+            </tr>
+            <tr>
+                <td>td</td>
+                <td>célula de dado (table data)</td>
+            </tr>
+        </tbody>
+    </table>
+    <!--
+      Tabelas são para DADOS TABULARES: coisas com linhas e colunas de verdade.
+      Não use tabela para posicionar elementos na página — isso era comum nos
+      anos 90 e hoje é trabalho do CSS.
+    -->
+
+    <!-- ============================================================
+         FORMULÁRIOS
+         ============================================================ -->
+    <h2 id="formularios">Formulários</h2>
+    <!-- O id desta seção é o alvo do link lá de cima (#formularios). -->
+
+    <form>
+        <p>
+            <label for="nome">Seu nome:</label>
+            <input type="text" id="nome" placeholder="Digite aqui">
+        </p>
+        <!--
+          <label for="..."> aponta para o id do campo.
+          Isso não é enfeite: com o label ligado, clicar no texto foca o campo,
+          e o leitor de tela anuncia "Seu nome, campo de texto" em vez de
+          "campo de texto" sozinho. Sempre ligue label e campo.
+        -->
+
+        <p>
+            <label for="idade">Idade:</label>
+            <input type="number" id="idade" min="0" max="120">
+        </p>
+
+        <p>
+            <label for="cor">Cor favorita:</label>
+            <input type="color" id="cor" value="#00f0ff">
+        </p>
+
+        <p>
+            <label for="quando">Data:</label>
+            <input type="date" id="quando">
+        </p>
+
+        <p>
+            <label for="volume">Volume:</label>
+            <input type="range" id="volume" min="0" max="100" value="50">
+        </p>
+
+        <p>
+            <input type="checkbox" id="aceito">
+            <label for="aceito">Uma caixa de marcar</label>
+        </p>
+
+        <p>
+            <label for="pais">Uma lista de opções:</label>
+            <select id="pais">
+                <option>Brasil</option>
+                <option>Portugal</option>
+                <option>Moçambique</option>
+            </select>
+        </p>
+
+        <p>
+            <label for="recado">Texto longo:</label><br>
+            <textarea id="recado" rows="3" cols="30"></textarea>
+        </p>
+
+        <button type="button">Um botão</button>
+        <!--
+          type="button" = um botão comum.
+          Sem o type, dentro de um <form>, o padrão é "submit": ele tentaria
+          ENVIAR o formulário e recarregaria a página. É uma das surpresas mais
+          comuns de quem começa.
+        -->
+    </form>
+
+    <!-- ============================================================
+         ESTRUTURA E AGRUPAMENTO
+         ============================================================ -->
+    <h2>Agrupar coisas</h2>
+
+    <div>
+        <p>
+            <code>&lt;div&gt;</code> é uma caixa genérica, sem significado
+            nenhum, usada só para agrupar. <code>&lt;span&gt;</code> é a versão
+            para <span>pedaços de texto dentro de uma linha</span>.
+        </p>
+        <p>
+            Use as duas quando não houver uma tag com significado que sirva.
+            Se houver, prefira a que tem significado:
+        </p>
+    </div>
+
+    <ul>
+        <li><code>&lt;header&gt;</code> — o topo de uma página ou seção</li>
+        <li><code>&lt;nav&gt;</code> — um bloco de navegação</li>
+        <li><code>&lt;main&gt;</code> — o conteúdo principal (um por página)</li>
+        <li><code>&lt;section&gt;</code> — uma seção temática</li>
+        <li><code>&lt;article&gt;</code> — um conteúdo que faz sentido sozinho</li>
+        <li><code>&lt;aside&gt;</code> — conteúdo lateral, secundário</li>
+        <li><code>&lt;footer&gt;</code> — o rodapé</li>
+    </ul>
+    <!--
+      Por dentro, todas se comportam como uma <div>. A diferença é o
+      SIGNIFICADO: buscadores, leitores de tela e o modo de leitura do
+      navegador usam essas tags para entender a página.
+
+      Escrever <div class="header"> em vez de <header> é jogar fora
+      informação de graça.
+    -->
+
+    <footer>
+        <p><small>Fim da lição 1.</small></p>
+    </footer>
+</body>
+</html>

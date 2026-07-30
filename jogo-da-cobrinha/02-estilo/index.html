@@ -1,0 +1,33 @@
+<!--
+  PASSO 2 — ESTILO
+  O HTML mudou UMA linha: a que carrega o arquivo de estilo.
+  Toda a diferença que você vai ver na tela veio do style.css.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Cobrinha</title>
+
+    <link rel="stylesheet" href="style.css">
+    <!--
+      NOVO. Carrega o CSS.
+        rel  = o TIPO de relação ("isto é uma folha de estilo")
+        href = ONDE o arquivo está
+
+      Repare no que NÃO aconteceu: nenhuma cor, nenhum tamanho e nenhuma
+      posição foram escritos aqui dentro. O HTML continua dizendo apenas
+      o que existe. Como aparece é problema do outro arquivo.
+    -->
+</head>
+
+<body>
+    <h1>Cobrinha</h1>
+
+    <canvas id="jogo" width="400" height="400">
+        Seu navegador não suporta canvas.
+    </canvas>
+</body>
+</html>

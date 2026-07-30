@@ -1,0 +1,177 @@
+/*
+  PASSO 9 — INTERFACE
+
+  O CSS ganha o que faltava para uma página de verdade:
+    - seletores mais específicos (descendente, atributo)
+    - empilhamento de camadas (relative + absolute)
+    - estados de um elemento (:hover, :active)
+*/
+
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+
+    min-height: 100vh;
+    margin: 0;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 34px;
+    letter-spacing: 10px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+/*
+  "fit-content" faz a caixa encolher até a largura do seu maior filho —
+  ou seja, a largura do canvas. É assim que o placar acima descobre
+  qual largura deve ocupar, sem ninguém escrever "400px" em lugar nenhum.
+*/
+#jogo-container {
+    width: fit-content;
+}
+
+#placar {
+    display: flex;
+    justify-content: space-between;  /* joga um filho para cada ponta */
+    width: 100%;                     /* 100% do pai = a largura do canvas */
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--cor-destaque);
+}
+
+/*
+  SELETOR DESCENDENTE: "#placar p" = todo <p> que esteja DENTRO de #placar.
+  Assim o zero de margem não vaza para os outros parágrafos da página.
+  Sem ele, você estaria dizendo "todo parágrafo do site", que é bem mais
+  do que você quis dizer.
+*/
+#placar p {
+    margin: 0;
+}
+
+/*
+  EMPILHAMENTO DE CAMADAS — o par relative/absolute.
+
+  Um filho com position: absolute se posiciona em relação ao ancestral mais
+  próximo que NÃO seja "static" (o padrão). Marcar o pai como "relative" é
+  dizer: "é a partir daqui que meus filhos absolutos medem as distâncias".
+
+  Sem este relative, o aviso de fim de jogo se posicionaria em relação à
+  página inteira e apareceria em qualquer lugar, menos sobre o canvas.
+*/
+#tela {
+    position: relative;
+    line-height: 0;  /* remove o espacinho de linha de texto embaixo do canvas */
+}
+
+canvas {
+    display: block;
+    background-color: var(--cor-fundo);
+    border: 2px solid var(--cor-neon);
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
+}
+
+/*
+  inset: 0 com position: absolute = "cole nos quatro lados do pai".
+  É o atalho para top/right/bottom/left todos iguais a zero.
+*/
+#fim-de-jogo {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+
+    background: rgba(6, 7, 13, 0.82);  /* escurece o jogo sem escondê-lo */
+    line-height: 1.2;  /* desfaz o line-height: 0 herdado de #tela */
+}
+
+/*
+  PEGADINHA CLÁSSICA, e vale memorizar:
+  o atributo "hidden" do HTML funciona porque o navegador aplica
+  "display: none" a ele. Mas a regra acima diz "display: flex" — e ela é
+  mais específica, então VENCE a cascata e o elemento aparece mesmo
+  estando "escondido".
+
+  A solução é dizer explicitamente o que fazer quando ele estiver oculto.
+  Sempre que você definir "display" em um elemento que usa "hidden",
+  lembre-se desta regra.
+
+  (Repare no seletor: [hidden] seleciona pelo ATRIBUTO.)
+*/
+#fim-de-jogo[hidden] {
+    display: none;
+}
+
+#fim-titulo {
+    margin: 0;
+    font-size: 32px;
+    letter-spacing: 4px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 12px rgba(255, 47, 208, 0.7);
+}
+
+#fim-pontos {
+    margin: 0;
+    font-size: 16px;
+    color: var(--cor-texto);
+}
+
+button {
+    /*
+      BOX MODEL: "padding: 14px 28px" = 14px em cima e embaixo,
+      28px nas laterais. Dois valores = vertical e horizontal.
+    */
+    padding: 14px 28px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+
+    /* Botões ignoram a fonte herdada; "font: inherit" manda usar a do body. */
+    font: inherit;
+    font-size: 14px;
+
+    cursor: pointer;  /* a mãozinha: o sinal universal de "isto é clicável" */
+    text-shadow: 0 0 8px var(--cor-neon);
+}
+
+/*
+  PSEUDO-CLASSES: estilos para ESTADOS temporários do elemento.
+  :hover  -> o mouse está em cima
+  :active -> o botão está sendo pressionado agora
+
+  Dar retorno visual ao toque não é enfeite: é o que faz a interface
+  parecer viva em vez de parecer travada.
+*/
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+    text-shadow: none;
+}
+
+button:active {
+    transform: translateY(2px);  /* afunda: sensação de gabinete de fliperama */
+}

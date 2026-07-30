@@ -1,0 +1,73 @@
+<!--
+  LIÇÃO 5 — PROJETO: LISTA DE TAREFAS
+
+  Tudo das quatro lições anteriores, junto e funcionando:
+  HTML semântico, CSS responsivo, lógica em JavaScript e manipulação do DOM.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas tarefas</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <header>
+        <h1>Minhas tarefas</h1>
+        <p class="subtitulo">Salvas no seu navegador.</p>
+    </header>
+
+    <main>
+        <form id="formulario-nova-tarefa">
+            <label for="campo-tarefa" class="apenas-leitor-de-tela">
+                Descrição da tarefa
+            </label>
+            <!--
+              A classe "apenas-leitor-de-tela" esconde o texto visualmente,
+              mas o mantém para leitores de tela. Um campo sem label é um
+              campo que uma pessoa cega não sabe preencher — e o placeholder
+              NÃO faz esse papel: ele some assim que se digita.
+            -->
+            <input
+                type="text"
+                id="campo-tarefa"
+                placeholder="O que precisa ser feito?"
+                autocomplete="off"
+                required>
+            <button type="submit">Adicionar</button>
+        </form>
+
+        <section class="filtros" aria-label="Filtrar tarefas">
+            <button type="button" class="filtro ativo" data-filtro="todas">Todas</button>
+            <button type="button" class="filtro" data-filtro="pendentes">Pendentes</button>
+            <button type="button" class="filtro" data-filtro="concluidas">Concluídas</button>
+            <!--
+              data-filtro é um ATRIBUTO DE DADOS. Qualquer atributo começado
+              por "data-" é livre para você inventar, e o JavaScript o lê com
+              elemento.dataset.filtro.
+
+              É como guardar uma informação no próprio elemento, em vez de
+              manter uma tabela paralela ligando botões a comportamentos.
+            -->
+        </section>
+
+        <ul id="lista-tarefas"></ul>
+        <!-- Vazia: tudo aqui dentro é criado por JavaScript. -->
+
+        <p id="mensagem-vazia" class="mensagem-vazia">
+            Nenhuma tarefa ainda. Adicione a primeira acima.
+        </p>
+
+        <footer class="rodape-lista">
+            <span id="contagem">0 tarefas</span>
+            <button type="button" id="limpar-concluidas" class="botao-texto">
+                Limpar concluídas
+            </button>
+        </footer>
+    </main>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!--
+  PASSO 9 — INTERFACE
+  O HTML volta a crescer: placar, camada de fim de jogo e botão.
+
+  Repare no que TODOS os elementos novos têm em comum: eles são TEXTO.
+  Nada disso foi desenhado no canvas, e o motivo está no guia.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Cobrinha</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Cobrinha</h1>
+
+    <div id="jogo-container" hidden>
+        <!--
+          <div> = caixa genérica, só para AGRUPAR coisas relacionadas.
+          Não tem significado próprio nem aparência própria.
+
+          "hidden" = atributo que esconde o elemento.
+          O jogo começa escondido; o JavaScript o revela quando você clica
+          em Iniciar. Mostrar algo que já existe é bem mais simples do que
+          criar elementos do zero por código.
+        -->
+
+        <div id="placar">
+            <p id="pontos">Pontos: 0</p>
+            <p id="tempo">Tempo: 60s</p>
+            <!--
+              O texto escrito aqui é só o valor INICIAL.
+              O JavaScript o reescreve a cada segundo.
+            -->
+        </div>
+
+        <div id="tela">
+            <!--
+              Esta div existe só para EMPILHAR duas camadas: o canvas
+              embaixo e o aviso de fim de jogo por cima. Quem faz o
+              empilhamento é o CSS, com position: relative aqui e
+              absolute no filho.
+            -->
+
+            <canvas id="jogo" width="400" height="400">
+                Seu navegador não suporta canvas.
+            </canvas>
+
+            <div id="fim-de-jogo" hidden>
+                <p id="fim-titulo">Game Over</p>
+                <p id="fim-pontos">Pontos: 0</p>
+            </div>
+        </div>
+    </div>
+
+    <button id="iniciar" type="button">Iniciar Jogo</button>
+    <!--
+      Repare que NÃO existe onclick="..." aqui.
+      O que o botão FAZ é comportamento, e comportamento mora no JavaScript.
+      O HTML apenas declara: "existe um botão chamado iniciar".
+      O script.js conecta o clique à função.
+    -->
+</body>
+</html>

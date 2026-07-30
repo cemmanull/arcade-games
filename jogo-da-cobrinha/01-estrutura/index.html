@@ -1,0 +1,53 @@
+<!--
+  PASSO 1 — ESTRUTURA
+  Só HTML. Nenhuma cor, nenhum comportamento. Só o esqueleto.
+-->
+<!DOCTYPE html>
+<!-- Diz ao navegador: "isto é HTML moderno". Sempre a primeira linha. -->
+
+<html lang="pt-BR">
+<!-- lang informa o idioma: ajuda leitores de tela e tradutores. -->
+
+<head>
+    <!-- <head> = informações SOBRE a página. Nada aqui aparece na tela. -->
+
+    <meta charset="UTF-8">
+    <!-- Sem isto, acentos viram símbolos estranhos: "Pontuação" -> "PontuaÃ§Ã£o". -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Faz o celular usar a largura real da tela em vez de fingir ser um desktop. -->
+
+    <title>Jogo da Cobrinha</title>
+    <!-- Texto que aparece na aba do navegador. -->
+</head>
+
+<body>
+    <!-- <body> = o conteúdo VISÍVEL da página. -->
+
+    <h1>Cobrinha</h1>
+    <!--
+      Títulos vão de <h1> (mais importante) a <h6> (menos importante).
+      Escolha pela HIERARQUIA do conteúdo, não pelo tamanho da letra —
+      tamanho é assunto do CSS, que ainda nem existe aqui.
+    -->
+
+    <canvas id="jogo" width="400" height="400">
+        Seu navegador não suporta canvas.
+    </canvas>
+    <!--
+      <canvas> = uma folha de papel em branco onde depois vamos DESENHAR.
+
+      Neste passo ele está na página, mas INVISÍVEL: uma folha transparente
+      sobre um fundo branco. Não se assuste — ele está lá. O guia mostra
+      como enxergá-lo.
+
+      id="jogo" = nome ÚNICO deste elemento. É a etiqueta pela qual o CSS e
+      o JavaScript vão conseguir encontrá-lo mais tarde.
+
+      width/height são a RESOLUÇÃO do desenho: quantos pixels existem dentro
+      dessa folha. Guarde essa palavra, ela volta no passo final.
+
+      O texto interno só aparece se o navegador não souber usar canvas.
+    -->
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!--
+  LIÇÃO 2 — CSS
+
+  O HTML aqui é quase todo <div> e <p>: é só um manequim para vestir.
+  Toda a mágica está no style.css — leia os dois lado a lado.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lição 2 — CSS</title>
+
+    <link rel="stylesheet" href="style.css">
+    <!-- A única ligação entre os dois arquivos. -->
+</head>
+
+<body>
+    <header>
+        <h1>CSS</h1>
+        <p class="subtitulo">A mesma estrutura, agora vestida.</p>
+    </header>
+
+    <main>
+
+        <section>
+            <h2>1. Seletores</h2>
+            <p>Este parágrafo é atingido pelo seletor de tag <code>p</code>.</p>
+            <p class="destaque">Este tem <code>class="destaque"</code>.</p>
+            <p id="unico">Este tem <code>id="unico"</code>.</p>
+            <p class="destaque grande">Este tem <strong>duas</strong> classes.</p>
+            <!--
+              Um elemento pode ter várias classes, separadas por espaço.
+              Classes se acumulam; é assim que se combinam estilos pequenos.
+            -->
+        </section>
+
+        <section>
+            <h2>2. Box model</h2>
+            <p>As três caixas têm o mesmo conteúdo e medidas diferentes:</p>
+
+            <div class="demo-caixas">
+                <div class="caixa">só conteúdo</div>
+                <div class="caixa com-padding">com padding</div>
+                <div class="caixa com-margem">com margem</div>
+            </div>
+
+            <p class="nota">
+                Inspecione com F12 e passe o mouse sobre elas: o navegador
+                pinta cada camada de uma cor.
+            </p>
+        </section>
+
+        <section>
+            <h2>3. Flexbox — organizar em uma direção</h2>
+
+            <div class="demo-flex">
+                <div class="item">1</div>
+                <div class="item">2</div>
+                <div class="item">3</div>
+            </div>
+
+            <p class="nota">Os três itens são iguais; quem os alinha é o pai.</p>
+        </section>
+
+        <section>
+            <h2>4. Grid — organizar em duas direções</h2>
+
+            <div class="demo-grid">
+                <div class="item">1</div>
+                <div class="item">2</div>
+                <div class="item">3</div>
+                <div class="item">4</div>
+                <div class="item largo">5 (ocupa duas colunas)</div>
+            </div>
+        </section>
+
+        <section>
+            <h2>5. Estados</h2>
+            <p>
+                <button class="botao">Passe o mouse e clique</button>
+                <a href="#" class="link-demo">Um link com estados</a>
+            </p>
+            <p>
+                <input type="text" placeholder="Clique aqui para ver o foco">
+            </p>
+        </section>
+
+        <section>
+            <h2>6. Posicionamento</h2>
+
+            <div class="demo-posicao">
+                <div class="etiqueta">absoluta</div>
+                Esta caixa é <code>position: relative</code>, e a etiqueta
+                no canto é <code>position: absolute</code>.
+            </div>
+        </section>
+
+        <section>
+            <h2>7. Responsivo</h2>
+            <p class="nota">
+                Estreite a janela até menos de 600px de largura.
+                As cartas abaixo passam de lado a lado para empilhadas,
+                e o fundo da página muda — para você ver a regra disparando.
+            </p>
+
+            <div class="demo-cartas">
+                <article class="carta">
+                    <h3>Carta A</h3>
+                    <p>Conteúdo qualquer.</p>
+                </article>
+                <article class="carta">
+                    <h3>Carta B</h3>
+                    <p>Conteúdo qualquer.</p>
+                </article>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p><small>Fim da lição 2.</small></p>
+    </footer>
+</body>
+</html>
