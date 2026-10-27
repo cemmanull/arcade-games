@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Tetris, passo 3: a queda</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Tetris, passo 3: a queda</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura este canvas. -->
+    <canvas id="jogo" width="80" height="160"></canvas>
+
+    <!-- Ordem importa: o apoio troca relógio e sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+    <script src="../../tetris/03-queda/script.js"></script>
+
+    <script>
+        // `poco`, `pecaAtual`, `cabe`... são os nomes do script do passo (escopo global).
+
+        function recomecarComPocoVazio(tipoDaPeca) {
+            poco = criarPocoVazio();
+            pecaAtual = criarPeca(tipoDaPeca);
+            acumuladorDeQueda = 0;
+        }
+
+        function contarCasasOcupadas() {
+            return poco.flat().filter(function (casa) { return casa !== null; }).length;
+        }
+
+        function pecaEstaNumLugarValido() {
+            return cabe(pecaAtual.forma, pecaAtual.coluna, pecaAtual.linha);
+        }
+
+        function pocoTemFormatoCorreto() {
+            return poco.length === 20 && poco.every(function (linha) { return linha.length === 10; });
+        }
+
+        testar("estado inicial", function () {
+            conferir("o poço começa 20x10", pocoTemFormatoCorreto());
+            conferir("já existe uma peça em jogo", pecaAtual !== null);
+            conferir("a peça nasce num lugar livre", pecaEstaNumLugarValido());
+            conferirIgual("a peça nasce na linha 0", pecaAtual.linha, 0);
+        });
+
+        testar("acumulador de tempo", function () {
+            recomecarComPocoVazio("O");
+
+            avancarQuadros(19, 50);   // 0,95 s
+            conferirIgual("antes de 1 s a peça não desce", pecaAtual.linha, 0);
+
+            avancarQuadros(3, 50);    // 1,10 s
+            conferirIgual("passado 1 s ela desceu exatamente uma linha", pecaAtual.linha, 1);
+        });
+
+        testar("subtrair, não zerar", function () {
+            recomecarComPocoVazio("O");
+
+            avancarQuadros(26, 40);   // 1,04 s: desce uma vez e sobram 0,04 s
+            conferirIgual("desceu uma linha", pecaAtual.linha, 1);
+            conferir(
+                "a sobra de tempo foi guardada",
+                Math.abs(acumuladorDeQueda - 0.04) < 0.001,
+                "acumulador = " + acumuladorDeQueda
+            );
+        });
+
+        testar("teto de 0,05 s por quadro", function () {
+            recomecarComPocoVazio("O");
+
+            avancarQuadro(10000);     // aba que volta do segundo plano
+            conferirIgual("um quadro gigante não faz a peça pular linhas", pecaAtual.linha, 0);
+        });
+
+        testar("testar antes de mover", function () {
+            recomecarComPocoVazio("O");
+            const fotoDoPoco = JSON.stringify(poco);
+
+            conferir("posição hipotética fora da esquerda não cabe", !cabe(pecaAtual.forma, -1, 0));
+            conferir("posição hipotética fora da direita não cabe", !cabe(pecaAtual.forma, 9, 0));
+            conferir("posição hipotética abaixo do chão não cabe", !cabe(pecaAtual.forma, 4, 19));
+            conferir("posição hipotética acima do topo não cabe", !cabe(pecaAtual.forma, 4, -1));
+            conferir("cabe() não altera o poço", JSON.stringify(poco) === fotoDoPoco);
+
+            pecaAtual.coluna = 0;
+            conferirIgual("mover para dentro da parede devolve false", moverPeca(-1, 0), false);
+            conferirIgual("e a peça fica onde estava", pecaAtual.coluna, 0);
+            conferirIgual("mover para dentro devolve true", moverPeca(1, 0), true);
+            conferirIgual("e a peça andou", pecaAtual.coluna, 1);
+
+            poco[3][1] = "T";         // a peça O (coluna 1, linhas 0-1) tem um bloco logo abaixo
+            conferirIgual("descer até encostar no bloco devolve true", moverPeca(0, 1), true);
+            conferirIgual("a peça desceu uma linha", pecaAtual.linha, 1);
+            conferirIgual("mover para uma casa ocupada devolve false", moverPeca(0, 1), false);
+            conferirIgual("e a peça fica sem entrar no bloco", pecaAtual.linha, 1);
+        });
+
+        testar("travar", function () {
+            recomecarComPocoVazio("O");
+            pecaAtual.linha = 18;     // O ocupa as linhas 18 e 19: já está no chão
+            const colunaDaPeca = pecaAtual.coluna;
+
+            const pecaQueEstavaCaindo = pecaAtual;
+            while (pecaAtual === pecaQueEstavaCaindo) {
+                avancarQuadro(50);    // para no quadro exato em que a peça trava
+            }
+
+            [18, 19].forEach(function (linha) {
+                [colunaDaPeca, colunaDaPeca + 1].forEach(function (coluna) {
+                    conferirIgual("casa " + linha + "," + coluna + " virou poço", poco[linha][coluna], "O");
+                });
+            });
+            conferirIgual("só as quatro casas foram escritas", contarCasasOcupadas(), 4);
+            conferirIgual("uma peça nova nasce no topo", pecaAtual.linha, 0);
+            conferirIgual("a peça nova começa com o acumulador zerado", acumuladorDeQueda, 0);
+        });
+
+        testar("poço cheio esvazia e segue", function () {
+            poco = criarPocoVazio();
+            poco[0] = poco[0].map(function () { return "I"; });
+            poco[1] = poco[1].map(function () { return "I"; });
+            nascerPeca();
+
+            conferirIgual("o poço foi esvaziado", contarCasasOcupadas(), 0);
+            conferir("e a peça nova cabe", pecaEstaNumLugarValido());
+        });
+
+        testar("robô aleatório, 30.000 quadros", function () {
+            semearSorteio(2024);
+            poco = criarPocoVazio();
+            nascerPeca();
+
+            let primeiraViolacao = null;
+            let travadas = 0;
+            let esvaziamentos = 0;
+            let pecaAnterior = pecaAtual;
+            let pocoAnterior = poco;
+
+            for (let quadro = 0; quadro < 30000 && primeiraViolacao === null; quadro++) {
+                // o robô aperta "teclas" ao acaso, mas só pelas portas do jogo
+                if (Math.random() < 0.3) {
+                    moverPeca(Math.floor(Math.random() * 3) - 1, Math.random() < 0.2 ? 1 : 0);
+                }
+                avancarQuadro(10 + Math.floor(Math.random() * 70));
+
+                if (pecaAtual !== pecaAnterior) {
+                    pecaAnterior = pecaAtual;
+                    travadas++;
+                }
+                if (poco !== pocoAnterior) {
+                    pocoAnterior = poco;
+                    esvaziamentos++;
+                }
+
+                if (!pocoTemFormatoCorreto()) {
+                    primeiraViolacao = "poço fora de 20x10 no quadro " + quadro;
+                } else if (!pecaEstaNumLugarValido()) {
+                    primeiraViolacao = "peça fora do poço ou sobre bloco no quadro " + quadro;
+                } else if (contarCasasOcupadas() % 4 !== 0) {
+                    primeiraViolacao = "casas ocupadas não são múltiplo de 4 no quadro " + quadro;
+                }
+            }
+
+            conferir("a peça nunca ocupa casa ocupada nem sai do poço; o poço fica 20x10; peças travam inteiras",
+                primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô travou muitas peças (" + travadas + ")", travadas > 100);
+            conferir("o poço encheu e foi esvaziado pelo menos uma vez (" + esvaziamentos + ")", esvaziamentos >= 1);
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>
