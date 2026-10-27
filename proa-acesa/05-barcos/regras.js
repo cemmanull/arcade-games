@@ -1,30 +1,27 @@
 /*
   PASSO 5: AS REGRAS (regras.js)
 
-  O mundo do jogo em NÚMEROS, no plano XZ: onde estão a barca, os barcos de pesca, os recifes e o
-  porto. Aqui não existe THREE: este arquivo roda sem three.js, sem tela e sem WebGL (a página de
-  teste o carrega sozinho). O script.js só LÊ estes números e os desenha.
-
-  Ordem dos scripts: regras.js primeiro, script.js depois (o script usa o que este declara).
-  Convenção: a frente de qualquer coisa com `proa` é (−sen proa, −cos proa); proa positiva = esquerda.
+  O mundo do jogo em NÚMEROS, no plano XZ: a barca, os barcos de pesca, os recifes, a ilha e o porto. Aqui
+  não existe THREE: este arquivo roda sem three.js, sem tela e sem WebGL. O script.js só LÊ estes números
+  e os desenha. Testes: verificacao/proa-acesa/05-barcos-regras.html (só este arquivo) e 05-barcos.html (o jogo).
+  Ordem dos scripts: regras.js primeiro. A frente de uma `proa` é (−sen proa, −cos proa); proa positiva = esquerda.
 */
 
 // ---- FICHAS ----
 const METADE_DO_MUNDO = 80;                  // o mundo é um quadrado de 160 m
-const VELOCIDADE_DA_BARCA = 5;               // metros por segundo
-const VELOCIDADE_DA_BARCA_DEVAGAR = 2.5;
-const GIRO_MAXIMO_DA_BARCA = 1.4;            // radianos por segundo
-const ACELERACAO_DO_GIRO = 4;                // radianos por segundo, a cada segundo
+const VELOCIDADE_DA_BARCA = 5, VELOCIDADE_DA_BARCA_DEVAGAR = 2.5;   // metros por segundo
+const GIRO_MAXIMO_DA_BARCA = 1.4, ACELERACAO_DO_GIRO = 4;           // radianos por segundo; e por segundo, a cada segundo
 const RAIO_DO_BARCO = 1.2;                   // metros: vale para a barca e para os barcos de pesca
-const SEGUNDOS_ENCALHADA = 2;
-const QUANTIDADE_DE_BARCOS = 4;
+const SEGUNDOS_ENCALHADA = 2, QUANTIDADE_DE_BARCOS = 4;
 const DISTANCIA_DO_COMBOIO = 7;              // onde cada barco quer parar, atrás do da frente
 const ZONA_DE_FREADA = 8;                    // a partir de quantos metros além disso ele começa a frear
 const VELOCIDADE_DO_BARCO = VELOCIDADE_DA_BARCA * 0.95;   // um pouco mais lento que a barca
 const ACELERACAO_DO_BARCO = 4;               // metros por segundo, a cada segundo
 const GIRO_MAXIMO_DO_BARCO = 1.1;            // MENOR que o da barca: é isso que balança a cauda
-const DISTANCIA_PARA_SE_PERDER = 35;         // atrás do da frente por mais que isso, some na névoa
+const DISTANCIA_PARA_SE_PERDER = 35;         // atrás do da frente por mais que isso, a névoa começa a engoli-lo…
+const SEGUNDOS_PARA_SE_PERDER = 5;           // …e engole se ele não voltar em 5 s: dá tempo de a barca esperar
 const SEGUNDOS_AFUNDANDO = 2.5;
+const FOLGA_DO_NASCIMENTO = 1;               // metros livres em volta de um barco que nasce
 
 // ---- O MUNDO (dados puros; o script.js desenha) ----
 const porto = { x: 6, z: -26, raio: 9 };
@@ -33,13 +30,12 @@ const recifes = [
     { x: 16, z: -16, raio: 2 }, { x: 22, z: 2, raio: 2.5 }, { x: -12, z: 4, raio: 3 }, { x: 20, z: -28, raio: 3 },
     { x: -6, z: -34, raio: 2.5 }, { x: -14, z: -10, raio: 2.5 }
 ];
+const ilha = { x: -5, z: -12, raio: 5.5 };   // a ilha do farol: bate como um recife (o script.js a desenha)
 const barcaNoMundo = { x: 8, z: 14, proa: 0, giro: 0, segundosEncalhada: 0 };
 let barcosDePesca = [];      // a fila, do mais perto da barca ao último: uma LISTA VIVA (entra e sai barco)
 let barcosAfundando = [];    // já fora da fila, só terminando de afundar
 let barcosRemovidos = [];    // saíram do mundo neste quadro: o script.js apaga as malhas e esvazia a lista
-let proximoIdDeBarco = 0;
-let salvos = 0;
-let naufragios = 0;
+let proximoIdDeBarco = 0, salvos = 0, naufragios = 0;
 
 // ---- MATEMÁTICA DO PLANO (sem THREE.MathUtils: este arquivo não pode depender dele) ----
 function limitar(valor, minimo, maximo) {
@@ -70,7 +66,7 @@ function atualizarMundo(tempo, leme, devagar) {
     barcosDePesca.forEach(function (barco) {
         conduzirBarco(barco, alvoDoBarco(barco), tempo);
     });
-    julgarBarcosDaFila();
+    julgarBarcosDaFila(tempo);
     atualizarBarcosAfundando(tempo);
     if (barcosDePesca.length === 0 && barcosAfundando.length === 0) {
         criarComboio();   // a fila acabou: chega um comboio novo, atrás da barca
@@ -121,13 +117,19 @@ function alvoDoBarco(barco) {
     return indice <= 0 ? barcaNoMundo : barcosDePesca[indice - 1];
 }
 
+/* O comboio nasce em fila atrás da barca, mas só onde dá para viver: dentro do mundo, fora do porto (senão seria salvo
+   de graça) e longe de recifes e ilha (senão naufragaria no 1º quadro). Sem sorteio: gira a fila 30° por tentativa; a
+   cada volta inteira sem achar, ela recua 7 m (a barca pode estar dentro do porto). */
 function criarComboio() {
+    let rumo = barcaNoMundo.proa, recuo = 0;
+    for (let tentativa = 1; tentativa <= 36 && !filaLivre(rumo, recuo); tentativa++) {
+        rumo += Math.PI / 6;
+        recuo = DISTANCIA_DO_COMBOIO * Math.floor(tentativa / 12);
+    }
     for (let i = 1; i <= QUANTIDADE_DE_BARCOS; i++) {
+        const lugar = lugarNaFila(rumo, recuo + DISTANCIA_DO_COMBOIO * i);
         barcosDePesca.push({
-            id: proximoIdDeBarco++,
-            x: barcaNoMundo.x + Math.sin(barcaNoMundo.proa) * DISTANCIA_DO_COMBOIO * i,   // atrás da barca
-            z: barcaNoMundo.z + Math.cos(barcaNoMundo.proa) * DISTANCIA_DO_COMBOIO * i,
-            proa: barcaNoMundo.proa,
+            id: proximoIdDeBarco++, x: lugar.x, z: lugar.z, proa: normalizarAngulo(rumo),
             velocidade: 0,
             segundosAfundando: 0,
             afundamento: 0   // 0 = boiando … 1 = no fundo
@@ -135,11 +137,28 @@ function criarComboio() {
     }
 }
 
+function lugarNaFila(rumo, metrosAtrasDaBarca) {
+    return { x: barcaNoMundo.x + Math.sin(rumo) * metrosAtrasDaBarca, z: barcaNoMundo.z + Math.cos(rumo) * metrosAtrasDaBarca };
+}
+
+function filaLivre(rumo, recuo) {
+    for (let i = 1; i <= QUANTIDADE_DE_BARCOS; i++) {
+        const lugar = lugarNaFila(rumo, recuo + DISTANCIA_DO_COMBOIO * i);
+        const foraDoMundo = Math.abs(lugar.x) > METADE_DO_MUNDO - FOLGA_DO_NASCIMENTO || Math.abs(lugar.z) > METADE_DO_MUNDO - FOLGA_DO_NASCIMENTO;
+        if (foraDoMundo || distanciaEntre(lugar, porto) < porto.raio + FOLGA_DO_NASCIMENTO || recifeTocadoPor(lugar, FOLGA_DO_NASCIMENTO) !== null) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // ---- A LISTA VIVA: salvos, naufragados e perdidos saem da fila ----
-/* Percorre de trás para a frente: tirar o item `i` não muda o índice dos que ainda faltam ver. */
-function julgarBarcosDaFila() {
+/* De trás para a frente: tirar o item `i` não muda o índice dos que faltam ver. A névoa leva tempo: sem isso, perdido o
+   primeiro, o de trás mediria até a barca (mais longe) e a fila sumiria em 4 quadros. Cada barco conta os seus segundos longe. */
+function julgarBarcosDaFila(tempo) {
     for (let i = barcosDePesca.length - 1; i >= 0; i--) {
         const barco = barcosDePesca[i];
+        barco.segundosPerdido = distanciaEntre(barco, alvoDoBarco(barco)) > DISTANCIA_PARA_SE_PERDER ? (barco.segundosPerdido || 0) + tempo : 0;
         if (distanciaEntre(barco, porto) < porto.raio) {
             salvos++;
             removerBarco(barcosDePesca, i);
@@ -147,7 +166,7 @@ function julgarBarcosDaFila() {
             naufragios++;
             barco.segundosAfundando = SEGUNDOS_AFUNDANDO;
             barcosAfundando.push(barcosDePesca.splice(i, 1)[0]);
-        } else if (distanciaEntre(barco, alvoDoBarco(barco)) > DISTANCIA_PARA_SE_PERDER) {
+        } else if (barco.segundosPerdido > SEGUNDOS_PARA_SE_PERDER) {
             naufragios++;
             removerBarco(barcosDePesca, i);
         }
@@ -169,13 +188,13 @@ function removerBarco(lista, indice) {
     barcosRemovidos.push(lista.splice(indice, 1)[0]);
 }
 
-function recifeTocadoPor(coisa) {
+function recifeTocadoPor(coisa, folga = 0) {   // recife ou ilha: quem bate nela; `folga` alarga o círculo
     for (let i = 0; i < recifes.length; i++) {
-        if (distanciaEntre(coisa, recifes[i]) < recifes[i].raio + RAIO_DO_BARCO) {
+        if (distanciaEntre(coisa, recifes[i]) < recifes[i].raio + RAIO_DO_BARCO + folga) {
             return recifes[i];
         }
     }
-    return null;
+    return distanciaEntre(coisa, ilha) < ilha.raio + RAIO_DO_BARCO + folga ? ilha : null;
 }
 
 criarComboio();

@@ -3,9 +3,10 @@
 **Mudou:** o código se **divide em dois arquivos**. `regras.js` (novo) guarda o mundo no plano XZ e
 **não usa `THREE`**: barca, comboio, recifes e porto. `script.js` fica com a cena, a entrada e o laço.
 `index.html` carrega `regras.js` **antes** do `script.js`; ganha um placar e o botão **Devagar**. O
-painel do passo 4 sai (a tecla **H** mostra só os eixos) e a câmera sobe.
+painel do passo 4 sai (a tecla **H** mostra só os eixos) e a câmera sobe. A ilha do farol passa a
+**bater** como um recife, o comboio nasce **só onde dá para viver** e a névoa leva 5 s para engolir um barco.
 **Rode:** abra o `index.html`. **A/D** ou **←/→** viram, **S** (segure) anda devagar, **Q/E** e **↑/↓**
-mirram, como no passo 4. Leve os barcos de pesca ao anel dourado, ao pé do farol.
+miram, como no passo 4. Leve os barcos de pesca ao anel dourado do porto, a uns 18 m do farol.
 
 ---
 
@@ -69,7 +70,10 @@ barco.velocidade = aproximar(barco.velocidade, VELOCIDADE_DO_BARCO * limitar(fol
 - **Chegar** (*arrive*): a velocidade desejada cai a zero ao chegar a 7 m do alvo, em vez de bater
   nele; a velocidade real corre atrás dela com aceleração limitada (`aproximar`, do passo 4).
 - Velocidade máxima de 95% da barca: o primeiro barco perde 0,25 m/s para ela. Com **S** (2,5 m/s)
-  ele alcança. Mais de 35 m atrás do da frente, o barco **se perde na névoa**: conta como naufrágio.
+  ele alcança. Mais de 35 m atrás do da frente **por mais de 5 s seguidos**, o barco **se perde na névoa**: conta como
+  naufrágio. Os 5 s existem por justiça: perdido o primeiro, o de trás passa a seguir a barca, que está
+  ainda mais longe, e sem tempo de espera a fila inteira sumiria em 4 quadros (3 naufrágios = fim de jogo).
+  Cada barco conta os seus segundos longe (`segundosPerdido`) e zera ao voltar: dá para frear a barca e esperar.
 
 Os outros barcos reutilizam a mesma função: o alvo deles é o barco da frente, não a barca.
 
@@ -102,8 +106,16 @@ Percorrer **de trás para a frente** faz tirar o item `i` não mudar o índice d
 Quem toca um recife vai para `barcosAfundando` (ainda desenhado, afundando 2,5 s), depois some. Quem
 sai do mundo entra em `barcosRemovidos`: o `script.js` esvazia essa fila e tira a malha da cena, pois
 `regras.js` não pode tocar na cena. As geometrias e os materiais dos barcos são **compartilhados**
-(`partes`), então tirar uma malha não vaza nada. Sem limite? A fila tem no máximo 4; um robô de
-200.000 quadros com leme e **S** aleatórios não passou de 4 barcos na fila nem de 4 afundando.
+(`partes`), então tirar uma malha não vaza nada. Sem limite? A fila tem no máximo 4: o robô da página de teste
+(milhares de quadros com leme e **S** aleatórios) confere que nunca passa de 4 entre fila e afundando.
+
+### Onde o comboio nasce
+
+Acabou a fila? Chega um comboio novo, em fila **atrás da barca**, mas só onde dá para viver
+(`filaLivre`): dentro do mundo, fora do porto (senão os 4 barcos seriam "salvos" de graça) e longe de
+recifes e ilha (senão naufragariam no primeiro quadro). Sem sorteio: se a fila de trás da barca não serve,
+`criarComboio` a **gira 30°** e tenta de novo; a cada volta inteira sem achar, ela **recua 7 m** (a barca
+pode estar dentro do porto). O mesmo mundo dá sempre o mesmo comboio, e dá para testar.
 
 ---
 
@@ -113,12 +125,14 @@ sai do mundo entra em `barcosRemovidos`: o `script.js` esvazia essa fila e tira 
 { x: 9, z: -4, raio: 2 }   // um recife: um círculo no plano
 ```
 
-Barca, barcos, recifes e porto são **círculos** `{x, z, raio}` (GDD §4.1). Tocar é uma distância
-menor que a soma dos raios (`recifeTocadoPor`). Os três desfechos:
+Barca, barcos, recifes, a ilha do farol (`ilha = { x: -5, z: -12, raio: 5.5 }`) e o porto são
+**círculos** `{x, z, raio}` (GDD §4.1). Tocar é uma distância menor que a soma dos raios
+(`recifeTocadoPor`, que confere os recifes e depois a ilha). Antes, a ilha só era desenhada: barca e
+comboio passavam por dentro dela. Os três desfechos:
 
 | Quem | O que acontece |
 |---|---|
-| barco toca recife | afunda 2,5 s, sai da fila, `naufragios++` |
+| barco toca recife **ou a ilha** | afunda 2,5 s, sai da fila, `naufragios++` |
 | barco entra no porto (raio 9 m) | sai da fila, `salvos++` |
 | **barca** toca recife | **encalha**: 2 s parada; é empurrada para fora da pedra (com 1% de folga: no ponto exato o arredondamento a faria encalhar de novo) |
 
@@ -148,6 +162,17 @@ Os barcos vêm **atrás** da barca. A câmera do passo 4 (5 m acima, 8 m atrás)
 fora da tela. Agora ela está em `(0, 10, 14)` e olha para a água quase embaixo da proa. Com isso o
 **primeiro** barco aparece; os de trás ficam fora da tela, e o placar e o **aria-live** dizem o que
 acontece com eles. O custo é uma barca menor na tela, e a névoa a deixa um pouco mais fraca.
+**Limite honesto:** a cauda é o centro do jogo e aqui ela não cabe na tela. O teto de linhas deste
+passo (650) não deixou espaço para consertar; o passo 6 enquadra a barca, os recifes à frente e a cauda.
+
+---
+
+## Testes
+
+`verificacao/proa-acesa/05-barcos-regras.html` ([abrir](../../verificacao/proa-acesa/05-barcos-regras.html))
+roda só o `regras.js`, sem three.js. `verificacao/proa-acesa/05-barcos.html`
+([abrir](../../verificacao/proa-acesa/05-barcos.html)) roda o jogo inteiro. Ou, com o Node:
+`node verificacao/rodar.mjs proa-acesa`.
 
 ---
 
@@ -158,11 +183,13 @@ acontece com eles. O custo é uma barca menor na tela, e a névoa a deixa um pou
 2. Mude `DISTANCIA_DO_COMBOIO` para 3 e para 15. O que a `ZONA_DE_FREADA` faz quando é 1?
 3. Ponha `VELOCIDADE_DO_BARCO` igual a `VELOCIDADE_DA_BARCA`. O primeiro barco ainda se perde?
 4. Em `julgarBarcosDaFila`, troque o laço para ir de frente para trás (`i++`). O que quebra?
-5. Troque o alvo de cada barco por **dois** barcos à frente (`barcosDePesca[indice - 2]`). A cauda
-   balança mais ou menos?
+5. Troque o alvo de cada barco por **dois** barcos à frente, deixando os dois primeiros na barca:
+   `return indice < 2 ? barcaNoMundo : barcosDePesca[indice - 2];`. A cauda balança mais ou menos? (Com
+   `indice - 2` puro, o barco 1 ganharia o alvo `undefined` e o jogo travaria: por quê?)
 6. Segure **A**, aperte **←** e solte só a seta (o exercício 8 do passo 4): a barca continua virando
    agora? Troque `acoes` de volta para `true`/`false` e veja o bug voltar.
-7. Dê aos barcos uma terceira flâmula (um cilindro): mexa só em `partes.bandeiras`.
+7. Dê aos barcos uma **quarta** flâmula (um cilindro, hoje são triângulo, quadrado e esfera): mexa só em
+   `partes.bandeiras`.
 8. Faça o comboio nascer **à frente** da barca. O alvo de cada um continua fazendo sentido?
 
 ---

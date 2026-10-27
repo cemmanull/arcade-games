@@ -1,20 +1,17 @@
 /*
   PASSO 5: OS BARCOS (script.js)
 
-  O mundo mora em regras.js (números no plano XZ, sem THREE). Este arquivo cria a cena, COPIA os
-  números do mundo para as malhas, lê a entrada e roda o laço. `barcaNoMundo` é o que a barca É;
-  `barca` (Group) é como ela APARECE. Ordem dos scripts: regras.js, depois este.
+  O mundo mora em regras.js (números no plano XZ, sem THREE). Este arquivo cria a cena, COPIA os números
+  para as malhas, lê a entrada e roda o laço. `barcaNoMundo` é o que a barca É; `barca` (Group), como APARECE.
 */
 
 // ---- CONSTANTES ----
 const COR_DO_FUNDO = 0x07111c;
 const COR_DO_MAR = 0x14344f;          // mar à noite
-const COR_DO_CEU_DE_TARDE = 0xf3c98b;
-const COR_DO_MAR_DE_TARDE = 0x3d7ea6;
+const COR_DO_CEU_DE_TARDE = 0xf3c98b, COR_DO_MAR_DE_TARDE = 0x3d7ea6;
 const COR_DA_LUZ = 0xfff1c8;
 const COR_DO_RECIFE = 0xe8e3d4;
-const CAMPO_DE_VISAO = 60;            // graus, na vertical
-const CAMPO_DE_VISAO_EM_PE = 80;      // celular em pé: mais aberto
+const CAMPO_DE_VISAO = 60, CAMPO_DE_VISAO_EM_PE = 80;   // graus, na vertical; o celular em pé é mais aberto
 const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const ALCANCE_DO_FEIXE = 12;          // metros
 const RAIO_DO_FEIXE = 3;              // metros, na ponta
@@ -23,24 +20,19 @@ const DIVISOES_DO_MAR = 64;           // 64 × 64 quadradinhos = 4.225 vértices
 const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // um quadradinho do mar, em metros
 const AMPLITUDE_DA_ONDA = 0.5;        // metros de altura
 const DURACAO_DO_ENTARDECER = 40;     // segundos da tarde à noite
-const NEVOA_DE_TARDE = 0.012;
-const NEVOA_DE_NOITE = 0.03;
-const LUZ_DO_CEU_DE_TARDE = 4;        // intensidade da HemisphereLight
-const LUZ_DO_CEU_DE_NOITE = 3.4;
+const NEVOA_DE_TARDE = 0.012, NEVOA_DE_NOITE = 0.03;
+const LUZ_DO_CEU_DE_TARDE = 4, LUZ_DO_CEU_DE_NOITE = 3.4;   // intensidade da HemisphereLight
 const GRAU = Math.PI / 180;           // radianos em um grau
 const LIMITE_DA_GUINADA = 75 * GRAU;
-const ARFAGEM_MINIMA = -20 * GRAU;
-const ARFAGEM_MAXIMA = 60 * GRAU;
+const ARFAGEM_MINIMA = -20 * GRAU, ARFAGEM_MAXIMA = 60 * GRAU;
 const REPOUSO_DA_ARFAGEM = -0.12;
-const VELOCIDADE_MAXIMA_DA_MIRA = 2.5;
-const ACELERACAO_DA_MIRA = 8;
-const GANHO_DA_MIRA = 5;
+const VELOCIDADE_MAXIMA_DA_MIRA = 2.5, ACELERACAO_DA_MIRA = 8, GANHO_DA_MIRA = 5;
 const TAXA_DO_ALVO_DA_MIRA = 2;       // rad/s: Q/E GIRAM o alvo da lanterna
 const DURACAO_DO_COMANDO_DO_PONTEIRO = 2;   // segundos que mexer ou arrastar assume a mira
 const SUAVIDADE_DA_CAMERA = 5;        // 1/s
 const TECLAS = {                      // tecla → ação
-    a: "esquerda", arrowleft: "esquerda", d: "direita", arrowright: "direita", s: "devagar",
-    q: "miraEsquerda", e: "miraDireita", arrowup: "miraCima", arrowdown: "miraBaixo"
+    a: "esquerda", arrowleft: "esquerda", d: "direita", arrowright: "direita", s: "devagar", q: "miraEsquerda", e: "miraDireita",
+    arrowup: "miraCima", arrowdown: "miraBaixo"
 };
 
 const palco = document.getElementById("palco");
@@ -52,15 +44,14 @@ let cena = null, camera = null, renderizador = null;
 let mar = null, luzDoCeu = null, cone = null;
 let barca = null, lanterna = null, feixe = null;
 let partes = null;                    // geometrias e materiais dos barcos de pesca, COMPARTILHADOS por todos
-let eixos = [];
+let eixos = [];                       // os AxesHelper da tecla H
 let guinada = { angulo: 0, velocidade: 0, minimo: -LIMITE_DA_GUINADA, maximo: LIMITE_DA_GUINADA };
 let arfagem = { angulo: REPOUSO_DA_ARFAGEM, velocidade: 0, minimo: ARFAGEM_MINIMA, maximo: ARFAGEM_MAXIMA };
 let intencao = { leme: 0, devagar: false, guinadaAlvo: 0, arfagemAlvo: REPOUSO_DA_ARFAGEM };   // o que o jogador QUER
 let acoes = {};                       // ação → ENTRADAS que a seguram: { esquerda: ["tecla:a", "dedo:1"] }
 let miraDoPonteiro = null;            // { guinada, arfagem, restante } enquanto o ponteiro manda na mira
 let rascunho = null;                  // objetos do three.js reaproveitados a cada quadro
-let noiteAplicada = -1;
-let lerp = null;                      // vem de THREE.MathUtils, em iniciar()
+let noiteAplicada = -1, lerp = null;  // lerp vem de THREE.MathUtils, em iniciar()
 let tempoTotal = 0;
 let instanteDoQuadroAnterior = 0;
 
@@ -86,15 +77,12 @@ function iniciar() {
     window.addEventListener("keydown", aoApertarTecla);
     window.addEventListener("keyup", aoSoltarTecla);
     window.addEventListener("blur", function () { acoes = {}; miraDoPonteiro = null; });   // aba perdeu o foco: solta tudo
-    ligarBotao(document.getElementById("botao-esquerda"), "esquerda");
-    ligarBotao(document.getElementById("botao-direita"), "direita");
-    ligarBotao(document.getElementById("botao-devagar"), "devagar");
+    ["esquerda", "direita", "devagar"].forEach(function (acao) { ligarBotao(document.getElementById("botao-" + acao), acao); });
     palco.addEventListener("pointerdown", aoMirarComPonteiro);
     palco.addEventListener("pointermove", aoMirarComPonteiro);
     palco.addEventListener("pointercancel", soltarMira);
     palco.addEventListener("pointerleave", soltarMira);
     palco.addEventListener("contextmenu", impedirMenuDeContexto);
-
     instanteDoQuadroAnterior = performance.now();
     requestAnimationFrame(quadroAQuadro);
 }
@@ -227,8 +215,7 @@ function montarCena() {
     camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
     rascunho = { cor: new THREE.Color(), ponto: new THREE.Vector3(), alvo: new THREE.Vector3() };
     partes = {
-        casco: new THREE.BoxGeometry(1.2, 0.4, 2.4), mastro: new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6),
-        luz: new THREE.SphereGeometry(0.15, 8, 6),
+        casco: new THREE.BoxGeometry(1.2, 0.4, 2.4), mastro: new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), luz: new THREE.SphereGeometry(0.15, 8, 6),
         bandeiras: [new THREE.ConeGeometry(0.25, 0.5, 3), new THREE.BoxGeometry(0.4, 0.4, 0.05), new THREE.SphereGeometry(0.2, 8, 6)],
         madeira: new THREE.MeshStandardMaterial({ color: 0x8a5a3c, flatShading: true }),
         brilho: new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false })   // sem névoa: a luz do barco nunca some
@@ -247,8 +234,7 @@ function criarMalha(geometria, cor) {
 function criarMar() {
     const geometria = new THREE.PlaneGeometry(TAMANHO_DO_MAR, TAMANHO_DO_MAR, DIVISOES_DO_MAR, DIVISOES_DO_MAR);
     geometria.rotateX(-Math.PI / 2);   // deitamos a GEOMETRIA: y vira a altura de cada vértice
-    mar = criarMalha(geometria, COR_DO_MAR_DE_TARDE);
-    return mar;
+    return (mar = criarMalha(geometria, COR_DO_MAR_DE_TARDE));
 }
 
 function criarIlhaComFarol() {
@@ -365,7 +351,7 @@ function quadroAQuadro(instanteAtual) {
     const tempo = Math.max(0, Math.min((instanteAtual - instanteDoQuadroAnterior) / 1000, TETO_DO_DELTA));   // nunca negativo nem enorme
     instanteDoQuadroAnterior = instanteAtual;
     atualizar(tempo);
-    desenhar();
+    renderizador.render(cena, camera);
     requestAnimationFrame(quadroAQuadro);
 }
 
@@ -426,8 +412,8 @@ function seguirAlvo(eixo, alvo, tempo) {
     eixo.angulo = limitar(eixo.angulo + eixo.velocidade * tempo, eixo.minimo, eixo.maximo);
 }
 
-/* O ponto (0, 10, 14) é LOCAL à barca (atrás e acima). `localToWorld` o leva ao mundo, já com a proa.
-   Mais alta e mais atrás que no passo 4 (0, 5, 8): o comboio vem ATRÁS da barca e ficaria fora da tela. */
+/* O ponto (0, 10, 14) é LOCAL à barca (atrás e acima); `localToWorld` o leva ao mundo, já com a proa. Mais alta e
+   mais atrás que no passo 4 (0, 5, 8): o comboio vem ATRÁS da barca e ficaria fora da tela. */
 function seguirComACamera(fracao) {
     camera.position.lerp(barca.localToWorld(rascunho.ponto.set(0, 10, 14)), fracao);
     camera.lookAt(barca.localToWorld(rascunho.alvo.set(0, 0, -1)));   // olha para a água, quase embaixo da proa: o comboio entra na tela
@@ -459,10 +445,6 @@ function aplicarCeu(noite) {   // 0 = fim de tarde, 1 = noite fechada
     mar.material.color.set(COR_DO_MAR_DE_TARDE).lerp(rascunho.cor.set(COR_DO_MAR), noite);
     luzDoCeu.intensity = lerp(LUZ_DO_CEU_DE_TARDE, LUZ_DO_CEU_DE_NOITE, noite);
     cone.material.opacity = lerp(0.04, 0.18, noite);   // de dia o feixe quase não aparece
-}
-
-function desenhar() {
-    renderizador.render(cena, camera);
 }
 
 iniciar();
