@@ -4,10 +4,11 @@
 da névoa; a 5 prepara as texturas; `desenharVisao` agora **escreve pixels** num `ImageData`, e a coluna
 de cada parede amostra a textura; `atualizarRaios` guarda também `u`, a posição do impacto ao longo da
 face; a seção 7, "medir antes de escolher", é nova; a leitura do H mostra os tempos; some o passo fixo do
-passo 3), `index.html` (a ajuda) e `style.css` (a leitura ganha uma sexta linha). `lancarRaio`, a colisão
+passo 3; a busca do raio não aloca objetos), `index.html` (a ajuda e os botões **Planta** e **Medir**) e `style.css` (a leitura ganha uma sexta linha; os botões). `lancarRaio`, a colisão
 e a entrada são **os mesmos** do passo 4.
 **Rode:** abra o `index.html`. Ande e gire como antes. **H** troca a imagem pela planta e mostra quanto
-cada técnica de desenho demorou; **M** mede de novo.
+cada técnica de desenho demorou; **M** mede de novo. Na tela do celular, os botões **Planta (H)** e **Medir (M)**
+fazem o mesmo.
 
 ---
 
@@ -60,11 +61,11 @@ horizontal (`"y"`), o `x`. Só a parte fracionária interessa (o resto é "qual 
 
 ```js
 const ponto = resultado.lado === "x" ? resultado.y : resultado.x;
-const fracao = ponto - Math.floor(ponto);          // 0 a 1 ao longo da face
+const u = ponto - Math.floor(ponto);                // 0 a 1 ao longo da face (espelhado em duas faces, abaixo)
 const colunaDaTextura = Math.floor(u * 16);        // 0 a 15
 ```
 
-Esse número, `u`, vai para o resultado de cada raio. Dois raios vizinhos batem em pontos vizinhos, então
+Esse número, `u` (no código, `fracao`, antes do espelhamento), vai para o resultado de cada raio. Dois raios vizinhos batem em pontos vizinhos, então
 `u` **cresce de forma contínua** ao longo da parede: não há saltos nem repetição.
 
 **O espelhamento.** Quem olha para uma parede de frente espera ver o tijolo na ordem em que ele foi
@@ -103,8 +104,9 @@ Dois cuidados que a conta de pixel exige:
 
 *GDD, seção 6.*
 
-A névoa mistura cada cor da parede com a cor de fundo (`COR_DA_NEVOA`, o azul-noite): em `nível 0`, a
-cor pura; em `nível 31`, só a névoa. Fazer essa mistura **por pixel, por quadro** custaria três
+A névoa mistura cada cor da parede com a cor do **horizonte** (`COR_DA_NEVOA` é a mesma `COR_DO_HORIZONTE`, o
+azul-noite): em `nível 0`, a cor pura; em `nível 31`, só a névoa. Ser a *mesma* cor importa: uma parede
+totalmente enevoada some no horizonte, em vez de virar uma silhueta mais escura que o fundo. Fazer essa mistura **por pixel, por quadro** custaria três
 multiplicações a mais em 64 mil pixels. Em vez disso, na carga, cada textura é copiada 32 vezes, uma
 por nível, já misturada:
 
@@ -156,35 +158,47 @@ Há dois jeitos de pôr uma parede com textura na tela:
 - **B.** O buffer da seção 5: o código escreve cada pixel.
 
 O código do passo tem os dois. `desenharVisaoPorFatias` (A) existe **só para medir**; o jogo usa
-`desenharVisao` (B). `medirAsTecnicas` roda 5 quadros de aquecimento e 40 medidos de cada técnica,
-cada quadro sendo `atualizarRaios` + o desenho, e divide pelo número de quadros:
+`desenharVisao` (B): ela já tinha sido escolhida pelo spike do GDD (seção 8.2), e esta medição a confirma.
+`medirAsTecnicas` roda 5 quadros de aquecimento e 40 medidos de cada técnica e divide pelo número de quadros.
+
+**O que entra na conta, exatamente: só o desenho de um quadro.** Para A, são o envio do fundo (um
+`putImageData` do quadro todo), as fatias `drawImage` e os retângulos de névoa; para B, escrever os pixels e
+um `putImageData`. Os raios (`atualizarRaios`) ficam **fora**: a pose não muda durante a medição, e eles são
+iguais nas duas técnicas. O envio do fundo de A é o mesmo tipo de trabalho que B faz no fim, então a diferença
+medida é: 320 fatias e 320 retângulos de A contra a escrita pixel a pixel de B.
 
 ```js
-const inicio = performance.now();
-for (...) { atualizarRaios(); desenharComATecnica(); pincelVisao.getImageData(0, 0, 1, 1); }
+atualizarRaios();                                  // fora da conta
+// ... depois dos 5 quadros de aquecimento: inicio = performance.now()
+desenharComATecnica(); pincelVisao.getImageData(0, 0, 1, 1);   // 45 vezes
 return (performance.now() - inicio) / QUADROS_MEDIDOS;
 ```
 
-O `getImageData` de 1 pixel força o canvas a **terminar** o que enfileirou (sem ele, o relógio mediria só
-o "pedir" desenho, não o "fazer"), e o canvas é criado com `willReadFrequently`, em software, para o tempo
-caber na conta. O resultado fica em `medicao` (`{ a, b, largura, altura }`) e aparece no H.
+O `getImageData` de 1 pixel força o canvas a **terminar** o que enfileirou (sem ele, o relógio mediria só o
+"pedir" desenho, não o "fazer"), e o canvas é criado com `willReadFrequently`, que o põe **em software** (a
+CPU desenha). O resultado fica em `medicao` (`{ a, b, largura, altura }`) e aparece no H. A linha "agora" do H é
+outra coisa: o quadro inteiro do jogo (`atualizar` + `desenhar`), sempre com a técnica B.
 
-**O que medi, nesta máquina** (Intel Core i5-3320M 2,6 GHz, Chrome headless, página parada no início do
-mapa, sem estrangulamento de CPU):
+**O que medi, nesta máquina** (Intel Core i5-3320M 2,6 GHz, Chrome headless, 6 rodadas de `medirAsTecnicas` por
+linha, sem estrangulamento de CPU):
 
-| Resolução | A: `drawImage` por coluna | B: `ImageData` por pixel | A ÷ B |
+| Resolução e pose | A: fatias `drawImage` | B: `ImageData` por pixel | A ÷ B |
 |---|---|---|---|
-| 320×200 (janela 1280×720) | 5,6 a 12,2 ms | 0,65 a 1,13 ms | 8 a 11× |
-| 195×150 (janela 390×750) | 5,6 ms | 0,55 ms | 10× |
+| 320×200, meio do corredor | 9,3 a 11,1 ms | 0,67 a 0,78 ms | 13 a 15× |
+| 320×200, nariz na parede | 9,5 a 12,2 ms | 0,73 a 0,98 ms | 11 a 14× |
+| 195×150 (janela 390×750) | 5,5 a 5,7 ms | 0,33 a 0,36 ms | 16 a 17× |
 
-(Cada linha é um intervalo de várias rodadas: o relógio oscila de uma para outra, e o pior caso, de
-nariz na parede, fica no alto do intervalo.) O orçamento de um quadro a 60 por segundo é **16,7 ms**.
-B sobra de longe; só o desenho de A, numa máquina de 2012, gasta de um terço a três quartos do
-orçamento, antes de o jogo ter feito qualquer outra coisa.
-Isso bate com a tabela do GDD (A dez a trinta vezes mais cara). **B fica.**
+O orçamento de um quadro a 60 por segundo é **16,7 ms**. B sobra de longe; só o desenho de A, numa máquina
+de 2012, gasta de um terço a três quartos do orçamento, antes de o jogo ter feito qualquer outra coisa.
+A razão cai dentro da faixa que o GDD registrou no spike (A dez a trinta vezes mais cara), mas o número
+exato depende do que entra na conta e da máquina. **B fica.**
 
-Ressalvas honestas: é um desktop com Chrome sem tela de verdade, não um celular; o GDD (seção 12)
-registra que celular **não foi medido**. Rode **M** na sua máquina e compare: o número que importa é o seu.
+**Ressalvas honestas:**
+- Medi **CPU com canvas em software** (`willReadFrequently`). Com a GPU desenhando de verdade, o custo de A
+  é diferente e **não foi medido**: o GDD (seção 8.2) já avisa que, sem a descarga forçada, A só "enfileira"
+  e o relógio não vê o custo. A escolha de B se apoia na tabela do spike inteira, não neste número só.
+- É um desktop com Chrome sem tela de verdade, não um celular; o GDD (seção 12) registra que celular **não foi
+  medido**. Rode **M** (ou o botão **Medir**) na sua máquina e compare: o número que importa é o seu.
 
 ---
 
@@ -193,13 +207,13 @@ registra que celular **não foi medido**. Rode **M** na sua máquina e compare: 
 A leitura do H deixa de ter o passo fixo (a lição do passo 3 já foi dada) e mostra:
 
 ```text
-A drawImage por coluna: 5.56 ms
-B ImageData por pixel: 0.55 ms (10.2×)
-195×150; agora: 0.55 ms de 16,7
+A drawImage por coluna: 5.60 ms
+B ImageData por pixel: 0.34 ms (16.5×)
+195×150; agora: 0.55 ms de 16.7
 ```
 
 A terceira linha é a **média móvel do quadro de verdade** (`msAoVivo`), que muda quando a pose muda. **M**
-repete a medição com a pose e o tamanho de agora: ande até colar o nariz na parede e meça (exercício 5).
+(ou o botão **Medir**, que também liga a planta para você ver o resultado) repete a medição com a pose e o tamanho de agora: ande até colar o nariz na parede e meça (exercício 5).
 
 ---
 

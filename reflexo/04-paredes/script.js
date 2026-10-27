@@ -374,12 +374,12 @@ function atualizarRaios() {
         const tamanho = Math.hypot(inclinadoX, inclinadoY);
         const direcaoX = inclinadoX / tamanho;
         const direcaoY = inclinadoY / tamanho;
-        const resultado = lancarRaio(jogador.x, jogador.y, direcaoX, direcaoY, false);   // sem o caminho: ninguém o lê
+        const resultado = raiosDaTela[coluna] || (raiosDaTela[coluna] = criarResultado());   // o mesmo objeto, quadro a quadro
+        percorrerAGrade(resultado, jogador.x, jogador.y, direcaoX, direcaoY, SEM_CRUZAMENTOS);   // sem o caminho: ninguém o lê
         const cosseno = jogador.dx * direcaoX + jogador.dy * direcaoY;
 
         resultado.perpendicular = resultado.distancia * cosseno;
         resultado.altura = k / resultado.perpendicular;
-        raiosDaTela[coluna] = resultado;
     }
 
     raio = lancarRaio(jogador.x, jogador.y, jogador.dx, jogador.dy);   // com o caminho, para o H
@@ -390,44 +390,60 @@ function atualizarRaios() {
 /*
   Um raio de direção UNITÁRIA cruza uma linha vertical da grade a cada 1/|dx| de
   distância e uma horizontal a cada 1/|dy|. Cada eixo guarda a distância até a
-  PRÓXIMA linha dele (`proximo`); a menor vence, e o raio entra na casa vizinha
-  daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  PRÓXIMA linha dele (`proximoX`, `proximoY`); a menor vence, e o raio entra na casa
+  vizinha daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  Tudo em variáveis simples: a busca roda 195 a 320 vezes por quadro e não cria objeto nenhum.
 */
-function prepararEixo(origem, direcao) {
-    if (direcao === 0) {
-        return { passo: 1, delta: Infinity, proximo: Infinity };   // paralelo: nunca cruza
-    }
-    const delta = Math.abs(1 / direcao);
-    const ateALinha = direcao < 0 ? origem - Math.floor(origem) : Math.floor(origem) + 1 - origem;
-    return { passo: direcao < 0 ? -1 : 1, delta, proximo: ateALinha * delta };
-}
-
 const SEM_CRUZAMENTOS = Object.freeze([]);
 
-// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
-// `registrar` guarda cada cruzamento (só o H os lê); os 320 raios da imagem passam false.
+// Um raio avulso (o do olhar, o dos testes): devolve um resultado novo.
+// `registrar` guarda cada cruzamento (só o H os lê).
 function lancarRaio(origemX, origemY, direcaoX, direcaoY, registrar = true) {
-    const eixos = { x: prepararEixo(origemX, direcaoX), y: prepararEixo(origemY, direcaoY) };
-    const cruzamentos = registrar ? [] : SEM_CRUZAMENTOS;
+    return percorrerAGrade(criarResultado(), origemX, origemY, direcaoX, direcaoY, registrar ? [] : SEM_CRUZAMENTOS);
+}
+
+function criarResultado() {
+    return { coluna: 0, linha: 0, lado: "x", distancia: 0, x: 0, y: 0, cruzamentos: SEM_CRUZAMENTOS };
+}
+
+// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
+// Preenche `resultado` no lugar: os raios da imagem reaproveitam os mesmos objetos, quadro a quadro.
+function percorrerAGrade(resultado, origemX, origemY, direcaoX, direcaoY, cruzamentos) {
+    const passoX = direcaoX < 0 ? -1 : 1;   // direção 0: paralelo, o passo não importa
+    const passoY = direcaoY < 0 ? -1 : 1;
+    const deltaX = direcaoX === 0 ? Infinity : Math.abs(1 / direcaoX);
+    const deltaY = direcaoY === 0 ? Infinity : Math.abs(1 / direcaoY);
+    let proximoX = direcaoX === 0 ? Infinity : (direcaoX < 0 ? origemX - Math.floor(origemX) : Math.floor(origemX) + 1 - origemX) * deltaX;
+    let proximoY = direcaoY === 0 ? Infinity : (direcaoY < 0 ? origemY - Math.floor(origemY) : Math.floor(origemY) + 1 - origemY) * deltaY;
     let coluna = Math.floor(origemX);
     let linha = Math.floor(origemY);
     let lado = "x";
     let distancia = 0;
 
     while (!ehSolida(coluna, linha)) {
-        lado = eixos.x.proximo < eixos.y.proximo ? "x" : "y";
-        distancia = eixos[lado].proximo;
-        eixos[lado].proximo += eixos[lado].delta;
-        if (lado === "x") {
-            coluna += eixos.x.passo;
+        if (proximoX < proximoY) {
+            lado = "x";
+            distancia = proximoX;
+            proximoX += deltaX;
+            coluna += passoX;
         } else {
-            linha += eixos.y.passo;
+            lado = "y";
+            distancia = proximoY;
+            proximoY += deltaY;
+            linha += passoY;
         }
-        if (registrar) {
+        if (cruzamentos !== SEM_CRUZAMENTOS) {
             cruzamentos.push({ x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, lado, coluna, linha });
         }
     }
-    return { coluna, linha, lado, distancia, x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, cruzamentos };
+    resultado.coluna = coluna;
+    resultado.linha = linha;
+    resultado.lado = lado;
+    resultado.distancia = distancia;
+    resultado.x = origemX + direcaoX * distancia;
+    resultado.y = origemY + direcaoY * distancia;
+    resultado.cruzamentos = cruzamentos;
+    return resultado;
 }
 
 // O jeito ingênuo, só para comparar: andar o raio em passos fixos até pisar numa casa sólida.
@@ -464,7 +480,7 @@ function ajustarVisao() {
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.
     const alturaLivre = window.innerHeight - medirOResto();
     const escala = Math.max(1, Math.floor(Math.min(window.innerWidth / larguraDaVisao, alturaLivre / alturaDaVisao)));
-    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, alturaLivre * tela.width / tela.height));
+    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, (alturaLivre - 4) * tela.width / tela.height + 4));   // 4 = as duas bordas
     const alturaDaPlanta = (larguraDaPlanta - 4) * tela.height / tela.width + 4;   // 4 = as duas bordas
     visao.style.width = larguraDaVisao * escala + "px";
     tela.style.width = larguraDaPlanta + "px";

@@ -6,7 +6,7 @@ função nova `desenharVisao`; a planta ganhou o leque de raios e a leitura, uma
 ganhou teto, piso e as casas `D`, `E`, `R`, com cores mais escuras na planta; `lancarRaio` ganhou o
 parâmetro `registrar`; o ângulo inicial é 0,25 rad), `index.html` (dois canvas
 num `#palco`) e `style.css` (`#palco`, `#visao`, `[hidden]` e a leitura de 5 linhas).
-A busca do `lancarRaio`, a colisão e a entrada são **as mesmas** do passo 3.
+A conta do DDA, a colisão e a entrada são **as mesmas** do passo 3 (a busca já não aloca objetos: seção 1).
 **Rode:** abra o `index.html`. Ande e gire como antes. **H** troca a imagem pela planta.
 
 ---
@@ -52,9 +52,9 @@ O `+ 0.5` mira o **meio** do pixel, não a quina dele. O resultado de cada colun
 **O raio do olhar é outro raio.** Com 320 colunas (um número par) nenhuma aponta exatamente para onde
 o zelador olha: a do meio está 0,003 do centro do plano. Por isso `raio`, o do passo 3, é lançado à
 parte, na direção `(dx, dy)`, e é ele que o H destaca e que a leitura mostra (no início, a distância
-2,021 do passo 3). Duas economias: os 320 raios da imagem chamam `lancarRaio(..., false)`, o novo
-parâmetro `registrar`, e **não guardam** os cruzamentos (só o H os lê), e o
-passo fixo da comparação só é recalculado quando o H está ligado e o zelador mudou de pose.
+2,021 do passo 3). Três economias: os 320 raios da imagem **não guardam** os cruzamentos (`registrar`; só o H os
+lê), **reaproveitam os mesmos 320 objetos** a cada quadro (`percorrerAGrade` os preenche, com variáveis simples:
+eram uns 77 mil objetos por segundo) e o passo fixo da comparação só é refeito com o H ligado e a pose mudada.
 
 ---
 

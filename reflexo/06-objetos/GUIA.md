@@ -4,20 +4,21 @@
 `OBJETOS`; a 5 sombreia também os sprites; a seção 7 é nova: o espaço da câmera e a projeção; o
 `zBuffer` é preenchido em `atualizarRaios`; `desenharVisao` desenha os sprites depois das paredes; o H
 ganha os objetos na planta; **saem** a técnica A e a medição do passo 5, que já cumpriram o papel),
-`index.html` (a ajuda) e `style.css` (só o comentário). O ângulo inicial é `0`: o zelador olha para o leste.
-`lancarRaio`, a colisão, a entrada e a textura das paredes são **as mesmas** do passo 5.
-**Rode:** abra o `index.html`. No início, uma **sombra** flutua no corredor, à sua frente. Ande, gire e
-dê a volta: há mais cinco objetos no mapa. Aperte **H**.
+`index.html` (a ajuda e o botão **Planta**) e `style.css` (o botão). O ângulo inicial é `0`: o zelador olha para o leste.
+A busca do raio, a colisão, a entrada e a textura das paredes são **as mesmas** do passo 5.
+**Rode:** abra o `index.html`. No início, uma **sombra** está no corredor, à sua frente. Ande, gire e
+contorne as paredes: há mais cinco objetos no mapa. Aperte **H** (ou o botão **Planta**).
 
 ---
 
 ## O que você vê
 
-Figuras em pé no chão da sala: **sombras** roxas de olhos amarelos e **cristais** azul-claros que
-flutuam um pouco acima do piso. Elas ficam menores e mais escuras (névoa) quanto mais longe, e sempre
+Figuras em pé no chão da sala: **sombras** roxas, que são línguas de escuro (uma chama inclinada, de ponta fina,
+sem saia nem olhos, só um brilho amarelo) e **cristais** azul-claros que flutuam um pouco acima do piso. Elas ficam menores e mais escuras (névoa) quanto mais longe, e sempre
 **de frente para você**, de qualquer ângulo: são "cartazes" (*billboards*), não modelos 3D. Quando uma
 parede está no caminho, a figura **some atrás dela**, coluna por coluna. Há um cristal escondido atrás
-da parede do início, na linha do olhar: vá até a casa de cima e dê a volta.
+da parede do início, na linha do olhar. Para chegar nele, desça pela coluna 4 até a linha 7, siga para o leste
+até a coluna 6 e suba pelo corredor dela: o cristal está no alto.
 
 Com **H**, a planta mostra cada objeto: **círculo** é sombra, **losango** é cristal (a forma, não só a
 cor); **cheio** é o objeto que está na frente do olho, **vazado** é o que ficou para trás.
@@ -137,14 +138,16 @@ uma sombra longe fica quase da cor da névoa, como a parede ao lado dela.
 ## 7. O que o H mostra
 
 ```text
+(pose do corredor da linha 9, olhando para o leste)
 sprites: 6 na frente de 6
-1 aparecem (z-buffer); os outros: parede
-agora: 0.68 ms de 16,7 (195×150)
+aparecem 3 · fora do campo 2 · tapados 1
+agora: 0.84 ms de 16.7 (195×150)
 ```
 
-"Na frente de 6" é `spritesDaTela.length` (profundidade ≥ 0,2). "Aparecem" é quantos têm pelo menos uma coluna
-que passou no z-buffer. Gire até as duas contas diferirem e olhe a planta: o objeto **cheio** que não
-aparece está atrás de uma parede.
+"Na frente de 6" é `spritesDaTela.length`: profundidade ≥ 0,2, ou seja, na frente do olho, **mesmo fora do campo de visão**.
+Desses, "aparecem" têm pelo menos uma coluna que passou no z-buffer; "fora do campo" estão à esquerda ou à direita
+da imagem; "tapados" estão dentro do campo, mas atrás de uma parede. As três contas somam a primeira. Só os
+**tapados** são obra do z-buffer; gire e veja os números trocarem.
 
 ---
 
@@ -169,4 +172,4 @@ aparece está atrás de uma parede.
 
 ---
 
-**Anterior:** [`05-texturas`](../05-texturas/) · **Próximo:** `07-espelhos` — o feixe de luz, que quica nos espelhos e abre portas.
+**Anterior:** [`05-texturas`](../05-texturas/) · **Próximo:** [`07-espelhos`](../07-espelhos/) — o feixe de luz, que quica nos espelhos e abre portas.

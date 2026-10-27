@@ -46,7 +46,7 @@ p { margin: 0; font-size: 13px; text-align: center; color: var(--cor-apagada); }
     color: var(--cor-texto);
 }
 
-#controles { display: grid; grid-template-columns: repeat(3, 72px); gap: 8px; }
+#controles { display: grid; grid-template-columns: repeat(4, 72px); gap: 8px; }
 
 #controles button {
     height: 56px;
@@ -61,8 +61,13 @@ p { margin: 0; font-size: 13px; text-align: center; color: var(--cor-apagada); }
 }
 
 /* Apertado (dedo, mouse ou a tecla equivalente): mais claro, borda do feixe e afundado. */
-#controles button:active, #controles button.segurado {
+#controles button:active, #controles button.segurado, #controles button[aria-pressed="true"] {
     background: #3a3a5c;
     border-color: var(--cor-feixe);
     transform: translateY(2px);
 }
+
+/* Os comandos (Planta, Medir) ficam na quarta coluna, com texto: a tecla vai entre parênteses. */
+#controles button[data-comando] { grid-column: 4; font-size: 14px; }
+#controles button[data-comando="planta"] { grid-row: 1; }
+#controles button[data-comando="medir"] { grid-row: 2; }

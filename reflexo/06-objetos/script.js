@@ -50,7 +50,7 @@ const PALETA_DAS_TEXTURAS = {
     g: "#a8842e", h: "#775c1e", i: "#2c2c3c", o: "#c9c9d6",   // madeira, escura, ferro, rebite
     j: "#2e7d8a", k: "#1c5560", l: "#bbffff",                 // emissor, escuro, luz
     m: "#8a4aa8", n: "#4e2a64",                               // receptor, escuro
-    s: "#783ebe", t: "#4a2478", y: "#ffe14d"                  // sombra, contorno dela, olhos
+    s: "#783ebe", t: "#4a2478", y: "#ffe14d"                  // sombra, contorno dela, o brilho
 };
 const TEXTURAS_EM_TEXTO = {
     // tijolo: quatro fileiras de tijolos com argamassa (c), deslocadas pela metade
@@ -154,24 +154,26 @@ const TEXTURAS_EM_TEXTO = {
 // acrescentar um objeto ao jogo é acrescentar uma linha, sem mexer em função nenhuma.
 // `tamanho` é o lado em casas (1 = a altura de uma parede); `elevacao` é a altura do chão até a base.
 const CATALOGO_DE_SPRITES = {
+    // A sombra é uma língua de escuro: uma chama inclinada, de ponta fina, com fagulhas soltas ao redor.
+    // Sem saia e sem par de olhos, só um brilho: a silhueta é o que a distingue (GDD, seção 7).
     sombra: {
         tamanho: 0.8, elevacao: 0, cor: "#b07cf0", arte: [
-            "................",
-            "................",
-            ".....tttttt.....",
-            "...ttsssssstt...",
-            "...tsssssssst...",
-            "..tssyyssyysst..",
-            "..tssyyssyysst..",
-            "..tssyyssyysst..",
-            "..tsssssssssst..",
-            "..tssssnnsssst..",
-            "..tssssnnsssst..",
-            "..tsssssssssst..",
-            "..tsttssttsstt..",
-            "..tt..tt..tt....",
-            "..t...t...t.....",
-            "................"
+            "..........tt....",
+            "..........tst...",
+            ".........tssst..",
+            "...t.....tsst...",
+            "........tssst...",
+            "........tsst....",
+            ".......tssst....",
+            ".......tssyst...",
+            "......tsssnsst..",
+            "......tssnnnst..",
+            "......tssnnst...",
+            "......tssssst...",
+            "....t..tssst....",
+            "........tsst....",
+            ".........tt.....",
+            "..t.......t....."
         ]
     },
     cristal: {
@@ -209,8 +211,8 @@ const PROFUNDIDADE_MINIMA = 0.2;   // casas: mais perto que isso (ou atrás) o s
 const NIVEIS_DE_NEVOA = 32;
 const DISTANCIA_DA_NEVOA = 10;   // casas: daí em diante a parede some na cor da névoa
 const ESCURO_DO_LADO_Y = 5;      // níveis extras nas faces y: a "luz" barata do passo 4, agora na névoa
-const COR_DA_NEVOA = [8, 8, 14]; // o azul-noite do fundo
 const COR_DO_HORIZONTE = [10, 10, 18];
+const COR_DA_NEVOA = COR_DO_HORIZONTE;   // a MESMA cor: parede e sprite enevoados somem no horizonte
 const COR_DO_TETO_ALTO = [4, 4, 9];
 const COR_DO_PISO_BAIXO = [38, 38, 56];
 const TRANSPARENTE = 0;          // pixel de alfa 0: o sprite não o escreve
@@ -520,12 +522,14 @@ function montarLeitura() {
     const { x, y, angulo, dx, dy } = jogador;
     const { coluna, linha, lado, distancia, cruzamentos } = raio;
     const aparecem = spritesDaTela.filter(sprite => sprite.colunas.length > 0).length;
+    const foraDoCampo = spritesDaTela.filter(sprite => sprite.direita <= 0 || sprite.esquerda >= larguraDaVisao).length;
+    const tapados = spritesDaTela.length - aparecem - foraDoCampo;   // dentro do campo, mas atrás de parede
     return `casa (${Math.floor(x)}, ${Math.floor(y)})  pos (${x.toFixed(2)}, ${y.toFixed(2)})\n`
         + `${(angulo * 180 / Math.PI).toFixed(0)}° = ${angulo.toFixed(3)} rad  dir (${dx.toFixed(2)}, ${dy.toFixed(2)})\n`
         + `raio (${coluna}, ${linha}) lado ${lado} ${distancia.toFixed(3)} · DDA ${cruzamentos.length}\n`
         + `sprites: ${spritesDaTela.length} na frente de ${OBJETOS.length}\n`
-        + `${aparecem} aparecem (z-buffer); os outros: parede\n`
-        + `agora: ${msAoVivo.toFixed(2)} ms de 16,7 (${larguraDaVisao}×${alturaDaVisao})`;
+        + `aparecem ${aparecem} · fora do campo ${foraDoCampo} · tapados ${tapados}\n`
+        + `agora: ${msAoVivo.toFixed(2)} ms de 16.7 (${larguraDaVisao}×${alturaDaVisao})`;
 }
 
 // ---- 7. OBJETOS NO ESPAÇO DA CÂMERA ------------------------
@@ -580,6 +584,7 @@ function colunasNaFrenteDaParede(sprite) {
 const entradasAtivas = new Map();   // "tecla:w", "ponteiro:3:frente" → "frente"
 const acoesAtivas = new Set();      // a visão derivada: os nomes das ações seguradas
 const botoesDeAcao = document.querySelectorAll("[data-acao]");
+const botoesDeComando = document.querySelectorAll("[data-comando]");   // Planta: as teclas H, na tela
 const ACAO_DA_TECLA = {
     w: "frente", arrowup: "frente", s: "tras", arrowdown: "tras",
     a: "esquerda", d: "direita", arrowleft: "girarEsquerda", arrowright: "girarDireita"
@@ -595,7 +600,7 @@ function mudarEntrada(entrada, acao) {   // acao indefinida = soltou
 document.addEventListener("keydown", evento => {
     const tecla = evento.key.toLowerCase();
     if (tecla === "h" && !evento.repeat) {
-        depuracaoLigada = !depuracaoLigada;
+        alternarPlanta();
     }
     if (ACAO_DA_TECLA[tecla] !== undefined) {
         evento.preventDefault();
@@ -613,6 +618,14 @@ botoesDeAcao.forEach(botao => {
     ["pointerup", "pointercancel", "pointerleave"].forEach(tipo => botao.addEventListener(tipo, evento => mudarEntrada(entradaDo(evento))));
     botao.addEventListener("contextmenu", evento => evento.preventDefault());   // pressão longa no celular
 });
+
+// A tecla H e o botão "Planta" são a mesma intenção; o botão mostra se está ligada (aria-pressed).
+function alternarPlanta(ligada = !depuracaoLigada) {
+    depuracaoLigada = ligada;
+    [...botoesDeComando].filter(botao => botao.dataset.comando === "planta").forEach(botao => botao.setAttribute("aria-pressed", ligada));
+}
+
+botoesDeComando.forEach(botao => botao.addEventListener("click", () => alternarPlanta()));
 
 function lerIntencao() {
     const eixo = (positiva, negativa) => Number(acoesAtivas.has(positiva)) - Number(acoesAtivas.has(negativa));
@@ -708,13 +721,13 @@ function atualizarRaios() {
         const tamanho = Math.hypot(inclinadoX, inclinadoY);
         const direcaoX = inclinadoX / tamanho;
         const direcaoY = inclinadoY / tamanho;
-        const resultado = lancarRaio(jogador.x, jogador.y, direcaoX, direcaoY, false);   // sem o caminho: ninguém o lê
+        const resultado = raiosDaTela[coluna] || (raiosDaTela[coluna] = criarResultado());   // o mesmo objeto, quadro a quadro
+        percorrerAGrade(resultado, jogador.x, jogador.y, direcaoX, direcaoY, SEM_CRUZAMENTOS);   // sem o caminho: ninguém o lê
         const cosseno = jogador.dx * direcaoX + jogador.dy * direcaoY;
 
         resultado.perpendicular = resultado.distancia * cosseno;
         resultado.altura = k / resultado.perpendicular;
         resultado.u = posicaoNaFace(resultado, direcaoX, direcaoY);
-        raiosDaTela[coluna] = resultado;
         zBuffer[coluna] = resultado.perpendicular;
     }
 
@@ -738,44 +751,60 @@ function posicaoNaFace(resultado, direcaoX, direcaoY) {
 /*
   Um raio de direção UNITÁRIA cruza uma linha vertical da grade a cada 1/|dx| de
   distância e uma horizontal a cada 1/|dy|. Cada eixo guarda a distância até a
-  PRÓXIMA linha dele (`proximo`); a menor vence, e o raio entra na casa vizinha
-  daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  PRÓXIMA linha dele (`proximoX`, `proximoY`); a menor vence, e o raio entra na casa
+  vizinha daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  Tudo em variáveis simples: a busca roda 195 a 320 vezes por quadro e não cria objeto nenhum.
 */
-function prepararEixo(origem, direcao) {
-    if (direcao === 0) {
-        return { passo: 1, delta: Infinity, proximo: Infinity };   // paralelo: nunca cruza
-    }
-    const delta = Math.abs(1 / direcao);
-    const ateALinha = direcao < 0 ? origem - Math.floor(origem) : Math.floor(origem) + 1 - origem;
-    return { passo: direcao < 0 ? -1 : 1, delta, proximo: ateALinha * delta };
-}
-
 const SEM_CRUZAMENTOS = Object.freeze([]);
 
-// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
-// `registrar` guarda cada cruzamento (só o H os lê); os 320 raios da imagem passam false.
+// Um raio avulso (o do olhar, o dos testes): devolve um resultado novo.
+// `registrar` guarda cada cruzamento (só o H os lê).
 function lancarRaio(origemX, origemY, direcaoX, direcaoY, registrar = true) {
-    const eixos = { x: prepararEixo(origemX, direcaoX), y: prepararEixo(origemY, direcaoY) };
-    const cruzamentos = registrar ? [] : SEM_CRUZAMENTOS;
+    return percorrerAGrade(criarResultado(), origemX, origemY, direcaoX, direcaoY, registrar ? [] : SEM_CRUZAMENTOS);
+}
+
+function criarResultado() {
+    return { coluna: 0, linha: 0, lado: "x", distancia: 0, x: 0, y: 0, cruzamentos: SEM_CRUZAMENTOS };
+}
+
+// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
+// Preenche `resultado` no lugar: os raios da imagem reaproveitam os mesmos objetos, quadro a quadro.
+function percorrerAGrade(resultado, origemX, origemY, direcaoX, direcaoY, cruzamentos) {
+    const passoX = direcaoX < 0 ? -1 : 1;   // direção 0: paralelo, o passo não importa
+    const passoY = direcaoY < 0 ? -1 : 1;
+    const deltaX = direcaoX === 0 ? Infinity : Math.abs(1 / direcaoX);
+    const deltaY = direcaoY === 0 ? Infinity : Math.abs(1 / direcaoY);
+    let proximoX = direcaoX === 0 ? Infinity : (direcaoX < 0 ? origemX - Math.floor(origemX) : Math.floor(origemX) + 1 - origemX) * deltaX;
+    let proximoY = direcaoY === 0 ? Infinity : (direcaoY < 0 ? origemY - Math.floor(origemY) : Math.floor(origemY) + 1 - origemY) * deltaY;
     let coluna = Math.floor(origemX);
     let linha = Math.floor(origemY);
     let lado = "x";
     let distancia = 0;
 
     while (!ehSolida(coluna, linha)) {
-        lado = eixos.x.proximo < eixos.y.proximo ? "x" : "y";
-        distancia = eixos[lado].proximo;
-        eixos[lado].proximo += eixos[lado].delta;
-        if (lado === "x") {
-            coluna += eixos.x.passo;
+        if (proximoX < proximoY) {
+            lado = "x";
+            distancia = proximoX;
+            proximoX += deltaX;
+            coluna += passoX;
         } else {
-            linha += eixos.y.passo;
+            lado = "y";
+            distancia = proximoY;
+            proximoY += deltaY;
+            linha += passoY;
         }
-        if (registrar) {
+        if (cruzamentos !== SEM_CRUZAMENTOS) {
             cruzamentos.push({ x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, lado, coluna, linha });
         }
     }
-    return { coluna, linha, lado, distancia, x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, cruzamentos };
+    resultado.coluna = coluna;
+    resultado.linha = linha;
+    resultado.lado = lado;
+    resultado.distancia = distancia;
+    resultado.x = origemX + direcaoX * distancia;
+    resultado.y = origemY + direcaoY * distancia;
+    resultado.cruzamentos = cruzamentos;
+    return resultado;
 }
 
 
@@ -808,7 +837,7 @@ function ajustarVisao() {
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.
     const alturaLivre = window.innerHeight - medirOResto();
     const escala = Math.max(1, Math.floor(Math.min(window.innerWidth / larguraDaVisao, alturaLivre / alturaDaVisao)));
-    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, alturaLivre * tela.width / tela.height));
+    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, (alturaLivre - 4) * tela.width / tela.height + 4));   // 4 = as duas bordas
     const alturaDaPlanta = (larguraDaPlanta - 4) * tela.height / tela.width + 4;   // 4 = as duas bordas
     visao.style.width = larguraDaVisao * escala + "px";
     tela.style.width = larguraDaPlanta + "px";

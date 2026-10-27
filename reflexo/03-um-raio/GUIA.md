@@ -133,7 +133,7 @@ Um raio de verdade aponta para qualquer lugar, inclusive os lugares chatos:
   continua `Infinity`, porque essa distância nunca é `0` para direção não negativa), então o ramo é
   clareza e proteção contra uma mudança futura, não um conserto. O perigo de verdade é o `NaN`
   (direção `NaN`, vinda de uma conta quebrada em outro lugar): toda comparação com `NaN` dá falso, o
-  laço escolhe `"y"` a cada volta, anda uma casa por vez até sair do mapa (fora é parede) e devolve
+  laço escolhe `"y"` a cada volta, anda uma casa por vez para baixo até a primeira casa sólida e devolve
   `distancia: NaN`. Termina, mas com um resultado inútil.
 - **Quase paralelo** (`dy = 1e-12`): `delta` é gigantesco mas finito, e o laço apenas nunca escolhe
   esse eixo. Funciona sem tratamento.

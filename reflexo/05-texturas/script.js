@@ -2,7 +2,8 @@
   REFLEXO — PASSO 5: TEXTURAS
   A parede ganha tijolos de verdade: uma textura 16×16 escrita como TEXTO, amostrada na coluna
   certa para cada faixa da imagem, e escurecida pela névoa. Para escolher COMO desenhar, o passo
-  mede duas técnicas (A: fatias drawImage; B: pixels num ImageData) e fica com a mais rápida.
+  mede duas técnicas (A: fatias drawImage; B: pixels num ImageData). O jogo usa sempre a B: ela foi
+  escolhida pelo spike do GDD (seção 8.2) e esta medição a confirma, sem medir a GPU.
 */
 
 // ---- 1. CONSTANTES E O MAPA --------------------------------
@@ -152,8 +153,8 @@ const TEXTURAS_EM_TEXTO = {
 const NIVEIS_DE_NEVOA = 32;
 const DISTANCIA_DA_NEVOA = 10;   // casas: daí em diante a parede some na cor da névoa
 const ESCURO_DO_LADO_Y = 5;      // níveis extras nas faces y: a "luz" barata do passo 4, agora na névoa
-const COR_DA_NEVOA = [8, 8, 14]; // o azul-noite do fundo
 const COR_DO_HORIZONTE = [10, 10, 18];
+const COR_DA_NEVOA = COR_DO_HORIZONTE;   // a MESMA cor: a parede toda enevoada some no horizonte
 const COR_DO_TETO_ALTO = [4, 4, 9];
 const COR_DO_PISO_BAIXO = [38, 38, 56];
 
@@ -162,7 +163,8 @@ const tela = document.getElementById("jogo");
 const pincel = tela.getContext("2d");
 const leitura = document.getElementById("leitura");
 const visao = document.getElementById("visao");
-// willReadFrequently: canvas em software. Sem ele a GPU só enfileira o trabalho e o relógio não vê o custo.
+// willReadFrequently: o canvas rasteriza na CPU (software). Sem ele a GPU só enfileira o trabalho e o relógio
+// não vê o custo; por isso a medição abaixo vale para a CPU, e o caminho da GPU não foi medido (GDD, 8.2).
 const pincelVisao = visao.getContext("2d", { willReadFrequently: true });
 const palco = document.getElementById("palco");
 
@@ -190,7 +192,7 @@ let fundo = null;
 const texturasSombreadas = {};   // símbolo → 32 Uint32Array de 256 pixels, um por nível de névoa
 const canvasesDasTexturas = {};  // símbolo → canvas 16×16, só para a técnica A
 const estilosDaNevoa = [];       // nível → "rgba(...)", só para a técnica A
-let medicao = { a: 0, b: 0, largura: 0, altura: 0 };   // ms por quadro (atualizar + desenhar) de cada técnica
+let medicao = { a: 0, b: 0, largura: 0, altura: 0 };   // ms por quadro, SÓ o desenho, de cada técnica
 let msAoVivo = 0;
 
 let depuracaoLigada = false;
@@ -431,22 +433,23 @@ function montarLeitura() {
         + `raio (${coluna}, ${linha}) lado ${lado} ${distancia.toFixed(3)} · DDA ${cruzamentos.length}\n`
         + `A drawImage por coluna: ${medicao.a.toFixed(2)} ms\n`
         + `B ImageData por pixel: ${medicao.b.toFixed(2)} ms (${vezesMaisRapida.toFixed(1)}×)\n`
-        + `${medicao.largura}×${medicao.altura}; agora: ${msAoVivo.toFixed(2)} ms de 16,7`;
+        + `${medicao.largura}×${medicao.altura}; agora: ${msAoVivo.toFixed(2)} ms de 16.7`;
 }
 
 // ---- 7. MEDIR ANTES DE ESCOLHER ----------------------------
-// ms por quadro = atualizar os raios + desenhar, como no spike do GDD (seção 8.2). A leitura de 1 pixel
-// força o canvas a terminar o que enfileirou, para o relógio ver o custo todo.
+// O que se mede: só o DESENHO de um quadro (A: fundo, fatias e névoa; B: pixels e envio). Os raios ficam fora: a pose
+// não muda e eles são iguais nas duas técnicas. O getImageData de 1 pixel força o canvas a terminar o que enfileirou.
+// É CPU com canvas em software; a GPU não foi medida. A linha "agora" do H é o quadro inteiro (atualizar + desenhar).
 const QUADROS_DE_AQUECIMENTO = 5;
 const QUADROS_MEDIDOS = 40;
 
 function medirOTempoDe(desenharComATecnica) {
+    atualizarRaios();
     let inicio = 0;
     for (let quadro = 0; quadro < QUADROS_DE_AQUECIMENTO + QUADROS_MEDIDOS; quadro++) {
         if (quadro === QUADROS_DE_AQUECIMENTO) {
             inicio = performance.now();
         }
-        atualizarRaios();
         desenharComATecnica();
         pincelVisao.getImageData(0, 0, 1, 1);
     }
@@ -465,6 +468,7 @@ function medirAsTecnicas() {
 const entradasAtivas = new Map();   // "tecla:w", "ponteiro:3:frente" → "frente"
 const acoesAtivas = new Set();      // a visão derivada: os nomes das ações seguradas
 const botoesDeAcao = document.querySelectorAll("[data-acao]");
+const botoesDeComando = document.querySelectorAll("[data-comando]");   // Planta e Medir: as teclas H e M, na tela
 const ACAO_DA_TECLA = {
     w: "frente", arrowup: "frente", s: "tras", arrowdown: "tras",
     a: "esquerda", d: "direita", arrowleft: "girarEsquerda", arrowright: "girarDireita"
@@ -480,7 +484,7 @@ function mudarEntrada(entrada, acao) {   // acao indefinida = soltou
 document.addEventListener("keydown", evento => {
     const tecla = evento.key.toLowerCase();
     if (tecla === "h" && !evento.repeat) {
-        depuracaoLigada = !depuracaoLigada;
+        alternarPlanta();
     }
     if (tecla === "m" && !evento.repeat) {
         medirAsTecnicas();   // medir de novo, com a pose e o tamanho de agora
@@ -501,6 +505,18 @@ botoesDeAcao.forEach(botao => {
     ["pointerup", "pointercancel", "pointerleave"].forEach(tipo => botao.addEventListener(tipo, evento => mudarEntrada(entradaDo(evento))));
     botao.addEventListener("contextmenu", evento => evento.preventDefault());   // pressão longa no celular
 });
+
+// A tecla H e o botão "Planta" são a mesma intenção; o botão mostra se está ligada (aria-pressed).
+function alternarPlanta(ligada = !depuracaoLigada) {
+    depuracaoLigada = ligada;
+    [...botoesDeComando].filter(botao => botao.dataset.comando === "planta").forEach(botao => botao.setAttribute("aria-pressed", ligada));
+}
+
+const COMANDOS = {
+    planta: () => alternarPlanta(),
+    medir: () => { medirAsTecnicas(); alternarPlanta(true); }   // o resultado aparece na leitura da planta
+};
+botoesDeComando.forEach(botao => botao.addEventListener("click", () => COMANDOS[botao.dataset.comando]()));
 
 function lerIntencao() {
     const eixo = (positiva, negativa) => Number(acoesAtivas.has(positiva)) - Number(acoesAtivas.has(negativa));
@@ -595,13 +611,13 @@ function atualizarRaios() {
         const tamanho = Math.hypot(inclinadoX, inclinadoY);
         const direcaoX = inclinadoX / tamanho;
         const direcaoY = inclinadoY / tamanho;
-        const resultado = lancarRaio(jogador.x, jogador.y, direcaoX, direcaoY, false);   // sem o caminho: ninguém o lê
+        const resultado = raiosDaTela[coluna] || (raiosDaTela[coluna] = criarResultado());   // o mesmo objeto, quadro a quadro
+        percorrerAGrade(resultado, jogador.x, jogador.y, direcaoX, direcaoY, SEM_CRUZAMENTOS);   // sem o caminho: ninguém o lê
         const cosseno = jogador.dx * direcaoX + jogador.dy * direcaoY;
 
         resultado.perpendicular = resultado.distancia * cosseno;
         resultado.altura = k / resultado.perpendicular;
         resultado.u = posicaoNaFace(resultado, direcaoX, direcaoY);
-        raiosDaTela[coluna] = resultado;
     }
 
     raio = lancarRaio(jogador.x, jogador.y, jogador.dx, jogador.dy);   // com o caminho, para o H
@@ -624,46 +640,61 @@ function posicaoNaFace(resultado, direcaoX, direcaoY) {
 /*
   Um raio de direção UNITÁRIA cruza uma linha vertical da grade a cada 1/|dx| de
   distância e uma horizontal a cada 1/|dy|. Cada eixo guarda a distância até a
-  PRÓXIMA linha dele (`proximo`); a menor vence, e o raio entra na casa vizinha
-  daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  PRÓXIMA linha dele (`proximoX`, `proximoY`); a menor vence, e o raio entra na casa
+  vizinha daquele lado. Nunca anda "no escuro": cada passo é uma casa, nenhuma é pulada.
+  Tudo em variáveis simples: a busca roda 195 a 320 vezes por quadro e não cria objeto nenhum.
 */
-function prepararEixo(origem, direcao) {
-    if (direcao === 0) {
-        return { passo: 1, delta: Infinity, proximo: Infinity };   // paralelo: nunca cruza
-    }
-    const delta = Math.abs(1 / direcao);
-    const ateALinha = direcao < 0 ? origem - Math.floor(origem) : Math.floor(origem) + 1 - origem;
-    return { passo: direcao < 0 ? -1 : 1, delta, proximo: ateALinha * delta };
-}
-
 const SEM_CRUZAMENTOS = Object.freeze([]);
 
-// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
-// `registrar` guarda cada cruzamento (só o H os lê); os 320 raios da imagem passam false.
+// Um raio avulso (o do olhar, o dos testes): devolve um resultado novo.
+// `registrar` guarda cada cruzamento (só o H os lê).
 function lancarRaio(origemX, origemY, direcaoX, direcaoY, registrar = true) {
-    const eixos = { x: prepararEixo(origemX, direcaoX), y: prepararEixo(origemY, direcaoY) };
-    const cruzamentos = registrar ? [] : SEM_CRUZAMENTOS;
+    return percorrerAGrade(criarResultado(), origemX, origemY, direcaoX, direcaoY, registrar ? [] : SEM_CRUZAMENTOS);
+}
+
+function criarResultado() {
+    return { coluna: 0, linha: 0, lado: "x", distancia: 0, x: 0, y: 0, cruzamentos: SEM_CRUZAMENTOS };
+}
+
+// Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
+// Preenche `resultado` no lugar: os raios da imagem reaproveitam os mesmos objetos, quadro a quadro.
+function percorrerAGrade(resultado, origemX, origemY, direcaoX, direcaoY, cruzamentos) {
+    const passoX = direcaoX < 0 ? -1 : 1;   // direção 0: paralelo, o passo não importa
+    const passoY = direcaoY < 0 ? -1 : 1;
+    const deltaX = direcaoX === 0 ? Infinity : Math.abs(1 / direcaoX);
+    const deltaY = direcaoY === 0 ? Infinity : Math.abs(1 / direcaoY);
+    let proximoX = direcaoX === 0 ? Infinity : (direcaoX < 0 ? origemX - Math.floor(origemX) : Math.floor(origemX) + 1 - origemX) * deltaX;
+    let proximoY = direcaoY === 0 ? Infinity : (direcaoY < 0 ? origemY - Math.floor(origemY) : Math.floor(origemY) + 1 - origemY) * deltaY;
     let coluna = Math.floor(origemX);
     let linha = Math.floor(origemY);
     let lado = "x";
     let distancia = 0;
 
     while (!ehSolida(coluna, linha)) {
-        lado = eixos.x.proximo < eixos.y.proximo ? "x" : "y";
-        distancia = eixos[lado].proximo;
-        eixos[lado].proximo += eixos[lado].delta;
-        if (lado === "x") {
-            coluna += eixos.x.passo;
+        if (proximoX < proximoY) {
+            lado = "x";
+            distancia = proximoX;
+            proximoX += deltaX;
+            coluna += passoX;
         } else {
-            linha += eixos.y.passo;
+            lado = "y";
+            distancia = proximoY;
+            proximoY += deltaY;
+            linha += passoY;
         }
-        if (registrar) {
+        if (cruzamentos !== SEM_CRUZAMENTOS) {
             cruzamentos.push({ x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, lado, coluna, linha });
         }
     }
-    return { coluna, linha, lado, distancia, x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, cruzamentos };
+    resultado.coluna = coluna;
+    resultado.linha = linha;
+    resultado.lado = lado;
+    resultado.distancia = distancia;
+    resultado.x = origemX + direcaoX * distancia;
+    resultado.y = origemY + direcaoY * distancia;
+    resultado.cruzamentos = cruzamentos;
+    return resultado;
 }
-
 
 // ---- 11. TAMANHO DA IMAGEM ---------------------------------
 // Mede o que a página gasta fora do palco (título, leitura, botões, ajuda, espaços e margens).
@@ -694,7 +725,7 @@ function ajustarVisao() {
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.
     const alturaLivre = window.innerHeight - medirOResto();
     const escala = Math.max(1, Math.floor(Math.min(window.innerWidth / larguraDaVisao, alturaLivre / alturaDaVisao)));
-    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, alturaLivre * tela.width / tela.height));
+    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, (alturaLivre - 4) * tela.width / tela.height + 4));   // 4 = as duas bordas
     const alturaDaPlanta = (larguraDaPlanta - 4) * tela.height / tela.width + 4;   // 4 = as duas bordas
     visao.style.width = larguraDaVisao * escala + "px";
     tela.style.width = larguraDaPlanta + "px";
