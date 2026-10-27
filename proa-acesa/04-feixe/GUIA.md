@@ -1,4 +1,4 @@
-# Faroleiro — Passo 4: O feixe
+# Proa Acesa — Passo 4: O feixe
 
 **Mudou:** `index.html` (painel e dois botões), `style.css` (os botões) e `script.js` (a barca anda,
 a lanterna mira, a câmera segue). Ondas, névoa e entardecer do passo 3 continuam iguais.

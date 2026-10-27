@@ -1,4 +1,4 @@
-# Faroleiro — Passo 2: A ilha
+# Proa Acesa — Passo 2: A ilha
 
 **Mudou:** `script.js` (cena nova; a ponte e o laço continuam iguais). Os outros arquivos mudam
 só o título. A tecla **H** ignora repetição de tecla e combinações com Ctrl/Alt/Meta (Ctrl+H é

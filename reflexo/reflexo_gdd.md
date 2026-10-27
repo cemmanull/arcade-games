@@ -1,11 +1,11 @@
 # REFLEXO — Documento de design (GDD)
 
-> **Título de trabalho.** A checagem de nome (seção 11) achou um jogo chamado exatamente "Reflexo" no
-> itch.io e vários títulos parecidos. O nome definitivo depende de você. Até lá, pasta e documento
-> seguem como `reflexo`.
+> **Aprovado pelo usuário em 2026-10-27** (TODO N6), com o nome **Reflexo**. A checagem de nome (seção 11)
+> achou um jogo chamado exatamente "Reflexo" no itch.io (narrativo, sem relação) e títulos parecidos; o
+> usuário manteve o nome.
 
 Módulo 9 do curso: o primeiro jogo em **2.5D**, um raycaster feito à mão, sem biblioteca. É a ponte
-entre o canvas 2D de todos os jogos anteriores e o three.js do Faroleiro (módulo 10).
+entre o canvas 2D de todos os jogos anteriores e o three.js de *Proa Acesa* (módulo 11, depois do isométrico).
 
 ## 1. Conceito
 

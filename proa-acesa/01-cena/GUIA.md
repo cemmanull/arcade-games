@@ -1,4 +1,4 @@
-# Faroleiro — Passo 1: A cena
+# Proa Acesa — Passo 1: A cena
 
 **Mudou:** os três arquivos (é o ponto de partida do módulo).
 **Rode:** abra o `index.html`. **Este módulo precisa de internet na primeira vez**, para baixar o
@@ -16,7 +16,7 @@ Se o three.js não carregar, em vez de uma tela vazia aparece um aviso em portug
 houve. Só desligar a internet não basta para ver isso: o navegador guarda a biblioteca no cache
 (veja o exercício 7 para testar de verdade).
 
-> O jogo completo está descrito em [`faroleiro_gdd.md`](../faroleiro_gdd.md): uma noite de
+> O jogo completo está descrito em [`proa-acesa_gdd.md`](../proa-acesa_gdd.md): uma noite de
 > tempestade, o farol apagado e o faroleiro numa barca, levando um comboio de barcos de pesca até o
 > porto. Hoje só montamos o palco.
 
@@ -153,4 +153,4 @@ O aviso é um `<p role="alert">`, que leitores de tela anunciam na hora.
 
 ---
 
-**Anterior:** [`faroleiro_gdd.md`](../faroleiro_gdd.md) · **Próximo:** [`02-ilha`](../02-ilha/) — uma caixa solitária ganha luz, mar e uma barca de verdade.
+**Anterior:** [`proa-acesa_gdd.md`](../proa-acesa_gdd.md) · **Próximo:** [`02-ilha`](../02-ilha/) — uma caixa solitária ganha luz, mar e uma barca de verdade.

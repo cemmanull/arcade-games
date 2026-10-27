@@ -1,4 +1,4 @@
-# Faroleiro — Passo 3: O mar
+# Proa Acesa — Passo 3: O mar
 
 **Mudou:** `script.js` (ondas, névoa e entardecer; o grafo de cena do passo 2 continua igual). Os
 outros arquivos mudam só o título.
