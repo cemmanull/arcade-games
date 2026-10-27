@@ -111,7 +111,16 @@ function finalizar() {
     escreverLinha("RESULTADO: " + quantidadeDeAcertos + " ok, " + quantidadeDeFalhas + " falhas");
 }
 
+/*
+  Erros que acontecem depois de finalizar() também viram linha FALHA; o
+  executor reprova a página por qualquer FALHA, antes ou depois do RESULTADO.
+*/
 window.addEventListener("error", function (evento) {
     quantidadeDeFalhas++;
     escreverLinha("FALHA erro não tratado  -> " + evento.message);
+});
+
+window.addEventListener("unhandledrejection", function (evento) {
+    quantidadeDeFalhas++;
+    escreverLinha("FALHA promessa rejeitada sem tratamento  -> " + evento.reason);
 });

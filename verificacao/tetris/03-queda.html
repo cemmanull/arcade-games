@@ -20,6 +20,15 @@
 
     <!-- Ordem importa: o apoio troca relógio e sorteio ANTES do jogo carregar. -->
     <script src="../apoio.js"></script>
+
+    <!-- O teste confere regras, não pixels: um contexto 2D que ignora o desenho acelera o robô. -->
+    <script>
+        const contextoQueIgnoraODesenho = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        HTMLCanvasElement.prototype.getContext = function () { return contextoQueIgnoraODesenho; };
+    </script>
     <script src="../../tetris/03-queda/script.js"></script>
 
     <script>
@@ -108,9 +117,17 @@
             const colunaDaPeca = pecaAtual.coluna;
 
             const pecaQueEstavaCaindo = pecaAtual;
-            while (pecaAtual === pecaQueEstavaCaindo) {
-                avancarQuadro(50);    // para no quadro exato em que a peça trava
+            let quadrosGastos = 0;
+            let loopDoJogoVivo = true;
+            while (pecaAtual === pecaQueEstavaCaindo && loopDoJogoVivo && quadrosGastos < 100) {
+                loopDoJogoVivo = avancarQuadro(50);   // para no quadro exato em que a peça trava
+                quadrosGastos++;
             }
+            conferir(
+                "a peça trava em poucos quadros",
+                pecaAtual !== pecaQueEstavaCaindo,
+                loopDoJogoVivo ? "ainda caindo após " + quadrosGastos + " quadros" : "o loop do jogo parou de pedir quadros"
+            );
 
             [18, 19].forEach(function (linha) {
                 [colunaDaPeca, colunaDaPeca + 1].forEach(function (coluna) {
@@ -148,7 +165,10 @@
                 if (Math.random() < 0.3) {
                     moverPeca(Math.floor(Math.random() * 3) - 1, Math.random() < 0.2 ? 1 : 0);
                 }
-                avancarQuadro(10 + Math.floor(Math.random() * 70));
+                if (!avancarQuadro(10 + Math.floor(Math.random() * 70))) {
+                    primeiraViolacao = "o loop do jogo parou de pedir quadros no quadro " + quadro;
+                    break;
+                }
 
                 if (pecaAtual !== pecaAnterior) {
                     pecaAnterior = pecaAtual;
