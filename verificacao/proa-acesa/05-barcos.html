@@ -67,6 +67,9 @@
             let violacoes = {};
             let tempoEsperado = 0;
             let barcosQueSairam = 0;
+            let idsJaVistos = new Set();
+            const ILHA = { x: -5, z: -12, raio: 5.5 };
+            const SEGUNDOS_PARA_SE_PERDER = 5;
 
             // O teste confere regras, não pixels: desenhar milhares de quadros por software seria lento.
             renderizador.render = function () { };
@@ -164,6 +167,19 @@
                 });
 
                 naAgua.forEach(function (barco) {
+                    if (!idsJaVistos.has(barco.id)) {
+                        idsJaVistos.add(barco.id);
+                        const obstaculos = recifes.concat([ILHA]);
+                        const ruim = Math.abs(barco.x) > METADE_DO_MUNDO - 1 + MARGEM || Math.abs(barco.z) > METADE_DO_MUNDO - 1 + MARGEM ||
+                            distancia(barco, porto) < porto.raio + 1 - MARGEM ||
+                            obstaculos.some(function (o) { return distancia(barco, o) < o.raio + 1.2 + 1 - MARGEM; });
+                        if (ruim) {
+                            registrar("todo comboio nasce em lugar válido", "barco " + barco.id + " nasceu em (" + barco.x + ", " + barco.z + ")");
+                        }
+                    }
+                    if (barcosDePesca.indexOf(barco) !== -1 && (barco.segundosPerdido || 0) > SEGUNDOS_PARA_SE_PERDER) {
+                        registrar("ninguém passa de 5 s além de 35 m e continua na fila", "barco " + barco.id + ": " + barco.segundosPerdido);
+                    }
                     const malha = barco.malha;
                     if (malha === undefined || malha.parent !== cena) {
                         registrar("todo barco da lista tem malha na cena", "barco " + barco.id + " sem malha na cena");
@@ -655,8 +671,10 @@
                 });
 
                 conferir("o robô realmente mexeu: mais de 10.000 eventos enviados", eventosEnviados > 10000, eventosEnviados + " eventos");
-                conferir("e fez barcos saírem do mundo (salvos, naufragados, perdidos): mais de 20 saídas, cada uma tirando a malha da cena",
-                    barcosQueSairam - saidasDoInicio > 20, (barcosQueSairam - saidasDoInicio) + " saídas");
+                // Antes (spawn sem validade e sem prazo de 5 s) saíam mais de 20; agora os nascimentos são válidos (sem salvo de graça, sem naufrágio
+                // instantâneo) e a névoa não faz cascata. A corrida semeada mede 14 saídas; o piso 8 pega "o mundo parou de julgar" sem cravar o 14.
+                conferir("e fez barcos saírem do mundo (salvos, naufragados, perdidos): mais de 8 saídas, cada uma tirando a malha da cena",
+                    barcosQueSairam - saidasDoInicio > 8, (barcosQueSairam - saidasDoInicio) + " saídas");
                 acalmar();
                 conferir("no fim a cena tem exatamente 6 filhos fixos + os barcos das listas", cena.children.length === FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length);
                 conferirSemViolacoes("depois do robô");

@@ -33,12 +33,15 @@
             const VELOCIDADE_DO_BARCO = 4.75;        // 95% dos 5 m/s da barca
             const DISTANCIA_DO_COMBOIO = 7;
             const DISTANCIA_PARA_SE_PERDER = 35;
+            const SEGUNDOS_PARA_SE_PERDER = 5;       // a névoa só engole quem passa MAIS de 5 s seguidos além dos 35 m
+            const PASSO_EXATO = 0.0625;              // 1/16 s: potência de 2, a soma de quadros é exata (80 quadros = 5,0 s)
             const SEGUNDOS_AFUNDANDO = 2.5;
             const SEGUNDOS_ENCALHADA = 2;
             const RAIO_DO_BARCO = 1.2;
             const BARCOS_POR_COMBOIO = 4;
             const METADE_DO_MUNDO = 80;
             const PORTO = { x: 6, z: -26, raio: 9 };
+            const ILHA = { x: -5, z: -12, raio: 5.5 };
             const RECIFE_DO_MEIO = { x: 9, z: -4, raio: 2 };
 
             const DURACOES_DO_ROBO = [0, 0.001, 0.008, 0.016, 0.033, 0.05, 0.05, 0.05, 0.05];
@@ -113,6 +116,40 @@
                     salvos: salvos,
                     naufragios: naufragios
                 };
+            }
+
+            /* Prende cada barco onde está: a regra de se perder só olha distâncias, e um barco solto correria para a barca. */
+            function prender(barcos) {
+                return barcos.map(function (barco) { return { barco: barco, x: barco.x, z: barco.z }; });
+            }
+
+            /* Roda `quadros` quadros de `passo` s e, depois de cada um, devolve ao lugar quem ainda está na fila. Devolve quem saiu e em que segundo. */
+            function passarPreso(presos, quadros, passo, segundoInicial) {
+                const saidas = [];
+                for (let quadro = 1; quadro <= quadros; quadro++) {
+                    atualizarMundo(passo, 0, false);
+                    esvaziarRemovidos().forEach(function (barco) { saidas.push({ barco: barco, segundo: segundoInicial + quadro * passo }); });
+                    presos.forEach(function (preso) {
+                        if (barcosDePesca.indexOf(preso.barco) !== -1) {
+                            preso.barco.x = preso.x;
+                            preso.barco.z = preso.z;
+                            preso.barco.velocidade = 0;
+                        }
+                    });
+                }
+                return saidas;
+            }
+
+            /* Um barco que acabou de nascer tem de viver: dentro de ±79 m, fora do porto, a 1 m de qualquer recife e da ilha. "" = tudo certo. */
+            function defeitoDeNascimento(barco, obstaculos) {
+                if (!todosFinitos([barco.x, barco.z]) || Math.abs(barco.x) > METADE_DO_MUNDO - 1 + MARGEM || Math.abs(barco.z) > METADE_DO_MUNDO - 1 + MARGEM) {
+                    return "fora do mundo de ±79 m em (" + barco.x + ", " + barco.z + ")";
+                }
+                if (distancia(barco, PORTO) < PORTO.raio + 1 - MARGEM) {
+                    return "a " + distancia(barco, PORTO).toFixed(2) + " m do centro do porto (salvo de graça)";
+                }
+                const batido = obstaculos.find(function (obstaculo) { return distancia(barco, obstaculo) < obstaculo.raio + RAIO_DO_BARCO + 1 - MARGEM; });
+                return batido === undefined ? "" : "a menos de 1 m de folga do obstáculo (" + batido.x + ", " + batido.z + ")";
             }
 
             function umBarcoSozinhoAtras(distanciaDaBarca) {
@@ -338,35 +375,181 @@
                 });
             });
 
-            testar("perdido na névoa: mais de 35 m atrás do barco da frente (ou da barca) vira naufrágio sem afundar", function () {
-                const casos = [
-                    ["a 35,5 m da barca (primeiro da fila)", 35.5, true],
-                    ["a 34,5 m da barca", 34.5, false]
-                ];
-                casos.forEach(function (caso) {
+            testar("perdido na névoa: só depois de MAIS de 5 s seguidos além de 35 m do da frente; voltar ao alcance zera a conta", function () {
+                // dt = 0 não conta tempo nenhum, nem a 35,5 m
+                [["a 35,5 m da barca (primeiro da fila), dt = 0", 35.5], ["a 34,5 m da barca, dt = 0", 34.5]].forEach(function (caso) {
                     const barco = umBarcoSozinhoAtras(caso[1]);
                     const naufragiosAntes = naufragios;
                     atualizarMundo(0, 0, false);
                     const saidos = esvaziarRemovidos();
-                    conferirIgual(caso[0] + ": se perde? ", naufragios - naufragiosAntes === 1, caso[2]);
-                    if (caso[2]) {
-                        conferir(caso[0] + ": sai direto (não vai para a lista dos que afundam)", barcosAfundando.length === 0 && saidos.indexOf(barco) !== -1);
-                    }
+                    conferir(caso[0] + ": continua na fila, ninguém saiu e nada afunda",
+                        barcosDePesca.indexOf(barco) !== -1 && saidos.length === 0 && barcosAfundando.length === 0 && naufragios === naufragiosAntes,
+                        "saíram " + saidos.length + ", naufrágios " + (naufragios - naufragiosAntes));
                 });
 
-                // a distância conta até o barco da FRENTE, não até a barca
+                // 35,5 m seguidos: aos 5,0 s exatos ainda está na fila (a regra é "MAIS de 5 s"); no quadro seguinte sai, direto
+                let barco = umBarcoSozinhoAtras(35.5);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                let presos = prender([barco]);
+                let naufragiosAntes = naufragios;
+                let saidas = passarPreso(presos, 80, PASSO_EXATO, 0);
+                conferir("35,5 m por 5,0 s exatos: ainda na fila, sem naufrágio", saidas.length === 0 && barcosDePesca.indexOf(barco) !== -1 && naufragios === naufragiosAntes);
+                saidas = passarPreso(presos, 1, PASSO_EXATO, 5);
+                conferir("no quadro que passa de 5 s ela se perde: +1 naufrágio", saidas.length === 1 && saidas[0].barco === barco && naufragios === naufragiosAntes + 1,
+                    saidas.length + " saídas, naufrágios +" + (naufragios - naufragiosAntes));
+                conferir("e sai direto: nunca esteve na lista dos que afundam", barcosAfundando.length === 0 && barcosDePesca.indexOf(barco) === -1);
+
+                // 34,5 m para sempre: nunca se perde
+                barco = umBarcoSozinhoAtras(34.5);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                presos = prender([barco]);
+                naufragiosAntes = naufragios;
+                saidas = passarPreso(presos, 160, PASSO_EXATO, 0);
+                conferir("34,5 m por 10 s: nunca se perde e a conta de segundos fica em 0",
+                    saidas.length === 0 && barcosDePesca.indexOf(barco) !== -1 && naufragios === naufragiosAntes && (barco.segundosPerdido || 0) === 0,
+                    "segundosPerdido " + barco.segundosPerdido);
+
+                // a conta é de segundos SEGUIDOS: 4,5 s longe + 1 quadro perto + 4,5 s longe não perde; 1,0625 s a mais perde
+                barco = umBarcoSozinhoAtras(35.5);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                presos = prender([barco]);
+                naufragiosAntes = naufragios;
+                saidas = passarPreso(presos, 72, PASSO_EXATO, 0);
+                conferir("4,5 s além de 35 m: ainda na fila e a conta está em 4,5", saidas.length === 0 && proximo(barco.segundosPerdido, 4.5, 1e-9), "conta " + barco.segundosPerdido);
+                barco.z = presos[0].z = 50 + 34.5;
+                passarPreso(presos, 1, PASSO_EXATO, 4.5);
+                conferir("voltou a 34,5 m por um quadro: a conta zera", barco.segundosPerdido === 0 && barcosDePesca.indexOf(barco) !== -1, "conta " + barco.segundosPerdido);
+                barco.z = presos[0].z = 50 + 35.5;
+                saidas = passarPreso(presos, 72, PASSO_EXATO, 5);
+                conferir("mais 4,5 s longe (9 s no total, mas não seguidos): não se perde", saidas.length === 0 && barcosDePesca.indexOf(barco) !== -1 && naufragios === naufragiosAntes);
+                saidas = passarPreso(presos, 17, PASSO_EXATO, 9.5);
+                conferir("passando de 5 s seguidos (4,5 + 1,0625): se perde", saidas.length === 1 && saidas[0].barco === barco && naufragios === naufragiosAntes + 1);
+
+                // a distância conta até o barco da FRENTE, não até a barca; só a cauda (35,5 m do meio) se perde, e só depois dos 5 s
                 limparMundo();
                 colocarBarca(-50, 50, 0);
+                barcaNoMundo.segundosEncalhada = 1e9;
                 const frente = novoBarco(-50, 57, 0);
                 const meio = novoBarco(-50, 57 + 34.5, 0);
                 const cauda = novoBarco(-50, 57 + 34.5 + 35.5, 0);
                 barcosDePesca.push(frente, meio, cauda);
-                const naufragiosAntes = naufragios;
+                presos = prender([frente, meio, cauda]);
+                naufragiosAntes = naufragios;
                 atualizarMundo(0, 0, false);
-                const saidos = esvaziarRemovidos();
-                conferir("na fila de três, só a cauda (35,5 m do barco da frente dela) se perde; o do meio (34,5 m) fica, mesmo a 69 m da barca",
-                    saidos.length === 1 && saidos[0] === cauda && barcosDePesca.length === 2 && naufragios === naufragiosAntes + 1,
-                    "saíram " + saidos.map(function (barco) { return barco.id; }));
+                conferir("na fila de três com dt = 0: ninguém sai", esvaziarRemovidos().length === 0 && barcosDePesca.length === 3 && naufragios === naufragiosAntes);
+                saidas = passarPreso(presos, 80, PASSO_EXATO, 0);
+                conferir("aos 5,0 s exatos: ninguém saiu ainda", saidas.length === 0 && barcosDePesca.length === 3);
+                saidas = passarPreso(presos, 1, PASSO_EXATO, 5);
+                conferir("passados os 5 s: só a cauda se perde; o do meio (34,5 m do da frente, 69 m da barca) fica",
+                    saidas.length === 1 && saidas[0].barco === cauda && barcosDePesca.length === 2 && barcosDePesca.indexOf(meio) !== -1 && naufragios === naufragiosAntes + 1,
+                    "saíram " + saidas.map(function (saida) { return saida.barco.id; }));
+                saidas = passarPreso(presos, 160, PASSO_EXATO, 5.0625);
+                conferir("10 s depois ninguém mais saiu (sem cascata): a fila ficou com 2", saidas.length === 0 && barcosDePesca.length === 2 && naufragios === naufragiosAntes + 1);
+
+                // SEM CASCATA: o primeiro está a 36 m da barca e os outros três vêm a 7 m um do outro atrás dele. Quando o primeiro se perde, o
+                // segundo passa a medir até a barca (43 m) e começa a SUA conta de 5 s do zero: os naufrágios se espalham no tempo, não 1 por quadro.
+                limparMundo();
+                colocarBarca(-50, 50, 0);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                const comboio = [0, 1, 2, 3].map(function (indice) { return novoBarco(-50, 50 + 36 + 7 * indice, 0); });
+                comboio.forEach(function (barcoDoComboio) { barcosDePesca.push(barcoDoComboio); });
+                presos = prender(comboio);
+                naufragiosAntes = naufragios;
+                saidas = passarPreso(presos, 330, PASSO_EXATO, 0).filter(function (saida) { return comboio.indexOf(saida.barco) !== -1; });
+                const horas = saidas.map(function (saida) { return saida.segundo; });
+                const intervalos = horas.slice(1).map(function (hora, indice) { return hora - horas[indice]; });
+                conferir("os 4 se perdem, um de cada vez e na ordem da fila", saidas.length === 4 && saidas.every(function (saida, indice) { return saida.barco === comboio[indice]; }),
+                    "horas " + horas.join(", "));
+                conferir("o primeiro só depois dos 5 s (" + horas[0] + ")", horas[0] > 5 && horas[0] < 5.2);
+                conferir("e cada naufrágio seguinte vem pelo menos 5 s depois do anterior, nunca no mesmo quadro (intervalos " + intervalos.join(", ") + ")",
+                    intervalos.length === 3 && intervalos.every(function (intervalo) { return intervalo > 5; }));
+                conferirIgual("4 naufrágios contados, todos sem afundar", [naufragios - naufragiosAntes, barcosAfundando.length].join(","), "4,0");
+                barcaNoMundo.segundosEncalhada = 0;
+            });
+
+            testar("o comboio nasce em lugar VÁLIDO: dentro de ±79 m, fora do porto, a 1 m de folga de recifes e da ilha (grade de poses da barca × 8 rumos)", function () {
+                const obstaculos = recifes.concat([ilha]);
+                let poses = 0, invalidas = 0, comAlgumSalvoOuNaufragioNoPrimeiroQuadro = 0, primeiraInvalida = "", menorFolgaDeObstaculo = Infinity, menorFolgaDoPorto = Infinity;
+
+                for (let x = -79; x <= 79; x += 1) {
+                    for (let z = -79; z <= 79; z += 1) {
+                        if (obstaculos.some(function (obstaculo) { return distancia({ x: x, z: z }, obstaculo) < obstaculo.raio + RAIO_DO_BARCO; })) {
+                            continue;   // a barca nunca fica dentro de uma pedra: ela é empurrada para fora
+                        }
+                        for (let rumo = 0; rumo < 8; rumo++) {
+                            limparMundo();
+                            colocarBarca(x, z, rumo * Math.PI / 4);
+                            criarComboio();
+                            poses++;
+                            const defeito = barcosDePesca.map(function (barco) { return defeitoDeNascimento(barco, obstaculos); }).find(function (texto) { return texto !== ""; });
+                            barcosDePesca.forEach(function (barco) {
+                                menorFolgaDoPorto = Math.min(menorFolgaDoPorto, distancia(barco, PORTO) - PORTO.raio);
+                                obstaculos.forEach(function (obstaculo) {
+                                    menorFolgaDeObstaculo = Math.min(menorFolgaDeObstaculo, distancia(barco, obstaculo) - obstaculo.raio - RAIO_DO_BARCO);
+                                });
+                            });
+                            if (defeito !== undefined) {
+                                invalidas++;
+                                primeiraInvalida = primeiraInvalida || "barca (" + x + ", " + z + ") rumo " + rumo + ": " + defeito;
+                            }
+                            const salvosAntes = salvos, naufragiosAntes = naufragios;
+                            atualizarMundo(0, 0, false);
+                            esvaziarRemovidos();
+                            if (salvos !== salvosAntes || naufragios !== naufragiosAntes || barcosDePesca.length !== BARCOS_POR_COMBOIO) {
+                                comAlgumSalvoOuNaufragioNoPrimeiroQuadro++;
+                            }
+                        }
+                    }
+                }
+                conferir("o teste cobriu mais de 100.000 poses (" + poses + ")", poses > 100000);
+                conferir("nenhum comboio nasceu inválido (" + invalidas + " de " + poses + ")", invalidas === 0, primeiraInvalida);
+                conferir("folga mínima medida: a 1 m ou mais de recife/ilha (" + menorFolgaDeObstaculo.toFixed(3) + " m) e fora do porto (" + menorFolgaDoPorto.toFixed(3) + " m)",
+                    menorFolgaDeObstaculo >= 1 - MARGEM && menorFolgaDoPorto >= 1 - MARGEM);
+                conferirIgual("e nenhum nasceu salvo de graça nem naufragou no 1º quadro", comAlgumSalvoOuNaufragioNoPrimeiroQuadro, 0);
+
+                // o caso mais difícil: a barca DENTRO do porto (o comboio tem de recuar para fora dele)
+                limparMundo();
+                colocarBarca(PORTO.x, PORTO.z, 0);
+                criarComboio();
+                conferir("com a barca no centro do porto os 4 nascem fora dele e salvos = 0 depois de um quadro", barcosDePesca.every(function (barco) { return defeitoDeNascimento(barco, obstaculos) === ""; }) &&
+                    (function () { const antes = salvos; atualizarMundo(0, 0, false); return salvos === antes; }()));
+                limparMundo();
+                colocarBarca(8, 14, 0);
+                criarComboio();
+            });
+
+            testar("a ilha do farol bate como um recife: encalha a barca e naufraga o barco (raio 5,5 + 1,2 m)", function () {
+                const limite = ILHA.raio + RAIO_DO_BARCO;
+
+                limparMundo();
+                colocarBarca(ILHA.x, ILHA.z + 12, 0);      // 12 m ao sul da ilha, de proa para ela (−z)
+                barcosDePesca.push(novoBarco(ILHA.x, ILHA.z + 19, 0));
+                const naufragiosAntes = naufragios;
+                let quadros = 0;
+                while (barcaNoMundo.segundosEncalhada === 0 && quadros < 100) {
+                    atualizarMundo(0.05, 0, false);
+                    esvaziarRemovidos();
+                    quadros++;
+                }
+                conferir("a barca encalhou na ilha (depois de " + quadros + " quadros)", barcaNoMundo.segundosEncalhada > 0);
+                conferir("e foi posta para FORA dela, a 1% de folga: " + distancia(barcaNoMundo, ILHA).toFixed(3) + " m ≥ " + (limite * 1.01).toFixed(3),
+                    distancia(barcaNoMundo, ILHA) >= limite * 1.01 - MARGEM);
+                conferir("encalhada por 2 s e sem contar naufrágio", proximo(barcaNoMundo.segundosEncalhada, SEGUNDOS_ENCALHADA, 1e-9) && naufragios === naufragiosAntes);
+
+                [["dentro (a " + (limite - 0.01).toFixed(2) + " m do centro)", limite - 0.01, true], ["fora (a " + (limite + 0.01).toFixed(2) + " m do centro)", limite + 0.01, false]].forEach(function (caso) {
+                    limparMundo();
+                    colocarBarca(9, 20, 0);
+                    const barco = novoBarco(ILHA.x + caso[1], ILHA.z, 0);
+                    barcosDePesca.push(barco);
+                    const antes = naufragios;
+                    atualizarMundo(0, 0, false);
+                    conferir("barco " + caso[0] + ": naufraga? " + caso[2],
+                        (naufragios - antes === 1) === caso[2] && (barcosAfundando.indexOf(barco) !== -1) === caso[2],
+                        "naufrágios +" + (naufragios - antes));
+                });
+                limparMundo();
+                colocarBarca(8, 14, 0);
+                criarComboio();
             });
 
             testar("fila vazia → chega um comboio novo (atrás da barca); com barco ainda afundando, não", function () {
@@ -462,7 +645,16 @@
                         const naFila = barcosDePesca;
                         const naAgua = naFila.concat(barcosAfundando);
                         naAgua.forEach(function (barco) {
+                            if (!idsVistos.has(barco.id)) {
+                                const defeito = defeitoDeNascimento(barco, recifes.concat([ILHA]));
+                                if (defeito !== "") {
+                                    registrar("todo comboio nasce em lugar válido", "barco " + barco.id + ": " + defeito);
+                                }
+                            }
                             idsVistos.add(barco.id);
+                            if (barcosDePesca.indexOf(barco) !== -1 && (barco.segundosPerdido || 0) > SEGUNDOS_PARA_SE_PERDER) {
+                                registrar("ninguém passa de 5 s além de 35 m e continua na fila", "barco " + barco.id + ": " + barco.segundosPerdido + " s");
+                            }
                             if (!todosFinitos([barco.x, barco.z, barco.proa, barco.velocidade, barco.afundamento, barco.segundosAfundando])) {
                                 registrar("NaN", "barco " + barco.id + " tem número inválido");
                             }

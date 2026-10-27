@@ -376,47 +376,68 @@
                 }));
             });
 
-            testar("recifeNoCone × oráculo por ângulo (20.000 sorteios semeados fora das bordas)", function () {
+            testar("recifeNoCone × oráculo por AMOSTRAGEM do disco (20.000 sorteios semeados, geometria exata: disco ∩ leque)", function () {
+                // A regra é geométrica: o disco encosta no leque (setor de 16° e 24 m). O oráculo é independente: o disco encosta no leque se
+                // (a) a lanterna está dentro dele, ou (b) algum ponto da CIRCUNFERÊNCIA dele está dentro do leque (se o leque não está todo dentro do
+                // disco, ele cruza a circunferência). Cada ponto é testado por ângulo (atan2) e distância, sem produto escalar.
+                // A circunferência tem 720 amostras: o erro de amostragem é a flecha r·(1 − cos(π/720)) ≤ 6e-5 m. Faixa de tolerância: 1 mm.
+                // O oráculo roda com o raio + 1 mm e com o raio − 1 mm; se os dois concordam o veredito é firme e a regra TEM de concordar;
+                // se discordam, o caso está dentro da faixa de 1 mm e não é cobrado.
+                const AMOSTRAS = 720;
+                const TOLERANCIA_EM_METROS = 0.001;
+                const cossenos = [], senos = [];
+                for (let k = 0; k < AMOSTRAS; k++) {
+                    cossenos.push(Math.cos(2 * Math.PI * k / AMOSTRAS));
+                    senos.push(Math.sin(2 * Math.PI * k / AMOSTRAS));
+                }
+
+                function oraculo(origem, direcao, centro, raio) {
+                    if (Math.hypot(centro.x - origem.x, centro.z - origem.z) <= raio) {
+                        return true;
+                    }
+                    for (let k = 0; k < AMOSTRAS; k++) {
+                        const dx = centro.x + raio * cossenos[k] - origem.x;
+                        const dz = centro.z + raio * senos[k] - origem.z;
+                        if (Math.hypot(dx, dz) <= ALCANCE && Math.abs(normalizar(Math.atan2(-dx, -dz) - direcao)) <= MEIO_ANGULO) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
                 semearSorteio(20261026);
-                let divergencias = 0, sorteados = 0, dentro = 0;
+                let divergencias = 0, firmes = 0, naFaixa = 0, dentro = 0, perto = 0;
                 let primeiraDivergencia = "";
 
                 for (let n = 0; n < 20000; n++) {
                     const origem = { x: Math.random() * 60 - 30, z: Math.random() * 60 - 30 };
                     const direcao = (Math.random() * 2 - 1) * 4 * Math.PI;
-                    const recife = { x: origem.x + Math.random() * 80 - 40, z: origem.z + Math.random() * 80 - 40, raio: 0.3 + Math.random() * 2.7 };
+                    const raio = 0.3 + Math.random() * 2.7;
+                    const sorteioPerto = n % 2 === 0;   // metade dos casos nasce em volta do leque, onde as bordas decidem
+                    const rumo = sorteioPerto ? direcao + (Math.random() * 2 - 1) * 45 * GRAU : Math.random() * 2 * Math.PI;
+                    const distanciaAoCentro = sorteioPerto ? Math.random() * (ALCANCE + 6) : Math.random() * 56;
+                    const recife = { x: origem.x - distanciaAoCentro * Math.sin(rumo), z: origem.z - distanciaAoCentro * Math.cos(rumo), raio: raio };
 
-                    const dx = recife.x - origem.x;
-                    const dz = recife.z - origem.z;
-                    const d = Math.hypot(dx, dz);
-                    let esperado;
-                    if (d <= recife.raio) {
-                        esperado = true;
-                    } else if (d - recife.raio > ALCANCE) {
-                        esperado = false;
-                    } else {
-                        // o oráculo mede o ÂNGULO entre o rumo do recife e o do feixe (a regra mede o cosseno)
-                        const desvio = Math.abs(normalizar(Math.atan2(-dx, -dz) - direcao));
-                        const limite = MEIO_ANGULO + Math.asin(recife.raio / d);
-                        if (Math.abs(desvio - limite) < 1e-6) {
-                            continue;
-                        }
-                        esperado = desvio < limite;
-                    }
-                    if (Math.abs(d - recife.raio) < 1e-6 || Math.abs(d - recife.raio - ALCANCE) < 1e-6) {
+                    const generoso = oraculo(origem, direcao, recife, raio + TOLERANCIA_EM_METROS);
+                    const apertado = oraculo(origem, direcao, recife, raio - TOLERANCIA_EM_METROS);
+                    if (generoso !== apertado) {
+                        naFaixa++;
                         continue;
                     }
-                    sorteados++;
-                    dentro += esperado ? 1 : 0;
-                    if (noCone(origem, direcao, recife) !== esperado) {
+                    firmes++;
+                    dentro += generoso ? 1 : 0;
+                    perto += sorteioPerto ? 1 : 0;
+                    if (noCone(origem, direcao, recife) !== generoso) {
                         divergencias++;
                         if (primeiraDivergencia === "") {
-                            primeiraDivergencia = "origem " + JSON.stringify(origem) + ", direção " + direcao + ", recife " + JSON.stringify(recife) + ", esperado " + esperado;
+                            primeiraDivergencia = "origem " + JSON.stringify(origem) + ", direção " + direcao + ", recife " + JSON.stringify(recife) + ", esperado " + generoso;
                         }
                     }
                 }
-                conferir("20.000 sorteios: a regra e o oráculo discordam em " + divergencias + " (de " + sorteados + ")", divergencias === 0, primeiraDivergencia);
-                conferir("e o sorteio cobre os dois lados (" + dentro + " dentro, " + (sorteados - dentro) + " fora)", dentro > 500 && sorteados - dentro > 500);
+                conferir("20.000 sorteios: a regra e o oráculo discordam em " + divergencias + " (de " + firmes + " firmes; " + naFaixa + " na faixa de 1 mm, não cobrados)",
+                    divergencias === 0, primeiraDivergencia);
+                conferir("a faixa de tolerância é estreita: menos de 1% dos sorteios (" + naFaixa + ")", naFaixa < 200);
+                conferir("e o sorteio cobre os dois lados (" + dentro + " dentro, " + (firmes - dentro) + " fora), com " + perto + " casos em volta do leque", dentro > 2000 && firmes - dentro > 2000 && perto > 5000);
             });
 
             testar("a memória: brasa cheia enquanto visto, esfria sem ver, 0 em 3 s, nunca negativa, dt = 0 não muda nada", function () {
@@ -517,7 +538,7 @@
                 // outra coluna, com recifes reais do mundo: de (−12, −4) a linha até o recife (−6, −22) passa pelo centro da coluna (−8, −16)
                 const alvoReal = recifes.find(function (recife) { return recife.x === -6 && recife.z === -22; });
                 conferir("recife real (−6, −22) visto de (−12, −4): a coluna (−8, −16) está no meio, tapado", estaTapado(ponto(-12, 1.5, -4), alvoReal) === true);
-                conferir("visto de (−2, −4): a linha passa a 3 m da coluna, livre", estaTapado(ponto(-2, 1.5, -4), alvoReal) === false);
+                conferir("visto de (−2, −4): a linha passa a 1,2 m da torre da ilha, que agora TAPA a luz (está em oclusores)", estaTapado(ponto(-2, 1.5, -4), alvoReal) === true);
                 conferir("lanterna na altura de uma lanterna de barca (0,5 a 2 m) é sempre mais baixa que a coluna de 5 m",
                     [0.5, 1, 2].every(function (altura) { return estaTapado(ponto(14, altura, 8), recifeFalso(14, -20, 2)) === true; }));
             });
@@ -594,6 +615,168 @@
                 acalmar();
                 zerarBrasas();
                 conferirSemViolacoes("coluna");
+            });
+
+            testar("estaTapado reaproveita a MESMA lista de acertos (nenhum array novo por raio)", function () {
+                const lista = acertos;
+                const lanterna = ponto(14, 1.5, 8);
+                estaTapado(lanterna, recifeFalso(14, -20, 2));
+                const tamanhoDepoisDeBloqueado = acertos.length;
+                conferir("depois de um raio bloqueado pela coluna a lista é a mesma e tem acertos (" + tamanhoDepoisDeBloqueado + ")", acertos === lista && tamanhoDepoisDeBloqueado > 0);
+                estaTapado(lanterna, recifeFalso(22, -20, 2));
+                conferir("depois de um raio livre é a mesma lista, esvaziada", acertos === lista && acertos.length === 0);
+                let sempreAMesma = true;
+                for (let i = 0; i < 200; i++) {
+                    estaTapado(ponto(i % 20, 1.5, 8), recifeFalso(14, -20, 2));
+                    sempreAMesma = sempreAMesma && acertos === lista;
+                }
+                conferir("200 raios depois ainda é o mesmo array", sempreAMesma);
+            });
+
+            testar("a ilha tapa a luz: a torre E o chão (oclusores), e uma origem realmente livre não é tapada", function () {
+                const alvoReal = recifes.find(function (recife) { return recife.x === -6 && recife.z === -22; });
+                conferir("visto de (−2, −4): a linha passa a 1,2 m da torre da ilha (−5, −12): tapado", estaTapado(ponto(-2, 1.5, -4), alvoReal) === true);
+                conferir("visto de (4, −4): a linha passa a 4,5 m da torre, longe das colunas: LIVRE", estaTapado(ponto(4, 1.5, -4), alvoReal) === false);
+                conferir("lanterna baixa (0,5 m) a 3 m do eixo da ilha: só o CHÃO da ilha corta o raio: tapado",
+                    estaTapado(ponto(-2, 0.5, -4), recifeFalso(-2, -22, 2)) === true);
+                conferir("a mesma linha, mais ao lado (a 8 m do eixo): livre", estaTapado(ponto(3, 0.5, -4), recifeFalso(3, -22, 2)) === false);
+                conferir("oclusores = 3 colunas + chão + torre da ilha", oclusores.length === QUANTIDADE_DE_COLUNAS + 2);
+            });
+
+            testar("H mostra um anel de colisão por recife, mesmo com o recife esquecido (opacidade 0)", function () {
+                acalmar();
+                zerarBrasas();
+                posicionarBarcaQuieta(70, 70, 0);   // longe de todo recife: nada é visto
+                passarSegundos(4);
+                const pedras = recifes.map(function (recife) { return recife.malha.children[0]; });
+                conferir("antes do H: todos esquecidos, opacidade 0 e malha invisível",
+                    recifes.every(function (recife, i) { return recife.brasa === 0 && pedras[i].material.opacity === 0 && recife.malha.visible === false; }));
+                apertar("h");
+                passar(50);
+                const aneis = pedras.map(function (pedra) { return pedra.children[0]; });
+                function visivelNoMundo(objeto) {
+                    for (let atual = objeto; atual !== null && atual !== cena.parent; atual = atual.parent) {
+                        if (atual.visible === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                conferirIgual("um anel por recife (13)", aneis.filter(function (anel) { return anel !== undefined && anel.geometry.type === "RingGeometry"; }).length, QUANTIDADE_DE_RECIFES);
+                conferir("com H todos os anéis estão visíveis na cena, com as pedras ainda em opacidade 0", aneis.every(visivelNoMundo) && pedras.every(function (pedra) { return pedra.material.opacity === 0; }));
+                conferir("o anel tem material próprio, opaco (o desvanecer da pedra não o apaga) e raio = recife + 1,2 m", aneis.every(function (anel, i) {
+                    return anel.material !== pedras[i].material && anel.material.opacity === 1 && anel.material.transparent === false &&
+                        proximo(anel.geometry.parameters.outerRadius, recifes[i].raio + 1.2, 1e-9);
+                }));
+                apertar("h");
+                passar(50);
+                conferir("H de novo: os anéis somem", aneis.every(function (anel) { return visivelNoMundo(anel) === false; }));
+                soltarABarca();
+                acalmar();
+                zerarBrasas();
+            });
+
+            testar("o cone DESENHADO fica na horizontal (= a regra); só o SpotLight levanta com a arfagem", function () {
+                acalmar();
+                posicionarBarcaQuieta(30, 40, 0.7);
+                apertar("ArrowUp");
+                passarSegundos(1.5);   // segurada: o alvo sobe 2 rad/s e a lanterna o persegue
+                cena.updateMatrixWorld(true);
+                conferir("a arfagem subiu bem acima do repouso (" + arfagem.angulo.toFixed(2) + " rad)", arfagem.angulo > 0.5);
+
+                const frenteDoCone = new THREE_REAL.Vector3(0, 0, -1).transformDirection(cone.matrixWorld);
+                const direcao = barcaNoMundo.proa + guinada.angulo;
+                conferir("o eixo do cone desenhado tem y = 0 (horizontal), como o leque da regra (y = " + frenteDoCone.y.toExponential(1) + ")", Math.abs(frenteDoCone.y) < 1e-9);
+                conferir("e aponta para a direção da regra (proa + guinada): (−sen, −cos)",
+                    proximo(frenteDoCone.x, -Math.sin(direcao), 1e-9) && proximo(frenteDoCone.z, -Math.cos(direcao), 1e-9));
+
+                const luz = feixe.children.find(function (filho) { return filho.isSpotLight === true; });
+                const posicaoDaLuz = luz.getWorldPosition(new THREE_REAL.Vector3());
+                const posicaoDoAlvo = luz.target.getWorldPosition(new THREE_REAL.Vector3());
+                const frenteDaLuz = posicaoDoAlvo.sub(posicaoDaLuz).normalize();
+                soltar("ArrowUp");
+                conferir("o SpotLight, esse sim, levanta: y ≈ sen(arfagem) = " + Math.sin(arfagem.angulo).toFixed(3) + " (obtido " + frenteDaLuz.y.toFixed(3) + ")",
+                    proximo(frenteDaLuz.y, Math.sin(arfagem.angulo), 0.03) && frenteDaLuz.y > 0.4,   // folga de 0,03: a posição do alvo do SpotLight no mundo vem com ~0,02 de desvio medido
+                    "feixe.rotation.x " + feixe.rotation.x + ", arfagem " + arfagem.angulo + ", luz " + posicaoDaLuz.toArray() + ", alvo " + posicaoDoAlvo.toArray());
+                soltarABarca();
+                acalmar();
+            });
+
+            testar("o enquadramento da câmera cabe a barca, um recife 14 m à frente e o 3º barco, em 1280×800 e em 390×750", function () {
+                acalmar();
+                const estiloAntes = palco.style.cssText;
+                const renderAntes = renderizador.render;
+                const projetado = new THREE_REAL.Vector3();
+
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": a câmera tem a proporção da tela", proximo(camera.aspect, tamanho[0] / tamanho[1], 1e-6));
+
+                    [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.8].forEach(function (proa) {
+                        posicionarBarcaQuieta(10, 45, proa);
+                        barcosDePesca.concat(barcosAfundando).forEach(function (barco) { if (barco.malha) { cena.remove(barco.malha); } });
+                        barcosDePesca.length = 0;
+                        barcosAfundando.length = 0;
+                        criarComboio();
+                        passarSegundos(4);
+                        camera.updateMatrixWorld(true);
+                        const pontos = [
+                            ["a barca", { x: barcaNoMundo.x, z: barcaNoMundo.z }],
+                            ["um recife 14 m à frente", { x: barcaNoMundo.x - 14 * Math.sin(proa), z: barcaNoMundo.z - 14 * Math.cos(proa) }],
+                            ["o 3º barco", { x: barcosDePesca[2].x, z: barcosDePesca[2].z }]
+                        ];
+                        const fora = pontos.filter(function (item) {
+                            projetado.set(item[1].x, 0, item[1].z).project(camera);
+                            item.push(projetado.x, projetado.y);
+                            return !(Math.abs(projetado.x) <= 1 && Math.abs(projetado.y) <= 1 && projetado.z > -1 && projetado.z < 1);
+                        });
+                        conferir(tamanho[0] + "×" + tamanho[1] + ", proa " + proa.toFixed(2) + ": barca, recife à frente e 3º barco dentro do quadro (" +
+                            pontos.map(function (item) { return item[0] + " [" + item[2].toFixed(2) + ", " + item[3].toFixed(2) + "]"; }).join("; ") + ")", fora.length === 0,
+                            "fora: " + fora.map(function (item) { return item[0]; }));
+                    });
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                renderizador.render = renderAntes;
+                soltarABarca();
+                acalmar();
+            });
+
+            testar("o comboio nasce válido e a ilha bate (a mesma regra do passo 5, na cópia do passo 6)", function () {
+                const obstaculos = recifes.concat([ilha]);
+                let poses = 0, invalidas = 0, primeira = "";
+                for (let x = -79; x <= 79; x += 2) {
+                    for (let z = -79; z <= 79; z += 2) {
+                        if (obstaculos.some(function (o) { return Math.hypot(x - o.x, z - o.z) < o.raio + 1.2; })) {
+                            continue;
+                        }
+                        for (let rumo = 0; rumo < 8; rumo++) {
+                            const guardados = barcosDePesca.splice(0);
+                            barcaNoMundo.x = x;
+                            barcaNoMundo.z = z;
+                            barcaNoMundo.proa = rumo * Math.PI / 4;
+                            criarComboio();
+                            poses++;
+                            const novos = barcosDePesca.splice(0);
+                            barcosDePesca.push.apply(barcosDePesca, guardados);
+                            novos.forEach(function (barco) {
+                                const ruim = Math.abs(barco.x) > 79 + MARGEM || Math.abs(barco.z) > 79 + MARGEM || Math.hypot(barco.x - porto.x, barco.z - porto.z) < porto.raio + 1 - MARGEM ||
+                                    obstaculos.some(function (o) { return Math.hypot(barco.x - o.x, barco.z - o.z) < o.raio + 1.2 + 1 - MARGEM; });
+                                if (ruim) {
+                                    invalidas++;
+                                    primeira = primeira || "barca (" + x + ", " + z + ") rumo " + rumo;
+                                }
+                            });
+                        }
+                    }
+                }
+                conferir("nenhum dos " + poses + " comboios nasceu inválido (" + invalidas + ")", poses > 40000 && invalidas === 0, primeira);
+                conferir("a ilha bate: dentro de 5,5 + 1,2 m é tocada, fora não, e vale para a barca e para o barco",
+                    recifeTocadoPor({ x: ilha.x + 6.69, z: ilha.z }) === ilha && recifeTocadoPor({ x: ilha.x + 6.71, z: ilha.z }) === null);
+                posicionarBarcaQuieta(8, 14, 0);
+                soltarABarca();
             });
 
             testar("robô semeado: piloto e entradas aleatórias; brasa, cone e raios conferidos por fora em 3 sementes × 4000 quadros", function () {

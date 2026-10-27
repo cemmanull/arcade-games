@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 7: sistema pede menos movimento</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        [hidden] { display: none !important; }
+    </style>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Aqui o sistema PEDE menos movimento: a opção "reduzir clarões" tem de nascer ligada (GDD §7). O caso padrão está em 07-tempestade.html. -->
+    <script>
+        (function () {
+            const original = window.matchMedia.bind(window);
+            window.matchMedia = function (consulta) {
+                if (/prefers-reduced-motion/.test(consulta)) {
+                    return { matches: true, media: consulta, addEventListener: function () { }, removeEventListener: function () { } };
+                }
+                return original(consulta);
+            };
+        }());
+    </script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/07-tempestade/regras.js" defer></script>
+    <script src="../../proa-acesa/07-tempestade/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 7: o sistema pede menos movimento (prefers-reduced-motion)</h1>
+    <pre id="resultado"></pre>
+
+    <header>
+        <button id="botao-clarao" type="button" aria-label="Reduzir clarões" aria-pressed="false">Clarões</button>
+    </header>
+    <div id="hud">
+        <p id="relogio"></p>
+        <p id="calor"></p>
+        <meter id="medidor" min="0" max="1" low="0.6" high="0.85" optimum="0" aria-label="Calor da lanterna"></meter>
+    </div>
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <p id="mensagem" aria-live="polite"></p>
+    <pre id="depuracao" hidden></pre>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <div id="acoes">
+            <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+            <button id="botao-foco" type="button" aria-label="Foco estreito ou largo" aria-pressed="false">Foco</button>
+        </div>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const MARGEM = 1e-9;
+            const FILHOS_FIXOS_DA_CENA = 7;   // luz do céu, mar, ilha, barca, porto, chuva, recifes da noite
+            const GOTAS_ESPERADAS = 2000;
+            const THREE_REAL = window.THREE;
+            const renderizadorReal = renderizador.render.bind(renderizador);
+
+            // O teste confere regras, não pixels: só os casos que medem draw calls desenham de verdade.
+            renderizador.render = function () { };
+            function desenharDeVerdade(ligado) {
+                renderizador.render = ligado ? renderizadorReal : function () { };
+            }
+
+            // ============================================================
+            // Ajudantes
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? 1e-9 : tolerancia);
+            }
+
+            function todosFinitos(lista) {
+                return lista.every(function (numero) { return Number.isFinite(numero); });
+            }
+
+            function sortear(lista) {
+                return lista[Math.floor(Math.random() * lista.length)];
+            }
+
+            function luminancia(cor) {
+                return 0.2126 * cor.r + 0.7152 * cor.g + 0.0722 * cor.b;
+            }
+
+            function passar(milissegundos) {
+                if (!avancarQuadro(milissegundos)) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+            }
+
+            function passarSegundos(segundos, milissegundos) {
+                const passo = milissegundos === undefined ? 50 : milissegundos;
+                for (let i = 0, quadros = Math.round(segundos * 1000 / passo); i < quadros; i++) {
+                    passar(passo);
+                }
+            }
+
+            function tecla(tipo, nome, opcoes) {
+                window.dispatchEvent(new KeyboardEvent(tipo, Object.assign({ key: nome }, opcoes)));
+            }
+
+            function apertar(nome) {
+                tecla("keydown", nome);
+            }
+
+            function soltarTecla(nome) {
+                tecla("keyup", nome);
+            }
+
+            function tocar(botao, detalhe) {
+                botao.dispatchEvent(new MouseEvent("click", { detail: detalhe === undefined ? 1 : detalhe, bubbles: true }));
+            }
+
+            /* Começa uma noite do jeito que o jogo faz (a regra monta, o script redesenha no próximo quadro) e deixa a barca quieta. */
+            function irParaNoite(indice) {
+                comecarNoite(indice);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                passar(50);
+            }
+
+            function filhosDaCenaEsperados() {
+                return FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length;
+            }
+
+            function ligarReducao(ligada) {
+                if ((botaoClarao.getAttribute("aria-pressed") === "true") !== ligada) {
+                    tocar(botaoClarao);
+                }
+            }
+
+            /* Roda um clarão da noite 2 (1º aos 15 s) em quadros de 16 ms e mede o fundo da cena quadro a quadro. */
+            function medirClarao() {
+                irParaNoite(1);
+                noite.segundos = 14.9;
+                const brilhos = [];
+                passar(16);
+                const base = luminancia(cena.background);
+                for (let quadro = 0; quadro < 100; quadro++) {
+                    passar(16);
+                    brilhos.push(luminancia(cena.background));
+                }
+                let maiorSalto = 0;
+                brilhos.forEach(function (brilho, i) { maiorSalto = Math.max(maiorSalto, Math.abs(brilho - (i === 0 ? base : brilhos[i - 1]))); });
+                return { maiorSalto: maiorSalto, pico: Math.max.apply(null, brilhos) - base, base: base, quadrosClaros: brilhos.filter(function (b) { return b - base > 0.001; }).length };
+            }
+
+            function posicoesDasGotas() {
+                const matrizes = chuva.instanciada.instanceMatrix.array;
+                const posicoes = [];
+                for (let i = 0; i < GOTAS_ESPERADAS; i++) {
+                    posicoes.push({ x: matrizes[i * 16 + 12], y: matrizes[i * 16 + 13], z: matrizes[i * 16 + 14] });
+                }
+                return posicoes;
+            }
+
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("com prefers-reduced-motion o botão e a regra nascem ligados, e o primeiro relâmpago já é suave sem ninguém tocar em nada", function () {
+                conferir("o jogo carregou", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
+                conferir("a regra nasce ligada, com aria-pressed=\"true\" e o texto \"Clarões ✓\"",
+                    reduzirClaroes === true && botaoClarao.getAttribute("aria-pressed") === "true" && botaoClarao.textContent === "Clarões ✓");
+                const suave = medirClarao();
+                conferir("o clarão sem tocar no botão: maior salto " + suave.maiorSalto.toFixed(4) + " (< 0,05) e pico ≤ 25% do clarão cheio",
+                    suave.maiorSalto < 0.05 && suave.pico <= 0.25 * (luminancia(new THREE_REAL.Color(0xcfe3ff)) - suave.base) + 1e-6 && suave.quadrosClaros > 30);
+                tocar(botaoClarao);
+                conferir("o jogador ainda pode DESLIGAR a opção: aria-pressed=\"false\" e texto \"Clarões\"", reduzirClaroes === false && botaoClarao.getAttribute("aria-pressed") === "false" && botaoClarao.textContent === "Clarões");
+                const seco = medirClarao();
+                conferir("desligada, o mesmo clarão volta a ser seco (salto " + seco.maiorSalto.toFixed(3) + " > 0,3)", seco.maiorSalto > 0.3);
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>
