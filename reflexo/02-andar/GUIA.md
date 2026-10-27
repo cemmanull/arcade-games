@@ -1,0 +1,201 @@
+# Reflexo — Passo 2: Andar
+
+**Mudou:** `script.js` (seções 5, 6 e 7 são novas), `index.html` (os botões) e `style.css`
+**Rode:** abra o `index.html`. Use **W A S D** e as setas ← →, ou os botões da tela. Depois
+aperte **H**.
+
+---
+
+## O que você vê
+
+A mesma planta do passo 1, mas agora o zelador anda. **W** e **S** (ou ↑ e ↓) o levam para
+onde a seta aponta e para trás; **A** e **D** dão passos de lado; ← e → giram a seta. Segure **W** e
+**D** juntos: ele anda na diagonal, **sem correr mais** que andando reto. Empurre-o contra uma
+parede: ele para encostado e, se você empurra em diagonal, **desliza** ao longo dela.
+
+Embaixo do desenho há seis botões (⟲ ▲ ⟳ / ◀ ▼ ▶) que fazem exatamente o mesmo, para celular.
+Com **H**: a grade e os números do zelador, agora mudando a cada quadro.
+
+> **Toque neste passo:** só os botões. O esquema final do jogo (arrastar o dedo sobre a imagem
+> para girar) precisa da imagem em primeira pessoa e chega depois. Os botões ⟲ ⟳ são o plano B
+> previsto no GDD, e valem como teste da ideia "teclado e toque viram a mesma intenção".
+
+---
+
+## 1. Teclado e toque viram a mesma intenção
+
+*Reusa `dealer-out/02-movimento` (entrada → intenção).*
+
+```js
+const acoesAtivas = new Set();     // "frente", "tras", "esquerda", ...
+
+function lerIntencao() {
+    const eixo = (positiva, negativa) => Number(acoesAtivas.has(positiva)) - Number(acoesAtivas.has(negativa));
+    return { frente: eixo("frente", "tras"), lado: ..., giro: ... };
+}
+```
+
+Teclas e botões **não movem ninguém**. Eles só ligam e desligam **ações** num conjunto: `keydown`
+de `W` liga `"frente"`, `keyup` desliga; o botão ▲ faz o mesmo em `pointerdown` e `pointerup`.
+Quem transforma isso em movimento é `atualizar`, que só enxerga a **intenção**: três números,
+cada um `-1`, `0` ou `1`.
+
+A vantagem é a do Dealer? Out!: se um dia houver um terceiro jeito de jogar (um controle, um
+mouse), basta ele escrever em `acoesAtivas`. Nada em `andar` ou na colisão muda.
+
+Três cuidados que existem por causa de bugs reais:
+
+- **Apertar frente e trás ao mesmo tempo** vale `1 - 1 = 0`: ele fica parado. Não é um erro, é a
+  conta.
+- **`blur`** limpa tudo: se você soltar a tecla com outra janela em foco, o `keyup` nunca
+  chega, e o zelador andaria para sempre.
+- **O botão também solta quando o dedo ou o mouse sai dele** (`pointerleave`). No celular o
+  dedo fica preso ao botão em que começou, mas o mouse não.
+
+---
+
+## 2. Andar relativo à direção
+
+```js
+const ordemX = jogador.dx * frente - jogador.dy * lado;
+const ordemY = jogador.dy * frente + jogador.dx * lado;
+```
+
+No passo 1, `(dx, dy)` era para onde o zelador **olha**. Aqui ele vira a régua do movimento:
+
+- **frente** soma `(dx, dy)`: andar para onde se olha;
+- **lado direito** soma `(-dy, dx)`: a mesma seta **girada 90°**. Olhando para a direita
+  `(1, 0)`, o lado direito é `(0, 1)`, para baixo na tela. Confira com a mão no papel.
+- **trás** e **lado esquerdo** são os negativos (`frente = -1`).
+
+A ordem `(ordemX, ordemY)` é, então, "para onde o jogador quer ir, no mundo". Por isso girar e
+andar são independentes: a tecla **W** é sempre "para onde estou olhando", qualquer que seja o
+ângulo.
+
+### A diagonal não pode ser mais rápida
+
+Frente (`1`) e lado (`1`) juntos dão um vetor de comprimento `√2 ≈ 1,41`. Sem cuidado, andar de
+viés seria 41% mais rápido que andar reto, o velho bug de todo jogo que ganhou "strafe". A cura
+é a **normalização**: dividir o vetor pelo próprio comprimento.
+
+```js
+const tamanho = Math.hypot(ordemX, ordemY);
+const passo = VELOCIDADE_DE_ANDAR * tempo / tamanho;
+moverComColisao(ordemX * passo, ordemY * passo);
+```
+
+Qualquer direção de entrada vira um vetor de comprimento 1 vezes `VELOCIDADE_DE_ANDAR`.
+Se `tamanho` é `0` (nada apertado, ou frente e trás se anulando), a função sai antes: dividir
+por zero daria `NaN`, e um `NaN` na posição estraga o jogo inteiro sem avisar.
+
+---
+
+## 3. Girar
+
+```js
+jogador.angulo = (jogador.angulo + delta + 2 * Math.PI) % (2 * Math.PI);
+atualizarDirecao();
+```
+
+Girar é somar ao ângulo: `giro × VELOCIDADE_DE_GIRO × tempo`. Girar para a direita **aumenta**
+o ângulo, porque o eixo y desce (o sentido horário na tela). O `%` mantém o ângulo entre `0` e
+`2π`, para o número não crescer sem fim. Somar `2π` antes evita o resto negativo do JavaScript
+(`-1 % 3` dá `-1`), o mesmo cuidado do túnel do Pac-Man. E depois de **todo** giro a seta é
+refeita com `atualizarDirecao()`: lembra do passo 1? A direção nunca é guardada à mão.
+
+---
+
+## 4. Colisão: um círculo contra a grade
+
+*Reusa `pong/05-colisao` (colisão conferida por eixo) e `xenomorph/02-gravidade` (um eixo de
+cada vez).*
+
+O corpo é um **círculo de raio `0.25`** casa. Perguntar "este círculo bate numa casa
+sólida?" tem uma conta simples:
+
+```js
+const pertoX = Math.min(Math.max(x, coluna), coluna + 1);
+const pertoY = Math.min(Math.max(y, linha), linha + 1);
+if (ehSolida(coluna, linha) && Math.hypot(x - pertoX, y - pertoY) < RAIO_DO_CORPO) ...
+```
+
+`(pertoX, pertoY)` é o ponto **da casa** mais perto do centro do círculo: o centro, se ele
+está dentro dos limites da casa; senão, o ponto da borda ou do canto. Se esse ponto está a menos
+de um raio, bateu. Só as casas que o quadrado do círculo cobre precisam ser conferidas: no
+máximo 4.
+
+O que é sólido? `CASAS_SOLIDAS = "#%DER"`: tijolo, pedra, **porta** (ainda fechada, nenhum
+receptor existe), emissor e receptor. **Espelhos não bloqueiam**, como pede o GDD: o jogador
+passa pela casa do espelho. Fora do mapa também é sólido (`ehSolida` devolve `true`), uma rede
+de segurança caso uma borda seja esquecida.
+
+### Um eixo de cada vez
+
+```js
+if (!corpoBateNaParede(jogador.x + passoX, jogador.y)) jogador.x += passoX;
+if (!corpoBateNaParede(jogador.x, jogador.y + passoY)) jogador.y += passoY;
+```
+
+Primeiro tenta andar em x; **depois** tenta andar em y, já com o x novo. É isso que faz o
+corpo **deslizar**: empurrando em diagonal contra uma parede vertical, o passo em x é recusado,
+mas o passo em y passa. Se os dois eixos fossem testados juntos, qualquer batida cancelaria o
+movimento inteiro e o zelador "grudaria" na parede.
+
+### O passo precisa ser menor que o raio
+
+Cada quadro anda no máximo `3 casas/s × 0,05 s = 0,15` casa, que é menor que o raio (`0.25`).
+Por isso nenhum passo consegue **atravessar** uma parede de uma casa inteira de espessura
+sem ser percebido (o *tunelamento* do Xenomorph). O teto de 0,05 s em `quadroAQuadro` é o que
+garante isso, mesmo se a aba ficar em segundo plano.
+
+### O que não está aqui
+
+Quando um passo é recusado, o corpo **para onde estava**, sem encostar exatamente na face.
+Um zelador lento deixa uma folga de até um passo (0,15 casa) entre ele e a parede. O Xenomorph
+encosta a caixa na face (veja o exercício 7).
+
+---
+
+## 5. A atualização separada do desenho
+
+```js
+function quadroAQuadro(instanteAtual) {
+    const tempo = Math.min((instanteAtual - instanteDoQuadroAnterior) / 1000, 0.05);
+    instanteDoQuadroAnterior = instanteAtual;
+
+    atualizar(tempo);
+    desenhar();
+    requestAnimationFrame(quadroAQuadro);
+}
+```
+
+O tempo em segundos entre dois quadros (`tempo`) multiplica **toda** velocidade. Em 60 ou em 144
+quadros por segundo o zelador anda a mesma distância por segundo. `atualizar` muda os números;
+`desenhar` só lê. Essa separação deixa o jogo testável sem canvas, e é o que o GDD pede de
+`regras` versus `desenho` no jogo completo.
+
+---
+
+## Experimente
+
+1. Dobre `VELOCIDADE_DE_ANDAR` para `6` e depois suba para `30`. Em qual valor o zelador
+   começa a atravessar paredes? Confira com a conta do passo máximo (seção 4).
+2. Troque `RAIO_DO_CORPO` por `0.45` e tente passar pelo corredor de uma casa. E por `0.05`?
+   Aperte **H** e veja o círculo do corpo.
+3. Em `lerIntencao`, troque `"frente"` e `"tras"` de lugar. O que muda no teclado? O que mudou no
+   toque? O que **não** precisou mudar?
+4. **Quebre de propósito:** em `andar`, apague a divisão por `tamanho`. Meça (com **H**) quanto
+   o zelador anda em 1 segundo reto e em 1 segundo na diagonal.
+5. **Quebre de propósito:** em `moverComColisao`, confira os dois eixos juntos com um só `if`
+   (`corpoBateNaParede(x + passoX, y + passoY)`). Empurre o zelador em diagonal contra uma parede.
+6. **Quebre de propósito:** apague a linha `window.addEventListener("blur", ...)`. Segure **W**,
+   troque de janela com Alt+Tab e solte a tecla. O que acontece quando você volta?
+7. Faça o corpo encostar na parede: quando `corpoBateNaParede` recusar o passo, em vez de
+   ficar parado, avance em passos cada vez menores até colar. Dica: o `xenomorph/02-gravidade`
+   tem a ideia.
+8. Tire `"E"` de `CASAS_SOLIDAS`. Dá para entrar no emissor? Por que o mapa final vai querer
+   que ele seja sólido?
+
+---
+
+**Anterior:** [`01-planta`](../01-planta/) · **Próximo:** `03-um-raio` — a luz sai do emissor e a planta desenha o caminho do raio, casa a casa.
