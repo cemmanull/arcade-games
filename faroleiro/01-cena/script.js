@@ -10,7 +10,6 @@
   E o laço de sempre (Pong, passo 2): requestAnimationFrame + delta time.
 */
 
-
 // ---- CONSTANTES ----
 const COR_DO_FUNDO = 0x07111c;
 const CAMPO_DE_VISAO = 60;            // graus, na vertical
@@ -20,7 +19,6 @@ const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const palco = document.getElementById("palco");
 const aviso = document.getElementById("aviso");
 
-
 // ---- ESTADO — globais de propósito, para poder inspecionar e testar ----
 let cena = null;
 let camera = null;
@@ -28,13 +26,9 @@ let renderizador = null;
 let caixa = null;
 let instanteDoQuadroAnterior = 0;
 
-
 // ---- LIGAR ----
 function iniciar() {
-    /*
-      Sem internet, a ponte do index.html falha e `THREE` nunca existe.
-      Conferimos ANTES de usar: sem isso o jogo morreria com um erro mudo.
-    */
+    /* Sem internet, a ponte falha e `THREE` nunca existe: conferimos ANTES de usar, ou o jogo morre mudo. */
     if (typeof THREE === "undefined") {
         mostrarAviso("Não consegui baixar o three.js. Confira sua internet e recarregue a página.");
         return;
@@ -69,7 +63,7 @@ function montarCena() {
     cena.background = new THREE.Color(COR_DO_FUNDO);
 
     camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
-    camera.position.set(0, 1.5, 5);   // x para a direita, y para cima, z para TRÁS de quem olha
+    camera.position.set(0, 2, 10);   // x para a direita, y para cima, z para TRÁS de quem olha
 
     /*
       Uma malha = GEOMETRIA (a forma) + MATERIAL (a aparência).
@@ -85,6 +79,9 @@ function montarCena() {
 function ajustarTamanho() {
     const largura = palco.clientWidth;
     const altura = palco.clientHeight;
+    if (largura === 0 || altura === 0) {
+        return;   // palco escondido ou sem altura: dividir por 0 daria proporção infinita
+    }
 
     /* Tela de alta densidade tem mais pixels que o necessário: 2 já basta e poupa a GPU. */
     renderizador.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -100,7 +97,7 @@ function ajustarTamanho() {
 function quadroAQuadro(instanteAtual) {
     const segundosDesdeOUltimoQuadro = (instanteAtual - instanteDoQuadroAnterior) / 1000;
     instanteDoQuadroAnterior = instanteAtual;
-    const tempo = Math.min(segundosDesdeOUltimoQuadro, TETO_DO_DELTA);
+    const tempo = Math.max(0, Math.min(segundosDesdeOUltimoQuadro, TETO_DO_DELTA));   // nunca negativo nem enorme
 
     atualizar(tempo);
     desenhar();

@@ -12,8 +12,9 @@ Uma caixa colorida girando num fundo azul-noite, ocupando a tela inteira abaixo 
 face tem uma cor diferente, conforme a direção para onde ela aponta. Redimensione a janela: a caixa
 não estica nem amassa.
 
-Desligue a internet e recarregue: em vez de uma tela vazia, aparece um aviso em português dizendo
-o que houve.
+Se o three.js não carregar, em vez de uma tela vazia aparece um aviso em português dizendo o que
+houve. Só desligar a internet não basta para ver isso: o navegador guarda a biblioteca no cache
+(veja o exercício 7 para testar de verdade).
 
 > O jogo completo está descrito em [`faroleiro_gdd.md`](../faroleiro_gdd.md): uma noite de
 > tempestade, o farol apagado e o faroleiro numa barca, levando um comboio de barcos de pesca até o
@@ -62,7 +63,7 @@ renderizador.render(cena, camera);
 | `WebGLRenderer` | desenha a cena vista pela câmera num `<canvas>` que ele mesmo cria |
 
 Os eixos: **x** para a direita, **y** para cima, **z** vindo na sua direção. A câmera em
-`(0, 1.5, 5)` está 5 unidades "para trás" da caixa, que fica na origem. Neste módulo uma unidade é
+`(0, 2, 10)` está 10 unidades "para trás" da caixa, que fica na origem. Neste módulo uma unidade é
 um **metro**.
 
 O que se vê é uma **malha**: uma **geometria** (a forma: `BoxGeometry`) mais um **material** (a
@@ -74,15 +75,16 @@ materiais de verdade ficam para o passo 2.
 ## 3. O loop, outra vez (reuso do `pong/02-loop`)
 
 ```js
-const tempo = Math.min(segundosDesdeOUltimoQuadro, 0.05);
+const tempo = Math.max(0, Math.min(segundosDesdeOUltimoQuadro, 0.05));
 atualizar(tempo);
 desenhar();
 requestAnimationFrame(quadroAQuadro);
 ```
 
 É o mesmo laço do Pong, passo 2: `requestAnimationFrame` entrega o carimbo de tempo, o delta time
-faz a velocidade valer igual em qualquer tela, e o teto de 0,05 s impede o salto depois de a aba
-ficar parada. A velocidade agora é em **radianos por segundo**:
+faz a velocidade valer igual em qualquer tela, o teto de 0,05 s impede o salto depois de a aba
+ficar parada, e o piso em 0 impede um `tempo` negativo no primeiro quadro (o instante inicial vem de
+`performance.now()`, que pode passar do primeiro carimbo do `requestAnimationFrame`). A velocidade agora é em **radianos por segundo**:
 
 ```js
 caixa.rotation.y += VELOCIDADE_DE_GIRO * tempo;
@@ -109,7 +111,8 @@ camera.updateProjectionMatrix();
 - **Proporção:** a câmera precisa saber o novo formato (`aspect`), e depois recalcular a matriz.
   Esquecer essa linha é o jeito mais comum de ver o mundo esticado.
 
-A função roda uma vez ao iniciar e a cada evento `resize`.
+A função roda uma vez ao iniciar e a cada evento `resize`. Se o palco estiver com largura ou
+altura 0, ela sai sem fazer nada: `largura / 0` daria uma proporção infinita.
 
 ---
 
@@ -137,14 +140,16 @@ O aviso é um `<p role="alert">`, que leitores de tela anunciam na hora.
    silhueta laranja, sem relevo: sem luz, sem sombreado.
 2. Mude `CAMPO_DE_VISAO` para 30 e depois para 110. Qual parece uma lente de longe e qual parece
    um "olho de peixe"?
-3. Mova a câmera: `camera.position.set(0, 4, 5)`. A caixa foi para baixo da tela. Por quê? (A
+3. Mova a câmera: `camera.position.set(0, 5, 10)`. A caixa foi para baixo da tela. Por quê? (A
    câmera ainda olha em frente; falta `camera.lookAt(0, 0, 0)`.)
 4. Mude `caixa.rotation.y` para `rotation.x`, e depois some as duas.
 5. Apague a linha `camera.updateProjectionMatrix()` e redimensione a janela.
 6. Troque `Math.min(devicePixelRatio, 2)` por `1`: a imagem fica serrilhada em tela de alta
    densidade. E por 3, o que acontece com a velocidade?
-7. Corte a internet (modo avião) e recarregue; depois, no `index.html`, estrague a versão do
-   endereço (`three@0.0.1`) e veja o mesmo aviso.
+7. Veja o aviso de verdade. Cortar a internet e recarregar **não basta**: o three.js fixado está
+   no cache HTTP e carrega mesmo offline. Duas saídas: (a) DevTools (F12) → aba Network → marque
+   **Disable cache** e **Offline**, e recarregue; (b) no `index.html`, estrague a versão do
+   endereço (`three@0.0.1`) e recarregue. O aviso em português aparece nos dois casos.
 
 ---
 

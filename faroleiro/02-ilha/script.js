@@ -20,6 +20,7 @@ const COR_DO_FUNDO = 0x07111c;
 const COR_DO_MAR = 0x14344f;
 const COR_DA_LUZ = 0xfff1c8;
 const CAMPO_DE_VISAO = 60;            // graus, na vertical
+const CAMPO_DE_VISAO_EM_PE = 80;      // celular em pé: mais aberto, para a ilha caber na largura estreita
 const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const ALCANCE_DO_FEIXE = 12;          // metros
 const RAIO_DO_FEIXE = 3;              // metros, na ponta
@@ -28,7 +29,6 @@ const VELOCIDADE_DO_GIRO = 0.7;       // radianos de fase por segundo
 
 const palco = document.getElementById("palco");
 const aviso = document.getElementById("aviso");
-
 // ---- ESTADO — globais de propósito, para poder inspecionar e testar ----
 let cena = null;
 let camera = null;
@@ -39,7 +39,6 @@ let feixe = null;
 let eixos = [];
 let fase = 0;
 let instanteDoQuadroAnterior = 0;
-
 // ---- LIGAR ----
 function iniciar() {
     if (typeof THREE === "undefined") {
@@ -70,7 +69,8 @@ function mostrarAviso(texto) {
 }
 
 function aoApertarTecla(evento) {
-    if (evento.key.toLowerCase() !== "h") {
+    const combinada = evento.ctrlKey || evento.metaKey || evento.altKey;   // Ctrl+H é do navegador
+    if (evento.repeat || combinada || String(evento.key).toLowerCase() !== "h") {
         return;
     }
     eixos.forEach(function (eixo) { eixo.visible = !eixo.visible; });
@@ -83,23 +83,19 @@ function montarCena() {
 
     camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
     camera.position.set(0, 6, 10);
-    camera.lookAt(0, 1, -7);
+    camera.lookAt(0, 3, -7);
 
     /* Sem luz, o material "standard" fica preto. A hemisfera é o céu fraco; o SpotLight mora no feixe. */
-    cena.add(new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, 0.8));
+    cena.add(new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, 2.4));
 
     cena.add(criarMar());
     cena.add(criarIlhaComFarol());
     cena.add(criarBarca());
 }
 
-/*
-  Malha = geometria (forma) + material (aparência). `flatShading` deixa
-  cada face de uma cor só: o visual facetado, e barato.
-*/
+/* Malha = geometria (forma) + material (aparência). `flatShading`: cada face de uma cor só, facetado e barato. */
 function criarMalha(geometria, cor) {
-    const material = new THREE.MeshStandardMaterial({ color: cor, flatShading: true });
-    return new THREE.Mesh(geometria, material);
+    return new THREE.Mesh(geometria, new THREE.MeshStandardMaterial({ color: cor, flatShading: true }));
 }
 
 function criarMar() {
@@ -187,11 +183,15 @@ function criarEixos(pai) {
 function ajustarTamanho() {
     const largura = palco.clientWidth;
     const altura = palco.clientHeight;
+    if (largura === 0 || altura === 0) {
+        return;   // palco sem tamanho: dividir por 0 daria proporção infinita
+    }
 
     renderizador.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderizador.setSize(largura, altura, false);
 
     camera.aspect = largura / altura;
+    camera.fov = camera.aspect < 1 ? CAMPO_DE_VISAO_EM_PE : CAMPO_DE_VISAO;
     camera.updateProjectionMatrix();
 }
 
@@ -199,7 +199,7 @@ function ajustarTamanho() {
 function quadroAQuadro(instanteAtual) {
     const segundosDesdeOUltimoQuadro = (instanteAtual - instanteDoQuadroAnterior) / 1000;
     instanteDoQuadroAnterior = instanteAtual;
-    const tempo = Math.min(segundosDesdeOUltimoQuadro, TETO_DO_DELTA);
+    const tempo = Math.max(0, Math.min(segundosDesdeOUltimoQuadro, TETO_DO_DELTA));   // nunca negativo nem enorme
 
     atualizar(tempo);
     desenhar();
@@ -215,6 +215,5 @@ function atualizar(tempo) {
 function desenhar() {
     renderizador.render(cena, camera);
 }
-
 
 iniciar();

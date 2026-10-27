@@ -1,7 +1,8 @@
 # Faroleiro — Passo 2: A ilha
 
 **Mudou:** `script.js` (cena nova; a ponte e o laço continuam iguais). Os outros arquivos mudam
-só o título.
+só o título. A tecla **H** ignora repetição de tecla e combinações com Ctrl/Alt/Meta (Ctrl+H é
+atalho do navegador).
 **Rode:** abra o `index.html` (precisa de internet, como no passo 1), e depois aperte **H**.
 
 ---
@@ -35,15 +36,17 @@ imagem.
 `MeshStandardMaterial` reage à luz. `flatShading: true` pinta cada face de uma cor só, deixando
 o visual facetado, e é barato de calcular.
 
-Isto é o "estado × desenho" do `xadrez/01-tabuleiro`, agora em 3D: `barca.rotation.y` é o
-**estado** (um número), e as malhas só mostram esse número.
+Isto é o "estado × desenho" do `xadrez/01-tabuleiro`, agora em 3D: o **estado** é `fase` (um
+número que cresce com o tempo). A cada quadro, `atualizar` **deriva** dela o giro
+(`barca.rotation.y = 0.7 · sen(fase)`) e as malhas só mostram esse giro. Por isso, se você mexer em
+`barca.rotation.y` pelo console, o quadro seguinte desfaz: quem manda é a `fase`.
 
 ---
 
 ## 2. Luz
 
 ```js
-cena.add(new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, 0.8));
+cena.add(new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, 2.4));
 ```
 
 Sem luz, o `MeshStandardMaterial` fica **preto**. Duas luzes aqui:
@@ -93,7 +96,8 @@ uma posição.
 Por que isso importa para o jogo: mais tarde a lanterna vai girar um pouco **além** da proa
 (para mirar o feixe), e o feixe vai herdar a proa mais esse giro, sem conta nossa.
 
-A frente é **−z**, por convenção da câmera do three.js. Por isso a lanterna fica em `z = -1.4`.
+A frente é **−z**, por convenção da câmera do three.js. Por isso a lanterna fica em `z = -1.4`
+(mais sobre isso na seção 4: `getWorldDirection` devolve o **+z**, o oposto).
 
 ---
 
@@ -115,9 +119,25 @@ y = 1
 z = 2 + (-1.4 · cos 0,7) = 2 - 1,07 = 0,93
 ```
 
-`getWorldPosition` devolve exatamente `(2,10; 1; 0,93)`. No console, digite
-`barca.rotation.y = 0.7; lanterna.getWorldPosition(new THREE.Vector3())` e confira. A mesma
-pergunta serve para o feixe, e `feixe.getWorldDirection(...)` diz para onde ele aponta.
+`getWorldPosition` devolve exatamente `(2,10; 1; 0,93)`. No console, digite **tudo numa linha só**:
+
+```js
+barca.position.set(3, 0, 2); barca.rotation.y = 0.7; lanterna.getWorldPosition(new THREE.Vector3())
+```
+
+Numa linha só, nenhum quadro acontece entre o ajuste e a leitura. Se você ajustar numa linha e ler
+em outra, o laço já terá sobrescrito `rotation.y` com o valor da `fase` e o resultado muda.
+
+A mesma pergunta serve para o feixe. Para a **direção**, `getWorldDirection` tem uma pegadinha: ela
+devolve o eixo **+z** do objeto no mundo, e o feixe aponta para o **−z**. Então a direção em que a
+luz sai é a resposta **negada**:
+
+```js
+const atras = feixe.getWorldDirection(new THREE.Vector3());   // +z do feixe, no mundo
+const frente = atras.clone().negate();                        // −z: para onde a luz vai
+```
+
+Com a barca sem giro, `frente` é `(0, 0, -1)`; girada `θ`, é `(-sen θ, 0, -cos θ)`.
 
 Essa distinção (local × mundo) vai voltar no passo 4, com guinada e arfagem, e explica por que
 uma bola presa no cinto de um personagem anda com ele.
@@ -144,7 +164,11 @@ aberta para a frente. É mais simples do que girar o objeto toda vez.
 2. Mude `lanterna.position` para `(0, 1, 1.4)`: a lanterna passa para a popa, e o feixe continua
    apontando para a frente. Por quê? (O cone aponta para o −z do próprio feixe; a posição da
    lanterna só muda de onde ele sai.)
-3. Troque `ALCANCE_DO_FEIXE` por 25: o cone cresce, e o `SpotLight` também, pois usam o mesmo número.
+3. Troque `ALCANCE_DO_FEIXE` por 25: o cone fica **mais comprido e mais fino**. O raio na ponta
+   continua 3 m, então o meio-ângulo `atan(RAIO / ALCANCE)` cai de 14° para 6,8°. O `SpotLight`
+   usa a mesma conta (abertura menor) e o seu `distance` (`ALCANCE × 1.5`) sobe de 18 para 37,5 m:
+   a luz alcança mais longe, mas num leque mais estreito. É a troca "estreito alcança longe, largo
+   cobre mais" do jogo (GDD §4.2).
 4. Troque a intensidade do `SpotLight` de 120 para 600 e depois para 5.
 5. Em `atualizar`, acrescente `lanterna.rotation.y = 0.5 * Math.sin(fase * 3)`. O feixe passa a
    varrer **além** da proa; as posições do mundo mudam, as locais não.
@@ -156,4 +180,4 @@ aberta para a frente. É mais simples do que girar o objeto toda vez.
 
 ---
 
-**Anterior:** [`01-cena`](../01-cena/) · **Próximo:** `03-mar` — o mar para de ser um piso liso e ganha ondas e névoa.
+**Anterior:** [`01-cena`](../01-cena/) · **Próximo:** [`03-mar`](../03-mar/) — o mar para de ser um piso liso e ganha ondas e névoa.
