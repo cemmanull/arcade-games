@@ -78,8 +78,10 @@ cena.fog = new THREE.FogExp2(COR_DO_CEU_DE_TARDE, NEVOA_DE_TARDE);
 densidade (`0.012` de tarde, `0.03` de noite) manda: quanto maior, mais perto o mundo some. A **cor
 da névoa tem de ser a do fundo**, senão o horizonte vira uma faixa estranha entre o mar e o céu.
 
-Repare que a borda do plano do mar, a 45 m, some na névoa: não se vê onde o mundo acaba. Mais
-adiante (GDD §4.2) o **alcance** da lanterna usará esse mesmo número da névoa.
+Repare na borda do plano do mar, a 45 m do centro (uns 55 m da câmera). De noite, com `0,03`, a
+névoa já cobre 93% dela e ninguém vê onde o mundo acaba. De tarde, com `0,012`, ela cobre só 35%: a
+borda ainda aparece como uma linha fraca no horizonte. A conta é `1 − e^(−(densidade × distância)²)`.
+Mais adiante (GDD §4.2) o **alcance** da lanterna usará esse mesmo número da névoa.
 
 ---
 
@@ -101,10 +103,14 @@ depois de 40 s) e o que vai de um extremo ao outro é:
 | 0,5 | 0,021 | 3,7 | 0,11 |
 | 1 (noite) | 0,030 | 3,4 | 0,18 |
 
-Para **cores**, o three.js já traz o `lerp` por canal: `new THREE.Color(a).lerp(new THREE.Color(b), t)`
-mistura vermelho, verde e azul, cada um por conta própria. Uma mesma cor misturada pinta o fundo
-(`cena.background`) e a névoa (`cena.fog.color`), para as duas continuarem iguais. O mar vai do azul
-da tarde (`0x3d7ea6`) ao azul-noite (`0x14344f`).
+Para **cores**, o three.js já traz o `lerp` por canal: `cor.set(a).lerp(rascunho.set(b), t)` mistura
+vermelho, verde e azul, cada um por conta própria. Repare que não há `new THREE.Color` dentro do
+laço: `aplicarCeu` roda a cada quadro, e criar objetos 60 vezes por segundo só dá trabalho ao coletor
+de lixo. Uma única cor de `rascunho` é reaproveitada, e `aplicarCeu` nem refaz a conta depois que a
+noite fecha (`t` parado em 1). Uma mesma cor misturada pinta o fundo (`cena.background`) e a névoa
+(`cena.fog.color`), para as duas continuarem iguais. O mar vai do azul da tarde (`0x3d7ea6`) ao
+azul-noite (`0x14344f`). (O `lerp` de números que escrevemos à mão existe também pronto, em
+`THREE.MathUtils.lerp`; o passo 4 passa a usar o do three.js.)
 
 Por que o cone quase some de dia? Porque a luz de uma lanterna só aparece contra o escuro: é
 `lerp(0.04, 0.18, t)`.
@@ -132,8 +138,9 @@ só desenho.
    lisa, mas as normais **não** foram recalculadas. O que você vê na luz?
 5. Mude `DURACAO_DO_ENTARDECER` para 10 e depois para 120. Faça o dia voltar: use `%` em
    `tempoTotal / DURACAO_DO_ENTARDECER` e um seno para ir e vir (como as ondas).
-6. Aumente `NEVOA_DE_NOITE` para 0,08. Até onde você enxerga a ilha? Agora faça o céu **não**
-   acompanhar: troque a cor da névoa por vermelho e olhe o horizonte.
+6. Aumente `NEVOA_DE_NOITE` para 0,08. Até onde você enxerga a ilha? Ponha também
+   `NEVOA_DE_TARDE` em 0,03: a borda do mar some de tarde? Agora faça o céu **não** acompanhar:
+   troque a cor da névoa por vermelho e olhe o horizonte.
 7. Faça o amanhecer: acrescente uma terceira cor ao `aplicarCeu` (`0xf3c98b`, de volta) e use dois
    `lerp` em sequência.
 8. Em `alturaDoMar`, some uma terceira onda diagonal: `Math.sin((x + z) * 0.3 + tempo)`.

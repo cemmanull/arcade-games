@@ -48,6 +48,8 @@ let lanterna = null;
 let feixe = null;
 let eixos = [];
 let fase = 0;
+let rascunhoDaCor = null;             // uma Color reaproveitada nas contas: criar objetos a cada quadro pesa no coletor de lixo
+let noiteAplicada = -1;               // o último `noite` pintado; -1 = ainda nenhum
 let tempoTotal = 0;                   // segundos desde que o jogo abriu: o relógio das ondas e do céu
 let instanteDoQuadroAnterior = 0;
 
@@ -102,6 +104,7 @@ function montarCena() {
     luzDoCeu = new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, LUZ_DO_CEU_DE_TARDE);
     cena.add(luzDoCeu);
 
+    rascunhoDaCor = new THREE.Color();
     cena.add(criarMar());
     cena.add(criarIlhaComFarol());
     cena.add(criarBarca());
@@ -258,16 +261,17 @@ function lerp(inicio, fim, t) {
     return inicio + (fim - inicio) * t;   // t = 0 devolve o início; t = 1, o fim; 0,5, o meio
 }
 
-function misturar(corInicial, corFinal, t) {
-    return new THREE.Color(corInicial).lerp(new THREE.Color(corFinal), t);   // lerp em cada canal r, g, b
-}
-
 function aplicarCeu(noite) {   // 0 = fim de tarde, 1 = noite fechada
-    const ceu = misturar(COR_DO_CEU_DE_TARDE, COR_DO_FUNDO, noite);
-    cena.background.copy(ceu);
-    cena.fog.color.copy(ceu);
+    if (noite === noiteAplicada) {
+        return;   // com a noite fechada nada mais muda: não refaz a conta a cada quadro
+    }
+    noiteAplicada = noite;
+
+    /* `set` põe a cor inicial e `lerp` a empurra para a final, tudo dentro do mesmo objeto (nenhuma Color nova). */
+    cena.background.set(COR_DO_CEU_DE_TARDE).lerp(rascunhoDaCor.set(COR_DO_FUNDO), noite);
+    cena.fog.color.copy(cena.background);
     cena.fog.density = lerp(NEVOA_DE_TARDE, NEVOA_DE_NOITE, noite);
-    mar.material.color.copy(misturar(COR_DO_MAR_DE_TARDE, COR_DO_MAR, noite));
+    mar.material.color.set(COR_DO_MAR_DE_TARDE).lerp(rascunhoDaCor.set(COR_DO_MAR), noite);
     luzDoCeu.intensity = lerp(LUZ_DO_CEU_DE_TARDE, LUZ_DO_CEU_DE_NOITE, noite);
     cone.material.opacity = lerp(0.04, 0.18, noite);   // de dia o feixe quase não aparece
 }

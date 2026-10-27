@@ -42,9 +42,13 @@ h1 {
     min-height: 0;
 }
 
-/* touch-action: none — arrastar o dedo mira a lanterna em vez de rolar a página. */
+/* touch-action: none — arrastar o dedo mira a lanterna em vez de rolar a página.
+   Sem seleção nem menu de segurar: o dedo parado não pode virar "copiar imagem" e cancelar o gesto. */
 #palco {
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 #palco canvas {
@@ -88,6 +92,8 @@ h1 {
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;   /* segurar o botão no iOS não abre o menu e não cancela o giro */
+    -webkit-tap-highlight-color: transparent;
 }
 
 #controles button:focus-visible {
