@@ -12,18 +12,37 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
 
 ## Comandos
 - Rodar um passo: abrir `<modulo>/<passo>/index.html` no navegador.
-- Conferir uma página sem interface (Chrome headless; funciona com `file://`):
+- Verificação (Chrome + Node 22+, sem npm; detalhes em `verificacao/README.md`):
+  - `node verificacao/rodar.mjs` — roda as páginas de teste `verificacao/<modulo>/<passo>.html`;
+  - `node verificacao/rodar.mjs --fumaca` — abre todo `index.html` e falha em erro de console fora da
+    tabela `ERROS_ESPERADOS` do `rodar.mjs`;
+  - `node verificacao/rodar.mjs --links` — confere todo link relativo dos `.md` (inclusive maiúsculas).
+  Os três precisam sair com 0 antes de qualquer merge.
+- Página de teste nova: copiar o esqueleto de uma existente; carregar `../apoio.js` e depois os
+  scripts reais do passo; se mexer em `localStorage`, guardar e devolver o valor do aluno.
+- Conferir uma página avulsa sem interface (Chrome headless; funciona com `file://`):
   `chrome --headless=new --user-data-dir=<pasta-temporária> --virtual-time-budget=5000 --dump-dom file:///<caminho>/index.html`
   (no Windows: `"/c/Program Files/Google/Chrome/Application/chrome.exe"`; para WebGL, acrescente
   `--enable-unsafe-swiftshader`).
+
+## Raiz
+- `README.md` — a trilha: ordem dos módulos, pré-requisito mínimo e o porquê da ordem.
+- `CONCEITOS.md` — conceito → onde se aprende (o módulo **mais cedo na ordem** que o ensina) → onde se
+  reusa.
+- `verificacao/` — o harness (ver Comandos).
+- Ao acrescentar ou mover um módulo, atualizar juntos: a tabela do `README.md`, as linhas de
+  `CONCEITOS.md`, os rodapés do módulo e dos vizinhos (`README.md` e `final/GUIA.md`), e rodar
+  `--links`.
 
 ## Estrutura de um módulo
 - `<modulo>/README.md` — trilha (tabela de passos), "por que vem depois de X", verificação, como
   estudar, rodapé com pré-requisito e índice.
 - `<modulo>/0N-nome/` — um passo: `index.html`, `style.css`, `script.js`, `GUIA.md`. O código do
   passo anterior é copiado para frente e alterado; cada pasta é independente.
-- `<modulo>/final/` — o jogo completo, com o guia mais longo e os exercícios. No final, o código pode
-  se dividir em arquivos por assunto (`regras.js`, `desenho.js` …).
+- `<modulo>/final/` — o jogo completo, com o guia mais longo e os exercícios. O código se divide em
+  arquivos por assunto (`regras.js`, `desenho.js` …) no `final` ou a partir do passo em que dividir é a
+  própria lição (precedentes: `xadrez/07-computador`, `xenomorph/06-semente`). Antes disso, um
+  `script.js` por passo.
 - Módulos feitos a partir de um documento de design têm `<modulo>/<modulo>_gdd.md`.
 
 ## Convenções
@@ -37,6 +56,10 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
 - Modelo do `GUIA.md` de passo: `# <Módulo> — Passo N: <Nome>` · `**Mudou:**` · `**Rode:**` ·
   `## O que você vê` · seções de conceito numeradas · `## Experimente` ·
   `**Anterior:** … · **Próximo:** … — <gancho>`.
+- Rodapé de módulo (no `README.md` e no `final/GUIA.md`, um nível mais fundo):
+  `**Pré-requisito:** … · **Antes:** … · **Depois:** … · **Índice:** [README raiz]`, sempre com o
+  pré-requisito. No `final/GUIA.md`, antes dele, a linha
+  `**Anterior:** [último passo] · **Módulo:** [README do módulo]`.
 - Tecla **H** liga a depuração visual ("mostrar o invisível").
 - `localStorage` é sempre lido com `try/catch` e saneado campo a campo.
 - A interface cabe numa tela de celular de 390×750 sem rolar; teclado e toque viram a mesma
@@ -60,3 +83,9 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
   pausar a sincronização. Prefira agentes em paralelo na mesma cópia, com arquivos disjuntos, a
   worktrees.
 - No Windows, `grep $'\r'` não é confiável para detectar CRLF; use `git ls-files --eol`.
+- No Windows, **não rode `chrome.exe --version`**: não imprime nada e abre o navegador com o perfil padrão
+  do usuário, que fica preso ao processo do terminal. Para a versão:
+  `(Get-Item "C:\Program Files\Google\Chrome\Application\chrome.exe").VersionInfo.ProductVersion`. Todo
+  Chrome de teste deve ser `--headless=new` com `--user-data-dir` temporário.
+- `Emulation.setCPUThrottlingRate` do Chrome não serve para simular celular nesta máquina: 4× e 8×
+  deixaram o JS só 1,2–1,5× mais lento. Desempenho em celular só vale medido num aparelho real.
