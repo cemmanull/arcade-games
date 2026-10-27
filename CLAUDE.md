@@ -15,7 +15,7 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
 - Verificação (Chrome + Node 22+, sem npm; detalhes em `verificacao/README.md`):
   - `node verificacao/rodar.mjs` — roda as páginas de teste `verificacao/<modulo>/<passo>.html`;
   - `node verificacao/rodar.mjs --fumaca` — abre todo `index.html` e falha em erro de console fora da
-    tabela `ERROS_ESPERADOS` do `rodar.mjs`;
+    tabela `ERROS_ESPERADOS` de `verificacao/fumaca.mjs` (cada padrão casa com a linha inteira);
   - `node verificacao/rodar.mjs --links` — confere todo link relativo dos `.md` (inclusive maiúsculas).
   Os três precisam sair com 0 antes de qualquer merge.
 - Página de teste nova: copiar o esqueleto de uma existente; carregar `../apoio.js` e depois os
