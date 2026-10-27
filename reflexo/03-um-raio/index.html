@@ -1,0 +1,40 @@
+<!--
+  REFLEXO — PASSO 3: UM RAIO
+
+  Da posição do zelador sai um raio, na direção em que ele olha, e o DDA
+  anda a grade casa a casa até a primeira parede. A planta desenha o raio
+  e o ponto onde ele bate. H mostra as linhas da grade que o raio cruzou.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reflexo — passo 3</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Reflexo</h1>
+
+    <canvas id="jogo" width="384" height="288" role="img"
+        aria-label="Planta da sala vista de cima, com o raio de luz que sai do zelador até a parede">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="leitura"></p>
+
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar para a esquerda">⟲</button>
+        <button type="button" data-acao="frente" aria-label="Andar para a frente">▲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar para a direita">⟳</button>
+        <button type="button" data-acao="esquerda" aria-label="Passo para a esquerda">◀</button>
+        <button type="button" data-acao="tras" aria-label="Andar para trás">▼</button>
+        <button type="button" data-acao="direita" aria-label="Passo para a direita">▶</button>
+    </div>
+
+    <p id="ajuda">W S ou ↑ ↓: andar · A D: passo lateral · ← →: girar<br>H: o invisível (● linha vertical cruzada · ■ horizontal)</p>
+</body>
+</html>
