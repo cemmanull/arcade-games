@@ -1,0 +1,97 @@
+<!--
+  XENOMORPH — PASSO 8: A MATRIARCA
+
+  No fundo da floresta, num covil escolhido pelo gerador, dorme a
+  Matriarca: três fases, quatro ataques, um ponto fraco. E o planeta
+  reage: quanto mais tempo numa região, mais o ecossistema evolui — e os
+  ninhos soltam reforços até serem destruídos.
+
+  Dois scripts, NUMA ORDEM QUE IMPORTA: o gerador primeiro (ele não sabe
+  que a tela existe), o jogo depois (ele usa o que o gerador declarou).
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xenomorph — passo 8</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="gerador.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Xenomorph</h1>
+    <p id="subtitulo">Protocolo de Extinção</p>
+
+    <div id="painel">
+        <label id="rotulo-da-vida" for="vida">Vida</label>
+        <progress id="vida" max="1" value="1"></progress>
+
+        <ul id="armas">
+            <li id="arma-0"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+            <li id="arma-1"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+        </ul>
+        <label id="rotulo-da-recarga" for="recarga">Recarregando</label>
+        <progress id="recarga" max="1" value="0"></progress>
+    </div>
+
+    <!--
+      A barra do chefe ocupa sempre o seu lugar (visibility, não hidden):
+      o canvas não pula quando a Matriarca desperta.
+    -->
+    <div id="barra-do-chefe">
+        <label for="vida-do-chefe">A Matriarca</label>
+        <progress id="vida-do-chefe" max="1" value="1"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="256" height="144">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <!-- Avisos curtos por cima da tela. role="status": o leitor de tela anuncia sem roubar o foco. -->
+        <p id="aviso" role="status" hidden></p>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-recomecar" type="button">Mesma semente</button>
+            <button id="botao-nova-expedicao" type="button">Nova expedição</button>
+        </div>
+    </div>
+
+    <!--
+      A EXPEDIÇÃO: onde se está, o mapa do que já foi explorado, e a semente.
+      O formulário é um <form> de verdade: Enter no campo gera o mundo, sem
+      nenhum ouvinte de tecla a mais.
+    -->
+    <div id="expedicao">
+        <canvas id="minimapa" width="57" height="26" aria-label="Mapa das salas exploradas"></canvas>
+        <div>
+            <p>Setor <span id="setor"></span></p>
+            <p>Objetivo <span id="objetivo"></span></p>
+            <p>Ecossistema <span id="ecossistema"></span></p>
+            <form id="formulario-da-semente">
+                <label for="campo-semente">Semente</label>
+                <input id="campo-semente" name="semente" maxlength="24" autocomplete="off" spellcheck="false">
+                <button type="submit">Gerar</button>
+                <button id="botao-sortear" type="button">Sortear</button>
+            </form>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>← → ou A D: andar</span>
+        <span>↑ ↓: mirar</span>
+        <span>Espaço, Z ou K: pular</span>
+        <span>↓ + pular: descer pela grade</span>
+        <span>X ou J: atirar</span>
+        <span>Q: trocar de arma</span>
+        <span>R: recarregar</span>
+        <span>Shift, C ou L: esquivar</span>
+        <span>H: depuração (caixas → mapa do gerador → nada)</span>
+    </p>
+</body>
+</html>

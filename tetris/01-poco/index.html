@@ -1,0 +1,34 @@
+<!--
+  TETRIS — PASSO 1: O POÇO
+
+  Nada cai ainda. O objetivo é montar o lugar onde o jogo acontece — uma
+  grade de 10 colunas por 20 linhas — e desenhá-la a partir de DADOS.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris — passo 1</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Tetris</h1>
+
+    <canvas id="jogo" width="80" height="160">
+        Seu navegador não suporta canvas.
+        <!--
+          80 por 160 é a RESOLUÇÃO de desenho: 10 colunas x 8 pixels de
+          largura, 20 linhas x 8 pixels de altura. O CSS amplia isso 3 vezes
+          (para 240x480).
+
+          Repare na proporção: uma tela EM PÉ, 1 por 2. O Pong era deitado
+          porque o jogo acontece de um lado ao outro; aqui ele acontece de
+          cima para baixo.
+        -->
+    </canvas>
+</body>
+</html>

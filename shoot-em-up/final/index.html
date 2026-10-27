@@ -1,0 +1,81 @@
+<!--
+  SHOOT 'EM UP
+
+  Se você vem do Dealer? Out!, quase tudo aqui é lista que nasce e
+  morre. A diferença está nas contas: tudo gira em torno do CENTRO, a
+  colisão é por círculos, os inimigos seguem trajetos calculados e
+  atiram com geometria. E a fase inteira é um roteiro escrito como dados.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoot 'em up</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Shoot 'em up</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Recorde <span id="recorde">0</span></p>
+        <p>Vidas <span id="vidas">3</span></p>
+        <p>Bombas <span id="bombas">3</span></p>
+    </div>
+
+    <div id="barra-do-chefe" class="escondida">
+        <label for="vida-do-chefe">Nave-mãe</label>
+        <progress id="vida-do-chefe" max="1" value="1"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="120" height="160">
+            Seu navegador não suporta canvas.
+            <!--
+              120x160, em pé. O CSS amplia 3 vezes quando cabe, e encolhe
+              para caber na altura da janela quando não cabe.
+            -->
+        </canvas>
+
+        <!--
+          A mesma camada serve de menu, pausa e fim de jogo: muda o texto
+          e, na pausa, o botão some.
+        -->
+        <div id="camada-mensagem" aria-live="polite">
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-iniciar" type="button">Iniciar</button>
+        </div>
+
+        <p id="aviso" role="status" hidden></p>
+    </div>
+
+    <!--
+      Num aparelho de toque, arrastar o dedo em qualquer lugar da tela
+      move a nave, e ela atira sozinha enquanto o dedo estiver lá. Faltam
+      só a bomba e a pausa — estes dois botões, que só aparecem onde não
+      há mouse.
+    -->
+    <div id="toque">
+        <button id="botao-bomba" type="button">Bomba</button>
+        <button id="botao-pausa" type="button">Pausa</button>
+    </div>
+
+    <div id="controles">
+        <button id="botao-som" type="button" aria-pressed="true">Som: ligado</button>
+    </div>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: voar</span>
+        <span>Espaço (segure): atirar</span>
+        <span>Shift (segure): foco</span>
+        <span>X: bomba</span>
+        <span>P: pausar</span>
+        <span>H: colisões</span>
+    </p>
+</body>
+</html>

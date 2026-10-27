@@ -1,0 +1,53 @@
+<!--
+  XENOMORPH — PASSO 4: AS ARMAS
+
+  O soldado atira em oito direções, com duas armas que são DADOS: um
+  rifle de plasma e uma espingarda magnética. Cada uma com pente,
+  recarga, cadência e alcance próprios. Os casulos espalhados pela sala
+  são alvos de treino.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xenomorph — passo 4</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Xenomorph</h1>
+    <p id="subtitulo">Protocolo de Extinção</p>
+
+    <!--
+      O PAINEL é HTML, não canvas: texto que muda pouco, lido por leitor de
+      tela, com fonte nítida em qualquer escala. A arma ativa é marcada com
+      aria-current — o mesmo atributo que diz "você está aqui" num menu.
+    -->
+    <div id="painel">
+        <ul id="armas">
+            <li id="arma-0"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+            <li id="arma-1"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+        </ul>
+        <label id="rotulo-da-recarga" for="recarga">Recarregando</label>
+        <progress id="recarga" max="1" value="0"></progress>
+    </div>
+
+    <canvas id="jogo" width="256" height="144">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>← → ou A D: andar</span>
+        <span>↑ ↓: mirar</span>
+        <span>Espaço, Z ou K: pular</span>
+        <span>X ou J: atirar</span>
+        <span>Q: trocar de arma</span>
+        <span>R: recarregar</span>
+        <span>Shift, C ou L: esquivar</span>
+        <span>H: mostrar as caixas</span>
+    </p>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!--
+  TETRIS — PASSO 8: A VELOCIDADE
+
+  Uma caixa nova no painel: o nível. Todo o resto deste passo está no
+  script — a curva de velocidade, a peça fantasma, a repetição de
+  teclas e o tempo antes de travar.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris — passo 8</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Tetris</h1>
+
+    <div id="jogo-container">
+
+        <div id="tela">
+            <!-- position: relative — o ponto de referência da camada de mensagem. -->
+
+            <canvas id="jogo" width="80" height="160">
+                Seu navegador não suporta canvas.
+            </canvas>
+
+            <div id="camada-mensagem">
+                <p id="mensagem-titulo">Tetris</p>
+                <p id="mensagem-texto">Complete linhas para limpá-las.</p>
+            </div>
+        </div>
+
+        <aside id="painel">
+            <section class="caixa">
+                <h2>Próxima</h2>
+                <canvas id="proxima" width="40" height="24"></canvas>
+            </section>
+
+            <section class="caixa">
+                <h2>Pontos</h2>
+                <p id="pontos" class="valor">0</p>
+            </section>
+
+            <section class="caixa">
+                <h2>Linhas</h2>
+                <p id="linhas" class="valor">0</p>
+            </section>
+
+            <section class="caixa">
+                <h2>Nível</h2>
+                <p id="nivel" class="valor">1</p>
+            </section>
+        </aside>
+
+    </div>
+
+    <div id="controles">
+        <button id="botao-iniciar" type="button">Iniciar</button>
+    </div>
+
+    <p id="ajuda">
+        <span>← → mover</span>
+        <span>↑ / X girar</span>
+        <span>Z girar ao contrário</span>
+        <span>↓ descer</span>
+        <span>Espaço derrubar</span>
+    </p>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!--
+  PAC-MAN — PASSO 7: AS VIDAS
+
+  Agora é um jogo de verdade: três vidas, "Pronto!" antes de cada
+  tentativa, uma animação quando o Pac-Man é pego, fases que se seguem
+  e um fim de jogo.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man — passo 7</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pac-Man</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Vidas <span id="vidas">3</span></p>
+        <p>Fase <span id="fase">1</span></p>
+        <p>Modo <span id="modo">-</span></p>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="224" height="240">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <p id="aviso" role="status" hidden></p>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo">Fim de jogo</p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-reiniciar" type="button">Jogar de novo</button>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: escolher a direção</span>
+        <span>H: mostrar os alvos</span>
+    </p>
+</body>
+</html>

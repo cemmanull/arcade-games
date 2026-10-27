@@ -1,0 +1,38 @@
+<!--
+  SHOOT 'EM UP — PASSO 5: A COLISÃO
+
+  Os tiros acertam. Inimigos piscam ao levar dano, explodem ao morrer e
+  valem pontos. O blindado laranja aguenta seis tiros.
+
+  Aperte H para VER as caixas de colisão — que aqui são círculos.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoot 'em up — passo 5</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Shoot 'em up</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Batidas <span id="batidas">0</span></p>
+    </div>
+
+    <canvas id="jogo" width="120" height="160">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: voar</span>
+        <span>Espaço (segure): atirar</span>
+        <span>H: mostrar colisões</span>
+    </p>
+</body>
+</html>

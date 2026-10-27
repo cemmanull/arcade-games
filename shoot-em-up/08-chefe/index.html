@@ -1,0 +1,53 @@
+<!--
+  SHOOT 'EM UP — PASSO 8: O CHEFE
+
+  No fim do roteiro, a nave-mãe. Ela tem uma barra de vida, três fases
+  que mudam conforme apanha, e avisa antes de cada ataque: o núcleo
+  pisca. Leia o aviso e você sempre tem tempo de reagir.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoot 'em up — passo 8</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Shoot 'em up</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Vidas <span id="vidas">3</span></p>
+    </div>
+
+    <div id="barra-do-chefe" class="escondida">
+        <label for="vida-do-chefe">Nave-mãe</label>
+        <progress id="vida-do-chefe" max="1" value="1"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="120" height="160">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-reiniciar" type="button">Jogar de novo</button>
+        </div>
+
+        <!-- role="status": um leitor de tela anuncia o aviso quando ele muda. -->
+        <p id="aviso" role="status" hidden></p>
+    </div>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: voar</span>
+        <span>Espaço (segure): atirar</span>
+        <span>H: mostrar colisões</span>
+    </p>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!--
+  XENOMORPH — PASSO 5: AS CRIATURAS
+
+  Os casulos se abriram. Três espécies, cada uma com o seu jeito de caçar:
+  o rastejador corre atrás e tenta cercar, o saltador avisa e pula em arco,
+  a cuspidora mantém distância e cospe ácido que fica no chão. E agora o
+  soldado pode ser ferido — e cair.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xenomorph — passo 5</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Xenomorph</h1>
+    <p id="subtitulo">Protocolo de Extinção</p>
+
+    <div id="painel">
+        <label id="rotulo-da-vida" for="vida">Vida</label>
+        <progress id="vida" max="1" value="1"></progress>
+
+        <ul id="armas">
+            <li id="arma-0"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+            <li id="arma-1"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+        </ul>
+        <label id="rotulo-da-recarga" for="recarga">Recarregando</label>
+        <progress id="recarga" max="1" value="0"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="256" height="144">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <!-- A camada de mensagem do Pong e do Tetris: aqui, só o fim. -->
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-recomecar" type="button">Recomeçar</button>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>← → ou A D: andar</span>
+        <span>↑ ↓: mirar</span>
+        <span>Espaço, Z ou K: pular</span>
+        <span>X ou J: atirar</span>
+        <span>Q: trocar de arma</span>
+        <span>R: recarregar</span>
+        <span>Shift, C ou L: esquivar (nada fere durante a esquiva)</span>
+        <span>H: mostrar o que as criaturas pensam</span>
+    </p>
+</body>
+</html>

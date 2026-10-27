@@ -1,0 +1,342 @@
+/*
+  TETRIS — estilo
+
+  A identidade visual do curso: baixa resolução ampliada por um número
+  inteiro, bordas duras, neon sobre quase-preto.
+
+  O layout é uma GRADE de três colunas — painel, poço, painel — com
+  grid-template-areas, que deixa o desenho do layout legível dentro do
+  próprio CSS. No celular, a mesma grade é redesenhada com outra "figura".
+*/
+
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    --cor-apagada: #5c7a85;
+    --cor-borda-caixa: #1d2a3d;
+
+    /*
+      A ESCALA DO PIXEL, em um lugar só.
+      O poço tem 80x160 pixels de desenho; 3x = 240x480 na tela.
+    */
+    --pixel: 3px;
+    --largura-da-tela: 240px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 12px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+
+/* ============================================================
+   O LAYOUT
+   ============================================================ */
+
+/*
+  A "figura" do layout escrita com nomes. Para mudar a ordem das colunas,
+  muda-se o desenho — nenhum elemento sai do lugar no HTML.
+*/
+#jogo-container {
+    display: grid;
+    grid-template-areas: "esquerdo tela direito";
+    grid-template-columns: 140px auto 140px;
+    align-items: start;
+    gap: 16px;
+}
+
+#painel-esquerdo { grid-area: esquerdo; }
+#tela            { grid-area: tela; }
+#painel-direito  { grid-area: direito; }
+
+.painel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#tela {
+    position: relative;
+    line-height: 0;   /* remove o espacinho de texto embaixo do canvas */
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+#jogo {
+    width: var(--largura-da-tela);
+    height: auto;
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+}
+
+/* As caixas usam a MESMA escala do poço: 40 x 3 = 120. */
+.miniatura {
+    width: calc(40 * var(--pixel));
+    height: calc(24 * var(--pixel));
+}
+
+.caixa {
+    padding: 8px 10px;
+    border: 2px solid var(--cor-borda-caixa);
+}
+
+.caixa h2 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--cor-apagada);
+}
+
+.valor {
+    margin: 0;
+    font-size: 22px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.6);
+
+    /*
+      Algarismos de largura fixa: o número não "dança" para os lados
+      quando passa de 1 para 8. A Courier já é assim; a regra garante
+      para qualquer fonte que você puser no lugar.
+    */
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* ============================================================
+   A CAMADA DE MENSAGEM
+   ============================================================ */
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    background: rgba(6, 7, 13, 0.85);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+/* display:flex venceria o hidden na cascata sem esta regra. */
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    font-size: 12px;
+}
+
+
+/* ============================================================
+   BOTÕES
+   ============================================================ */
+
+#controles {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+button {
+    padding: 12px 22px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-shadow: 0 0 8px var(--cor-neon);
+    transition: background 0.15s, color 0.15s;
+}
+
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+    text-shadow: none;
+}
+
+button:active {
+    transform: translateY(2px);
+}
+
+/* Nunca remova o foco sem colocar outro indicador no lugar. */
+button:focus-visible {
+    outline: 3px solid var(--cor-destaque);
+    outline-offset: 3px;
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 24px;
+    max-width: 560px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--cor-apagada);
+}
+
+
+/* ============================================================
+   TOQUE
+   ============================================================ */
+
+/*
+  Escondidos por padrão; aparecem só onde não há mouse.
+
+  `hover: none` e `pointer: coarse` perguntam ao aparelho como ele é
+  usado: "o ponteiro principal não consegue pairar e é impreciso" — um
+  dedo. É melhor do que adivinhar pelo tamanho da tela: um tablet com
+  teclado e um notebook com tela de toque estragariam o palpite.
+*/
+#toque {
+    display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    #toque {
+        display: grid;
+        grid-template-columns: repeat(4, 64px);
+        gap: 8px;
+    }
+
+    #toque button {
+        height: 52px;
+        padding: 0;
+        font-size: 22px;
+
+        /*
+          touch-action: none — o navegador não usa este toque para rolar
+          nem para dar zoom com dois toques rápidos. Sem isso, apertar ↓
+          duas vezes depressa ampliaria a página.
+        */
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* Num aparelho sem teclado, a lista de teclas só ocupa espaço. */
+    #ajuda {
+        display: none;
+    }
+}
+
+
+/* ============================================================
+   TELAS ESTREITAS
+   ============================================================ */
+
+/*
+  No celular não cabem três colunas. `display: contents` faz os dois
+  painéis "sumirem" como caixa — os filhos deles passam a ser itens da
+  grade diretamente — e as seis caixas se arrumam em duas linhas de três,
+  acima do poço.
+*/
+@media (max-width: 600px) {
+    body {
+        gap: 10px;
+        padding: 10px;
+    }
+
+    h1 {
+        font-size: 20px;
+        letter-spacing: 8px;
+    }
+
+    #jogo-container {
+        grid-template-areas: none;
+        grid-template-columns: repeat(3, 1fr);
+        align-items: stretch;   /* as caixas de uma linha com a mesma altura */
+        gap: 6px;
+        width: 100%;
+        max-width: 360px;
+    }
+
+    .painel {
+        display: contents;
+    }
+
+    #tela {
+        grid-area: auto;
+        grid-column: 1 / -1;
+        justify-self: center;
+        order: 1;   /* depois das caixas */
+    }
+
+    /*
+      O poço encolhe em telas baixas, para caber junto com as caixas e os
+      botões de toque sem rolar a página. 100svh é a altura da tela com
+      as barras do navegador à mostra; os ~390px são o que o resto ocupa.
+
+      Aqui a escala deixa de ser inteira — um compromisso consciente: num
+      celular, ver o poço inteiro vale mais que o pixel perfeito.
+    */
+    #jogo {
+        width: clamp(160px, calc((100svh - 390px) / 2), var(--largura-da-tela));
+    }
+
+    .caixa {
+        padding: 4px 6px;
+    }
+
+    .caixa h2 {
+        margin-bottom: 2px;
+        font-size: 9px;
+    }
+
+    .valor {
+        font-size: 16px;
+    }
+
+    .miniatura {
+        width: calc(40 * 2px);
+        height: calc(24 * 2px);
+    }
+}

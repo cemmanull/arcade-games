@@ -1,0 +1,41 @@
+<!--
+  TETRIS — PASSO 6: AS LINHAS
+
+  Linhas completas somem e valem pontos. O HTML ganha um placar — e,
+  como no Pong, ele é TEXTO, não desenho: fica fora do canvas.
+
+  Ainda não há fim de jogo: quando o poço enche, ele se esvazia e o
+  placar volta a zero.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Tetris</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Linhas <span id="linhas">0</span></p>
+    </div>
+
+    <canvas id="jogo" width="80" height="160">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>← → mover</span>
+        <span>↑ / X girar</span>
+        <span>Z girar ao contrário</span>
+        <span>↓ descer</span>
+        <span>Espaço derrubar</span>
+    </p>
+</body>
+</html>

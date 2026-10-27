@@ -1,0 +1,72 @@
+/*
+  XENOMORPH — PASSO 1: estilo
+
+  A receita de sempre: baixa resolução ampliada por um número inteiro e
+  bordas duras. Desta vez a tela é DEITADA (16:9), como num jogo de
+  plataforma — e precisa caber tanto na largura quanto na altura da janela.
+*/
+
+:root {
+    --cor-fundo: #05070d;
+    --cor-neon: #3cf2ff;       /* ciano: o visor do soldado, a tecnologia humana */
+    --cor-perigo: #ff5a3c;     /* laranja-vermelho: o que é alienígena e hostil */
+    --cor-texto: #e2e8f5;
+    --cor-apagada: #56627a;
+
+    /* O canvas tem 256x144 pixels de desenho; 3x = 768x432 na tela. */
+    --pixel: 3px;
+    --largura-da-tela: 768px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 10px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(60, 242, 255, 0.35);
+}
+
+#subtitulo {
+    margin: -8px 0 0;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--cor-perigo);
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+
+    /*
+      O menor de três: o tamanho ideal (3x), a largura da janela, e a
+      altura disponível convertida em largura (x 16/9, a proporção 256:144).
+    */
+    width: min(var(--largura-da-tela), 94vw, calc((100vh - 140px) * 16 / 9));
+    height: auto;
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(60, 242, 255, 0.25);
+}

@@ -1,0 +1,35 @@
+<!--
+  PAC-MAN — PASSO 3: AS PASTILHAS
+
+  O Pac-Man come o que encontra pelo caminho: 10 pontos por pastilha, 50
+  por energizante. Coma tudo e o labirinto pisca, se refaz, e você
+  recomeça.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man — passo 3</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pac-Man</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Faltam <span id="restantes">0</span></p>
+    </div>
+
+    <canvas id="jogo" width="224" height="240">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: escolher a direção</span>
+    </p>
+</body>
+</html>

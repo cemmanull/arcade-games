@@ -1,0 +1,115 @@
+<!--
+  TETRIS
+
+  Se você vem do Pong, repare na volta à grade: aqui ninguém está em
+  x = 73,42. A peça está numa linha ou na outra, e o poço inteiro é uma
+  matriz. Do Pong ficaram o loop, o delta time, a máquina de estados e
+  o som; da cobrinha, a grade.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Tetris</h1>
+
+    <div id="jogo-container">
+
+        <aside id="painel-esquerdo" class="painel">
+            <section class="caixa">
+                <h2>Guardada</h2>
+                <canvas id="guardada" class="miniatura" width="40" height="24"></canvas>
+            </section>
+
+            <section class="caixa">
+                <h2>Recorde</h2>
+                <p id="recorde" class="valor">0</p>
+            </section>
+        </aside>
+
+        <div id="tela">
+            <!-- position: relative — o ponto de referência da camada de mensagem. -->
+
+            <canvas id="jogo" width="80" height="160">
+                Seu navegador não suporta canvas.
+                <!--
+                  80x160: 10 colunas e 20 linhas de 8 pixels. O CSS amplia
+                  3 vezes, com image-rendering: pixelated.
+                -->
+            </canvas>
+
+            <!--
+              aria-live="polite": quando o texto daqui muda ("Pausado",
+              "Fim de jogo"), um leitor de tela anuncia sozinho, sem
+              interromper o que estiver lendo.
+            -->
+            <div id="camada-mensagem" aria-live="polite">
+                <p id="mensagem-titulo">Tetris</p>
+                <p id="mensagem-texto">Complete linhas para limpá-las.</p>
+            </div>
+        </div>
+
+        <aside id="painel-direito" class="painel">
+            <section class="caixa">
+                <h2>Próxima</h2>
+                <canvas id="proxima" class="miniatura" width="40" height="24"></canvas>
+            </section>
+
+            <section class="caixa">
+                <h2>Pontos</h2>
+                <p id="pontos" class="valor">0</p>
+            </section>
+
+            <section class="caixa">
+                <h2>Linhas</h2>
+                <p id="linhas" class="valor">0</p>
+            </section>
+
+            <section class="caixa">
+                <h2>Nível</h2>
+                <p id="nivel" class="valor">1</p>
+            </section>
+        </aside>
+
+    </div>
+
+    <!--
+      Controles de toque. Só aparecem em telas sem mouse (ver o CSS).
+      Cada botão diz QUAL COMANDO ele é, com um atributo data-*; o script
+      lê esse atributo e chama as mesmas funções que o teclado chama.
+      Nenhuma lógica nova para o toque: só uma porta de entrada a mais.
+    -->
+    <div id="toque">
+        <button type="button" data-comando="girarAoContrario" aria-label="Girar ao contrário">↺</button>
+        <button type="button" data-comando="girar" aria-label="Girar">↻</button>
+        <button type="button" data-comando="guardar" aria-label="Guardar peça">⇄</button>
+        <button type="button" data-comando="pausar" aria-label="Pausar">❚❚</button>
+        <button type="button" data-comando="esquerda" aria-label="Mover para a esquerda">←</button>
+        <button type="button" data-comando="baixo" aria-label="Descer">↓</button>
+        <button type="button" data-comando="direita" aria-label="Mover para a direita">→</button>
+        <button type="button" data-comando="derrubar" aria-label="Derrubar">⤓</button>
+    </div>
+
+    <div id="controles">
+        <button id="botao-iniciar" type="button">Iniciar</button>
+        <button id="botao-som" type="button" aria-pressed="true">Som: ligado</button>
+    </div>
+
+    <p id="ajuda">
+        <span>← → mover</span>
+        <span>↑ / X girar</span>
+        <span>Z girar ao contrário</span>
+        <span>↓ descer</span>
+        <span>Espaço derrubar</span>
+        <span>C guardar</span>
+        <span>P pausar</span>
+    </p>
+</body>
+</html>

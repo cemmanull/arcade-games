@@ -1,0 +1,39 @@
+<!--
+  PAC-MAN — PASSO 6: OS MODOS
+
+  Os fantasmas alternam entre DISPERSAR (cada um vai para o seu canto)
+  e PERSEGUIR, seguindo uma tabela de horários. Coma um energizante e
+  eles ficam azuis e fogem — coma-os, e os olhos voltam correndo para
+  casa pelo caminho mais curto.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pac-Man</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Faltam <span id="restantes">0</span></p>
+        <p>Capturas <span id="capturas">0</span></p>
+        <p>Modo <span id="modo">-</span></p>
+    </div>
+
+    <canvas id="jogo" width="224" height="240">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: escolher a direção</span>
+        <span>H: mostrar os alvos</span>
+    </p>
+</body>
+</html>

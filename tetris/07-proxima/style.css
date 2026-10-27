@@ -1,0 +1,191 @@
+/*
+  TETRIS — PASSO 7: estilo
+
+  O poço e um painel lado a lado, com flexbox. Em telas estreitas, o
+  painel desce para baixo do poço sozinho (flex-wrap).
+*/
+
+:root {
+    --cor-fundo: #06070d;
+    --cor-neon: #00f0ff;
+    --cor-destaque: #ff2fd0;
+    --cor-texto: #d8f6ff;
+    --cor-apagada: #5c7a85;
+
+    /* O canvas tem 80x160 pixels de desenho; 3x = 240x480 na tela. */
+    --pixel: 3px;
+    --largura-da-tela: 240px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 12px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(0, 240, 255, 0.4);
+}
+
+#jogo-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+#tela {
+    position: relative;
+    line-height: 0;   /* remove o espacinho de texto embaixo do canvas */
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+#jogo {
+    width: var(--largura-da-tela);
+    height: auto;
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+}
+
+/*
+  A caixa da próxima peça usa a MESMA escala do poço: 40 pixels de
+  desenho x 3 = 120. Escalas diferentes lado a lado ficam visivelmente
+  erradas, mesmo para quem não sabe dizer por quê.
+*/
+#proxima {
+    width: calc(40 * var(--pixel));
+    height: calc(24 * var(--pixel));
+}
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    background: rgba(6, 7, 13, 0.85);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+/* A pegadinha do Pong: display:flex venceria o hidden sem esta regra. */
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 24px;
+    letter-spacing: 4px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    font-size: 12px;
+}
+
+#painel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 140px;
+}
+
+.caixa {
+    padding: 8px 10px;
+    border: 2px solid #1d2a3d;
+}
+
+.caixa h2 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--cor-apagada);
+}
+
+.valor {
+    margin: 0;
+    font-size: 22px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 47, 208, 0.6);
+}
+
+#controles {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+button {
+    padding: 12px 22px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-shadow: 0 0 8px var(--cor-neon);
+    transition: background 0.15s, color 0.15s;
+}
+
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+    text-shadow: none;
+}
+
+button:active {
+    transform: translateY(2px);
+}
+
+/* Nunca remova o foco sem colocar outro indicador no lugar. */
+button:focus-visible {
+    outline: 3px solid var(--cor-destaque);
+    outline-offset: 3px;
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 24px;
+    max-width: 480px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--cor-apagada);
+}

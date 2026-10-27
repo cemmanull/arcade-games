@@ -1,0 +1,296 @@
+/*
+  SHOOT 'EM UP — estilo
+
+  Baixa resolução ampliada, bordas duras, e uma tela em pé que precisa
+  caber na ALTURA da janela.
+*/
+
+:root {
+    --cor-fundo: #04050d;
+    --cor-neon: #ffcc33;
+    --cor-destaque: #ff3b6b;
+    --cor-texto: #e8ecff;
+    --cor-apagada: #5c6a85;
+
+    /* O canvas tem 120x160 pixels de desenho; 3x = 360x480 na tela. */
+    --pixel: 3px;
+    --largura-da-tela: 360px;
+
+    /*
+      Quanto da altura da janela o resto da página ocupa (título, placar,
+      barra, botões). O canvas fica com o que sobra.
+    */
+    --espaco-fora-da-tela: 230px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 12px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: 8px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(255, 204, 51, 0.4);
+}
+
+
+/* ============================================================
+   PLACAR E BARRA DO CHEFE
+   ============================================================ */
+
+#placar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 24px;
+}
+
+#placar p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--cor-apagada);
+}
+
+#placar span {
+    display: block;
+    font-size: 20px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 14px rgba(255, 204, 51, 0.6);
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+  visibility, e não hidden: escondida, a barra continua ocupando o lugar,
+  e o canvas não pula quando o chefe aparece.
+*/
+#barra-do-chefe {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(var(--largura-da-tela), 92vw);
+    font-size: 11px;
+    color: var(--cor-destaque);
+}
+
+#barra-do-chefe.escondida {
+    visibility: hidden;
+}
+
+#vida-do-chefe {
+    flex: 1;
+    height: 8px;
+    appearance: none;
+    border: 1px solid var(--cor-destaque);
+    background: transparent;
+}
+
+#vida-do-chefe::-webkit-progress-bar {
+    background: transparent;
+}
+
+#vida-do-chefe::-webkit-progress-value {
+    background: var(--cor-destaque);
+}
+
+#vida-do-chefe::-moz-progress-bar {
+    background: var(--cor-destaque);
+}
+
+
+/* ============================================================
+   A TELA
+   ============================================================ */
+
+#tela {
+    position: relative;
+    line-height: 0;
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+
+    width: min(var(--largura-da-tela), 92vw, calc((100vh - var(--espaco-fora-da-tela)) * 3 / 4));
+    height: auto;
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(255, 204, 51, 0.3);
+
+    /*
+      O dedo arrastando sobre o canvas move a NAVE, não a página: sem
+      rolagem, sem zoom, sem o menu de "salvar imagem" do toque longo.
+    */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+
+    background: rgba(4, 5, 13, 0.85);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--cor-destaque);
+    text-shadow: 0 0 14px rgba(255, 59, 107, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    font-size: 12px;
+}
+
+#aviso {
+    position: absolute;
+    top: 18%;
+    left: 0;
+    right: 0;
+    margin: 0;
+    text-align: center;
+    line-height: 1.3;
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px rgba(255, 204, 51, 0.8);
+    pointer-events: none;
+}
+
+
+/* ============================================================
+   BOTÕES
+   ============================================================ */
+
+#controles,
+#toque {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+button {
+    padding: 10px 20px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-shadow: 0 0 8px var(--cor-neon);
+    transition: background 0.15s, color 0.15s;
+}
+
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+    text-shadow: none;
+}
+
+button:active {
+    transform: translateY(2px);
+}
+
+button:focus-visible {
+    outline: 3px solid var(--cor-destaque);
+    outline-offset: 3px;
+}
+
+/* O botão também usa hidden (some na pausa). */
+button[hidden] {
+    display: none;
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 20px;
+    max-width: 520px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--cor-apagada);
+}
+
+
+/* ============================================================
+   TOQUE
+   ============================================================ */
+
+#toque {
+    display: none;
+}
+
+/*
+  Só onde o ponteiro principal é um dedo: aparecem a bomba e a pausa, e
+  a lista de teclas — inútil sem teclado — some.
+*/
+@media (hover: none) and (pointer: coarse) {
+    #toque {
+        display: flex;
+    }
+
+    #toque button {
+        min-width: 120px;
+        padding: 14px 20px;
+        touch-action: manipulation;
+    }
+
+    #ajuda {
+        display: none;
+    }
+
+    :root {
+        --espaco-fora-da-tela: 260px;
+    }
+}
+
+@media (max-width: 420px) {
+    h1 {
+        font-size: 18px;
+        letter-spacing: 5px;
+    }
+
+    #placar span {
+        font-size: 16px;
+    }
+}

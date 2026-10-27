@@ -1,0 +1,38 @@
+<!--
+  PAC-MAN — PASSO 5: AS PERSONALIDADES
+
+  Quatro fantasmas, a MESMA regra de cruzamento, e um alvo diferente
+  para cada um. O vermelho vai atrás de você; a rosa tenta te cortar
+  pela frente; o ciano trabalha em dupla com o vermelho; o laranja
+  perde a coragem quando chega perto. Aperte H.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man — passo 5</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Pac-Man</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Faltam <span id="restantes">0</span></p>
+        <p>Capturas <span id="capturas">0</span></p>
+    </div>
+
+    <canvas id="jogo" width="224" height="240">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: escolher a direção</span>
+        <span>H: mostrar os alvos</span>
+    </p>
+</body>
+</html>

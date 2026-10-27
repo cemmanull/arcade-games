@@ -1,0 +1,256 @@
+/*
+  XENOMORPH — PASSO 5: estilo
+
+  A receita de sempre: baixa resolução ampliada por um número inteiro e
+  bordas duras. Desta vez a tela é DEITADA (16:9), como num jogo de
+  plataforma — e precisa caber tanto na largura quanto na altura da janela.
+*/
+
+:root {
+    --cor-fundo: #05070d;
+    --cor-neon: #3cf2ff;       /* ciano: o visor do soldado, a tecnologia humana */
+    --cor-perigo: #ff5a3c;     /* laranja-vermelho: o que é alienígena e hostil */
+    --cor-texto: #e2e8f5;
+    --cor-apagada: #56627a;
+
+    /* O canvas tem 256x144 pixels de desenho; 3x = 768x432 na tela. */
+    --pixel: 3px;
+    --largura-da-tela: 768px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 10px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(60, 242, 255, 0.35);
+}
+
+#subtitulo {
+    margin: -8px 0 0;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--cor-perigo);
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+
+    /*
+      O menor de três: o tamanho ideal (3x), a largura da janela, e a
+      altura disponível convertida em largura (x 16/9, a proporção 256:144).
+    */
+    width: min(var(--largura-da-tela), 94vw, calc((100vh - 210px) * 16 / 9));
+    height: auto;
+
+    border: var(--pixel) solid var(--cor-neon);
+    box-shadow: 0 0 20px rgba(60, 242, 255, 0.25);
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 20px;
+    max-width: 640px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--cor-apagada);
+}
+
+/*
+  O PAINEL: as duas armas lado a lado, a ativa acesa. A barra de recarga
+  ocupa sempre o seu lugar (visibility, não hidden): o canvas não pula
+  quando ela aparece — a lição da barra do chefe no Shoot 'em up.
+*/
+#painel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 24px;
+    font-size: 12px;
+}
+
+#armas {
+    display: flex;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+#armas li {
+    color: var(--cor-apagada);
+}
+
+#armas li[aria-current="true"] {
+    color: var(--cor-neon);
+    text-shadow: 0 0 10px rgba(60, 242, 255, 0.6);
+}
+
+#armas li[aria-current="true"]::before {
+    content: "▶ ";
+}
+
+.municao {
+    font-variant-numeric: tabular-nums;
+}
+
+#rotulo-da-recarga,
+#recarga {
+    visibility: hidden;
+}
+
+#painel.recarregando #rotulo-da-recarga,
+#painel.recarregando #recarga {
+    visibility: visible;
+}
+
+#rotulo-da-recarga {
+    font-size: 10px;
+    color: var(--cor-perigo);
+}
+
+#recarga {
+    width: 90px;
+    height: 6px;
+    appearance: none;
+    border: 1px solid var(--cor-perigo);
+    background: transparent;
+}
+
+#recarga::-webkit-progress-bar {
+    background: transparent;
+}
+
+#recarga::-webkit-progress-value {
+    background: var(--cor-perigo);
+}
+
+#recarga::-moz-progress-bar {
+    background: var(--cor-perigo);
+}
+
+/* A vida: verde enquanto há bastante, e o mesmo laranja do perigo quando falta. */
+#rotulo-da-vida {
+    font-size: 11px;
+    color: var(--cor-apagada);
+}
+
+#vida {
+    width: 110px;
+    height: 8px;
+    appearance: none;
+    border: 1px solid #4dff7a;
+    background: transparent;
+}
+
+#vida::-webkit-progress-bar {
+    background: transparent;
+}
+
+#vida::-webkit-progress-value {
+    background: #4dff7a;
+}
+
+#vida::-moz-progress-bar {
+    background: #4dff7a;
+}
+
+#vida.pouca {
+    border-color: var(--cor-perigo);
+}
+
+#vida.pouca::-webkit-progress-value {
+    background: var(--cor-perigo);
+}
+
+#vida.pouca::-moz-progress-bar {
+    background: var(--cor-perigo);
+}
+
+/* A tela é o chão da camada de mensagem, posta por cima do canvas. */
+#tela {
+    position: relative;
+    line-height: 0;
+}
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+
+    background: rgba(5, 7, 13, 0.82);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: 6px;
+    color: var(--cor-perigo);
+    text-shadow: 0 0 14px rgba(255, 90, 60, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    max-width: 420px;
+    font-size: 12px;
+}
+
+button {
+    padding: 10px 20px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+}
+
+button:focus-visible {
+    outline: 3px solid var(--cor-perigo);
+    outline-offset: 3px;
+}

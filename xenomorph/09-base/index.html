@@ -1,0 +1,108 @@
+<!--
+  XENOMORPH — PASSO 9: A BASE
+
+  O ciclo roguelike completo. O jogo abre na BASE DE OPERAÇÕES: amostras
+  guardadas, melhorias permanentes, registros, bestiário — e a semente da
+  próxima descida. Morrer devolve metade das amostras; extrair (segurando
+  ↑ ao lado da nave) ou cumprir a missão devolve todas. Tudo é salvo no
+  navegador.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xenomorph — passo 9</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="gerador.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Xenomorph</h1>
+    <p id="subtitulo">Protocolo de Extinção</p>
+
+    <div id="painel">
+        <label id="rotulo-da-vida" for="vida">Vida</label>
+        <progress id="vida" max="1" value="1"></progress>
+
+        <ul id="armas">
+            <li id="arma-0"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+            <li id="arma-1"><span class="nome-da-arma"></span> <span class="municao"></span></li>
+        </ul>
+        <label id="rotulo-da-recarga" for="recarga">Recarregando</label>
+        <progress id="recarga" max="1" value="0"></progress>
+    </div>
+
+    <div id="barra-do-chefe">
+        <label for="vida-do-chefe">A Matriarca</label>
+        <progress id="vida-do-chefe" max="1" value="1"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="256" height="144">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <p id="aviso" role="status" hidden></p>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-voltar" type="button">Voltar à base</button>
+        </div>
+
+        <!--
+          A BASE: uma tela de HTML por cima do hangar desenhado no canvas.
+          A lista de melhorias e o bestiário são montados pelo script, a
+          partir das tabelas — o HTML só guarda o lugar.
+        -->
+        <section id="base" hidden aria-labelledby="titulo-da-base">
+            <h2 id="titulo-da-base">Base de operações</h2>
+            <p class="saldo">Amostras guardadas <span id="saldo">0</span></p>
+
+            <!-- A ação principal primeiro: descer. O resto da base fica abaixo dela. -->
+            <form id="formulario-da-semente">
+                <label for="campo-semente">Semente</label>
+                <input id="campo-semente" name="semente" maxlength="24" autocomplete="off" spellcheck="false">
+                <button id="botao-sortear" type="button">Sortear</button>
+                <button id="botao-descer" type="submit">Descer ao planeta</button>
+            </form>
+
+            <h3>Melhorias permanentes</h3>
+            <ul id="melhorias"></ul>
+
+            <h3>Registros</h3>
+            <p id="registros"></p>
+
+            <h3>Bestiário</h3>
+            <ul id="bestiario"></ul>
+
+            <button id="botao-apagar" type="button">Apagar campanha</button>
+        </section>
+    </div>
+
+    <div id="expedicao">
+        <canvas id="minimapa" width="57" height="26" aria-label="Mapa das salas exploradas"></canvas>
+        <div>
+            <p>Setor <span id="setor"></span> · Semente <span id="semente-atual"></span></p>
+            <p>Objetivo <span id="objetivo"></span></p>
+            <p>Ecossistema <span id="ecossistema"></span> · Amostras <span id="amostras">0</span></p>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>← → ou A D: andar</span>
+        <span>↑ ↓: mirar</span>
+        <span>Espaço, Z ou K: pular</span>
+        <span>↓ + pular: descer pela grade</span>
+        <span>X ou J: atirar</span>
+        <span>Q: trocar de arma</span>
+        <span>R: recarregar</span>
+        <span>Shift, C ou L: esquivar</span>
+        <span>↑ (segurar) ao lado da nave: extrair</span>
+        <span>H: depuração</span>
+    </p>
+</body>
+</html>

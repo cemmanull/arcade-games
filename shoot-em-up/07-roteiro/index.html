@@ -1,0 +1,48 @@
+<!--
+  SHOOT 'EM UP — PASSO 7: O ROTEIRO
+
+  A fase deixa de ser sorteio: cada inimigo entra num instante e num
+  lugar escritos num roteiro. Formações, avisos de onda, e um fim —
+  sobreviva até o último inimigo.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoot 'em up — passo 7</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Shoot 'em up</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Vidas <span id="vidas">3</span></p>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="120" height="160">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-reiniciar" type="button">Jogar de novo</button>
+        </div>
+
+        <!-- role="status": um leitor de tela anuncia o aviso quando ele muda. -->
+        <p id="aviso" role="status" hidden></p>
+    </div>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: voar</span>
+        <span>Espaço (segure): atirar</span>
+        <span>H: mostrar colisões</span>
+    </p>
+</body>
+</html>

@@ -1,0 +1,172 @@
+/*
+  PAC-MAN — PASSO 8: estilo
+
+  Baixa resolução ampliada por um número inteiro, bordas duras — e um
+  labirinto quase quadrado, que precisa caber na altura da janela.
+*/
+
+:root {
+    --cor-fundo: #000000;
+    --cor-neon: #ffd84d;       /* o amarelo do Pac-Man */
+    --cor-labirinto: #3b5bff;  /* o azul das paredes */
+    --cor-texto: #e8ecff;
+    --cor-apagada: #5c6a85;
+
+    /* O canvas tem 224x240 pixels de desenho; 2x = 448x480 na tela. */
+    --pixel: 2px;
+    --largura-da-tela: 448px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 10px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px var(--cor-neon), 0 0 32px rgba(255, 216, 77, 0.4);
+}
+
+canvas {
+    display: block;
+    image-rendering: pixelated;
+
+    /*
+      O menor de três: o tamanho ideal (2x), a largura da janela, e a
+      altura disponível convertida em largura (x 224/240, a proporção).
+    */
+    width: min(var(--largura-da-tela), 92vw, calc((100vh - 140px) * 224 / 240));
+    height: auto;
+
+    border: var(--pixel) solid var(--cor-labirinto);
+    box-shadow: 0 0 20px rgba(59, 91, 255, 0.35);
+}
+
+#ajuda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 24px;
+    max-width: 480px;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--cor-apagada);
+}
+
+#placar {
+    display: flex;
+    gap: 32px;
+}
+
+#placar p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--cor-apagada);
+}
+
+#placar span {
+    display: block;
+    font-size: 22px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 12px rgba(255, 216, 77, 0.6);
+    font-variant-numeric: tabular-nums;
+}
+
+/* A camada de mensagem e o aviso, por cima do canvas. */
+#tela {
+    position: relative;
+    line-height: 0;
+}
+
+#camada-mensagem {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+
+    background: rgba(0, 0, 0, 0.8);
+    line-height: 1.3;
+    text-align: center;
+    padding: 16px;
+}
+
+#camada-mensagem[hidden] {
+    display: none;
+}
+
+#mensagem-titulo {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: 4px;
+    color: var(--cor-neon);
+    text-shadow: 0 0 14px rgba(255, 216, 77, 0.7);
+}
+
+#mensagem-texto {
+    margin: 0;
+    font-size: 13px;
+}
+
+/*
+  "Pronto!" aparece logo abaixo da casa dos fantasmas, como no original:
+  a linha 17 de 30 fica a 58% da altura.
+*/
+#aviso {
+    position: absolute;
+    top: 55%;
+    left: 0;
+    right: 0;
+    margin: 0;
+    text-align: center;
+    line-height: 1.3;
+    font-size: 18px;
+    letter-spacing: 4px;
+    color: var(--cor-neon);
+    pointer-events: none;
+}
+
+button {
+    padding: 12px 22px;
+    border: 2px solid var(--cor-neon);
+    background: transparent;
+    color: var(--cor-neon);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--cor-neon);
+    color: var(--cor-fundo);
+}
+
+button:focus-visible {
+    outline: 3px solid var(--cor-labirinto);
+    outline-offset: 3px;
+}

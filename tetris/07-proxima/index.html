@@ -1,0 +1,74 @@
+<!--
+  TETRIS — PASSO 7: A PRÓXIMA PEÇA
+
+  O HTML cresce: um painel ao lado do poço com a próxima peça e o placar,
+  uma camada de mensagem por cima do canvas e um botão para começar.
+
+  A camada de mensagem é a mesma técnica do Pong: ela JÁ EXISTE na
+  página, e mostrar ou esconder é só mexer no atributo hidden.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris — passo 7</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Tetris</h1>
+
+    <div id="jogo-container">
+
+        <div id="tela">
+            <!-- position: relative — o ponto de referência da camada de mensagem. -->
+
+            <canvas id="jogo" width="80" height="160">
+                Seu navegador não suporta canvas.
+            </canvas>
+
+            <div id="camada-mensagem">
+                <p id="mensagem-titulo">Tetris</p>
+                <p id="mensagem-texto">Complete linhas para limpá-las.</p>
+            </div>
+        </div>
+
+        <aside id="painel">
+            <section class="caixa">
+                <h2>Próxima</h2>
+                <!--
+                  Um segundo canvas: 40x24 cabe o I deitado (32 pixels) e
+                  qualquer outra peça com folga. Mesma escala do poço.
+                -->
+                <canvas id="proxima" width="40" height="24"></canvas>
+            </section>
+
+            <section class="caixa">
+                <h2>Pontos</h2>
+                <p id="pontos" class="valor">0</p>
+            </section>
+
+            <section class="caixa">
+                <h2>Linhas</h2>
+                <p id="linhas" class="valor">0</p>
+            </section>
+        </aside>
+
+    </div>
+
+    <div id="controles">
+        <button id="botao-iniciar" type="button">Iniciar</button>
+    </div>
+
+    <p id="ajuda">
+        <span>← → mover</span>
+        <span>↑ / X girar</span>
+        <span>Z girar ao contrário</span>
+        <span>↓ descer</span>
+        <span>Espaço derrubar</span>
+    </p>
+</body>
+</html>

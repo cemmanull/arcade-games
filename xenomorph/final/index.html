@@ -1,0 +1,182 @@
+<!--
+  XENOMORPH: PROTOCOLO DE EXTINÇÃO
+
+  Um metroidvania com elementos roguelike, construído a partir do
+  documento de design (../xenomorph_gdd.md). Um planeta gerado de uma
+  semente, uma habilidade que abre caminhos, criaturas com máquinas de
+  estado, um ecossistema que evolui, a Matriarca — e uma base onde a
+  campanha continua depois de cada morte.
+
+  Tudo o que é TEXTO (painéis, base, mensagens) é HTML, posto POR CIMA ou
+  em volta do canvas. Só o que é GRÁFICO vai para o canvas.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xenomorph: Protocolo de Extinção</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!--
+      OS SCRIPTS, NUMA ORDEM QUE IMPORTA (como no Dealer? Out!): cada um pode
+      usar, AO CARREGAR, só o que os anteriores declararam. `defer` mantém a
+      ordem e só roda depois de o HTML inteiro estar pronto.
+
+      1. dados/    — a CONFIGURAÇÃO: números, tabelas e desenhos. Dá para
+                     ajustar o jogo inteiro mexendo só aqui (GDD, seção 12:
+                     "configurações externas para definir atributos de
+                     armas, inimigos, salas, itens e habilidades").
+      2. scripts/  — os SISTEMAS, um assunto por arquivo.
+      3. principal.js por último: ele liga tudo.
+    -->
+    <script src="dados/mundo.js" defer></script>
+    <script src="dados/fisica.js" defer></script>
+    <script src="dados/aparencia.js" defer></script>
+    <script src="dados/armas.js" defer></script>
+    <script src="dados/criaturas.js" defer></script>
+    <script src="dados/progressao.js" defer></script>
+    <script src="dados/controles.js" defer></script>
+
+    <script src="scripts/sorte.js" defer></script>
+    <script src="scripts/gerador.js" defer></script>
+    <script src="scripts/estado.js" defer></script>
+    <script src="scripts/opcoes.js" defer></script>
+    <script src="scripts/som.js" defer></script>
+    <script src="scripts/entrada.js" defer></script>
+    <script src="scripts/fisica.js" defer></script>
+    <script src="scripts/armas.js" defer></script>
+    <script src="scripts/criaturas.js" defer></script>
+    <script src="scripts/matriarca.js" defer></script>
+    <script src="scripts/combate.js" defer></script>
+    <script src="scripts/ecossistema.js" defer></script>
+    <script src="scripts/mundo.js" defer></script>
+    <script src="scripts/campanha.js" defer></script>
+    <script src="scripts/base.js" defer></script>
+    <script src="scripts/desenho.js" defer></script>
+    <script src="scripts/depuracao.js" defer></script>
+    <script src="scripts/interface.js" defer></script>
+    <script src="scripts/principal.js" defer></script>
+</head>
+
+<body>
+    <h1>Xenomorph</h1>
+    <p id="subtitulo">Protocolo de Extinção</p>
+
+    <div id="painel">
+        <label id="rotulo-da-vida" for="vida">Vida</label>
+        <progress id="vida" max="1" value="1"></progress>
+
+        <ul id="armas">
+            <li id="arma-0"><span class="nome-da-arma"></span><span class="modificacao"></span> <span class="municao"></span></li>
+            <li id="arma-1"><span class="nome-da-arma"></span><span class="modificacao"></span> <span class="municao"></span></li>
+        </ul>
+        <label id="rotulo-da-recarga" for="recarga">Recarregando</label>
+        <progress id="recarga" max="1" value="0"></progress>
+    </div>
+
+    <div id="barra-do-chefe">
+        <label for="vida-do-chefe">A Matriarca</label>
+        <progress id="vida-do-chefe" max="1" value="1"></progress>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="256" height="144">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <p id="aviso" role="status" hidden></p>
+
+        <!-- A mesma camada serve ao fim e à pausa: cada um mostra o seu botão. -->
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo"></p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-voltar" type="button">Voltar à base</button>
+            <button id="botao-continuar" type="button" hidden>Continuar</button>
+        </div>
+
+        <!--
+          A BASE: uma tela de HTML por cima do hangar desenhado no canvas.
+          As listas são montadas pelo script, a partir das tabelas de dados/ —
+          o HTML só guarda o lugar.
+        -->
+        <section id="base" hidden aria-labelledby="titulo-da-base">
+            <h2 id="titulo-da-base">Base de operações</h2>
+            <p class="saldo">Amostras guardadas <span id="saldo">0</span></p>
+
+            <form id="formulario-da-semente">
+                <label for="campo-semente">Semente</label>
+                <input id="campo-semente" name="semente" maxlength="24" autocomplete="off" spellcheck="false">
+                <button id="botao-sortear" type="button">Sortear</button>
+                <button id="botao-descer" type="submit">Descer ao planeta</button>
+            </form>
+
+            <h3>Arsenal — leve duas</h3>
+            <ul id="arsenal" class="lista-com-botoes"></ul>
+
+            <h3>Melhorias permanentes</h3>
+            <ul id="melhorias" class="lista-com-botoes"></ul>
+
+            <h3>Registros</h3>
+            <p id="registros"></p>
+
+            <h3>Bestiário</h3>
+            <ul id="bestiario"></ul>
+
+            <h3>Registros da colônia</h3>
+            <ul id="registros-da-colonia"></ul>
+
+            <h3>Opções</h3>
+            <ul id="preferencias"></ul>
+            <ul id="teclas"></ul>
+            <button id="botao-restaurar-teclas" type="button">Restaurar teclas</button>
+
+            <button id="botao-apagar" type="button">Apagar campanha</button>
+        </section>
+    </div>
+
+    <!--
+      OS CONTROLES DE TOQUE: só aparecem onde não há teclado (o CSS decide).
+      Cada botão diz a sua ação em data-acao — a mesma da tabela CONTROLES.
+    -->
+    <div id="toque">
+        <div class="direcional">
+            <button type="button" data-acao="cima" aria-label="Cima">▲</button>
+            <button type="button" data-acao="esquerda" aria-label="Esquerda">◀</button>
+            <button type="button" data-acao="baixo" aria-label="Baixo">▼</button>
+            <button type="button" data-acao="direita" aria-label="Direita">▶</button>
+        </div>
+        <div class="acoes">
+            <button type="button" data-acao="trocar">Troca</button>
+            <button type="button" data-acao="esquivar">Esquiva</button>
+            <button type="button" data-acao="atirar">Tiro</button>
+            <button type="button" data-acao="pular">Pulo</button>
+            <button id="toque-pausa" type="button">Pausa</button>
+        </div>
+    </div>
+
+    <div id="expedicao">
+        <canvas id="minimapa" width="57" height="26" aria-label="Mapa das salas exploradas"></canvas>
+        <div>
+            <p>Setor <span id="setor"></span> · Semente <span id="semente-atual"></span></p>
+            <p>Objetivo <span id="objetivo"></span></p>
+            <p>Ecossistema <span id="ecossistema"></span> · Amostras <span id="amostras">0</span></p>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>← → ou A D: andar</span>
+        <span>↑ ↓: mirar</span>
+        <span>Espaço, Z ou K: pular</span>
+        <span>↓ + pular: descer pela grade</span>
+        <span>X ou J: atirar</span>
+        <span>Q: trocar de arma</span>
+        <span>R: recarregar</span>
+        <span>Shift, C ou L: esquivar</span>
+        <span>↑: usar (estação, terminal) · segurar ao lado da nave: extrair</span>
+        <span>P ou Esc: pausa</span>
+        <span>H: depuração</span>
+    </p>
+</body>
+</html>

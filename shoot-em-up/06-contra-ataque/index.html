@@ -1,0 +1,45 @@
+<!--
+  SHOOT 'EM UP — PASSO 6: O CONTRA-ATAQUE
+
+  Os inimigos atiram: uns miram em você, outros espalham leques e anéis
+  de balas. Três vidas. Ao ser atingido, a nave pisca e fica invencível
+  por dois segundos.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoot 'em up — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Shoot 'em up</h1>
+
+    <div id="placar">
+        <p>Pontos <span id="pontos">0</span></p>
+        <p>Vidas <span id="vidas">3</span></p>
+    </div>
+
+    <div id="tela">
+        <canvas id="jogo" width="120" height="160">
+            Seu navegador não suporta canvas.
+        </canvas>
+
+        <div id="camada-mensagem" hidden>
+            <p id="mensagem-titulo">Fim de jogo</p>
+            <p id="mensagem-texto"></p>
+            <button id="botao-reiniciar" type="button">Jogar de novo</button>
+        </div>
+    </div>
+
+    <p id="ajuda">
+        <span>Setas ou WASD: voar</span>
+        <span>Espaço (segure): atirar</span>
+        <span>H: mostrar colisões</span>
+    </p>
+</body>
+</html>
