@@ -1,0 +1,88 @@
+/* REFLEXO — PASSO 8: estilo. Botões de toque com 56 px de altura (o mínimo é 48). */
+
+:root {
+    --cor-fundo: #08080e;      /* o azul-noite do observatório */
+    --cor-feixe: #bbffff;
+    --cor-texto: #e8ecff;
+    --cor-apagada: #7f8aa8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 16px;
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: var(--cor-feixe);
+}
+
+canvas { display: block; width: min(384px, 100%); height: auto; border: 2px solid var(--cor-apagada); }
+
+[hidden] { display: none; }   /* sem isto, o display: block do canvas vence o atributo */
+#palco { display: grid; place-items: center; }
+
+/* A imagem em baixa resolução é ampliada sem suavizar; a largura (inteira) vem do script. */
+#visao { border: 0; image-rendering: pixelated; }
+
+p { margin: 0; font-size: 13px; text-align: center; color: var(--cor-apagada); }
+
+#leitura {
+    min-height: 8em;   /* reserva as 6 linhas do H: ligá-lo não empurra a página */
+    white-space: pre;
+    color: var(--cor-texto);
+}
+
+#controles { display: grid; grid-template-columns: repeat(3, 1fr) 1.3fr 1.5fr; gap: 8px; width: min(100%, 358px); }
+
+#controles button {
+    height: 56px;
+    font-size: 24px;
+    color: var(--cor-feixe);
+    background: #1c1c2c;
+    border: 2px solid var(--cor-apagada);
+    padding: 0;
+    touch-action: none;   /* o dedo não rola nem dá zoom: só aperta */
+    user-select: none;
+    -webkit-user-select: none;       /* iOS: pressão longa não seleciona... */
+    -webkit-touch-callout: none;     /* ...nem abre o menu de contexto */
+}
+
+/* Apertado (dedo, mouse ou a tecla equivalente): mais claro, borda do feixe e afundado. */
+#controles button:active, #controles button.segurado, #controles button[aria-pressed="true"] {
+    background: #3a3a5c;
+    border-color: var(--cor-feixe);
+    transform: translateY(2px);
+}
+
+/* Os comandos têm texto e ficam à direita: Espelho e Planta na quarta coluna, Reiniciar na quinta. */
+#controles button[data-comando] { font-size: 12px; }
+#controles button[data-comando="espelho"] { grid-column: 4; grid-row: 1; }
+#controles button[data-comando="planta"] { grid-column: 4; grid-row: 2; }
+#controles button[data-comando="reiniciar"] { grid-column: 5; grid-row: 1; }
+
+/* Foco visível para quem usa o teclado (Tab). */
+#controles button:focus-visible { outline: 3px solid var(--cor-feixe); outline-offset: 2px; }
+
+/* Só para leitor de tela: o aviso ("Porta aberta") não ocupa lugar na página. */
+.so-leitor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+    #controles button:active, #controles button.segurado, #controles button[aria-pressed="true"] { transform: none; }
+}
+
+/* Invulnerável depois de perder uma vida: um contorno parado ao redor da imagem. Nada pisca (GDD, seção 7). */
+#palco.invulneravel { outline: 3px solid var(--cor-feixe); outline-offset: -3px; }
