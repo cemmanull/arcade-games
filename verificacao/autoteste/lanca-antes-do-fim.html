@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>autoteste: lança antes de finalizar()</title></head>
+<body>
+<pre id="resultado"></pre>
+<script src="../apoio.js"></script>
+<script>
+conferir("ok", true);
+throw new Error("antes do fim");
+finalizar();
+</script>
+</body>
+</html>

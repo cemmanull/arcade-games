@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>autoteste: erro depois de finalizar()</title></head>
+<body>
+<pre id="resultado"></pre>
+<script src="../apoio.js"></script>
+<script>
+conferir("ok", true);
+finalizar();
+setTimeout(function () { throw new Error("estourou tarde"); }, 50);
+</script>
+</body>
+</html>
