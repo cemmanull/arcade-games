@@ -1,0 +1,37 @@
+<!--
+  PASSO 6: ILUMINAR
+
+  A ponte entre o three.js (um módulo ES) e os nossos scripts clássicos.
+  A ORDEM importa: import map, módulo inline, depois regras.js e SÓ ENTÃO o script.js.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proa Acesa — passo 6</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="regras.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Proa Acesa</h1>
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+</body>
+</html>

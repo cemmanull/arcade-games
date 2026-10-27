@@ -1,0 +1,116 @@
+/*
+  PASSO 6: estilo
+
+  O palco ocupa o que sobra da tela; o canvas do three.js enche o palco.
+*/
+
+:root {
+    --cor-fundo: #07111c;
+    --cor-texto: #dfe9f3;
+    --cor-perigo: #ff8a4d;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: system-ui, sans-serif;
+    font-size: 1rem;
+}
+
+h1 {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    font-size: 1.25rem;
+}
+
+/* min-height: 0 deixa o palco encolher; sem isso o canvas empurraria a página e ela rolaria. */
+#palco {
+    flex: 1;
+    min-height: 0;
+}
+
+/* touch-action: none — arrastar o dedo mira a lanterna em vez de rolar a página.
+   Sem seleção nem menu de segurar: o dedo parado não pode virar "copiar imagem" e cancelar o gesto. */
+#palco {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+#palco canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#placar {
+    margin: 0;
+    padding: 0 1rem 0.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Alvos de toque de 64 px (GDD §7), no canto inferior esquerdo. */
+#controles {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    pointer-events: none;   /* a faixa não rouba o ponteiro do palco; só os botões respondem */
+}
+
+#controles button {
+    pointer-events: auto;
+    width: 64px;
+    height: 64px;
+    border: 2px solid var(--cor-texto);
+    border-radius: 50%;
+    background: rgba(7, 17, 28, 0.7);
+    color: var(--cor-texto);
+    font-size: 1.5rem;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;   /* segurar o botão no iOS não abre o menu e não cancela o giro */
+    -webkit-tap-highlight-color: transparent;
+}
+
+#controles #botao-devagar {
+    width: 96px;
+    margin-left: auto;
+    border-radius: 2rem;
+    font-size: 1rem;
+}
+
+#controles button:focus-visible {
+    outline: 3px solid var(--cor-perigo);
+    outline-offset: 2px;
+}
+
+#aviso {
+    max-width: 32rem;
+    margin: 1rem;
+    padding: 1rem;
+    border: 2px solid var(--cor-perigo);
+    border-radius: 0.5rem;
+    line-height: 1.5;
+}
+
+#aviso[hidden] {
+    display: none;
+}
