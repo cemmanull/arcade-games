@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Faroleiro, passo 1: a cena</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        /* O palco do passo manda o tamanho do canvas; aqui ele tem um tamanho fixo e pequeno. */
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <!-- O relógio falso entra ANTES do jogo. -->
+    <script src="../apoio.js"></script>
+
+    <!-- Ponte do passo, igual ao index.html dele. -->
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../faroleiro/01-cena/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Faroleiro, passo 1: a cena</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo. -->
+    <main id="palco"></main>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        // O módulo da ponte e o script do passo rodam antes do evento load; as afirmações esperam por ele.
+        window.addEventListener("load", function () {
+
+            function mudarDensidadeDePixels(densidade) {
+                Object.defineProperty(window, "devicePixelRatio", { value: densidade, configurable: true });
+            }
+
+            function mudarPalcoEAvisarOResize(largura, altura) {
+                palco.style.width = largura + "px";
+                palco.style.height = altura + "px";
+                window.dispatchEvent(new Event("resize"));
+            }
+
+            testar("a cena sobe com internet", function () {
+                conferir("o three.js carregou", typeof THREE !== "undefined");
+                conferir("o renderizador existe", renderizador !== null);
+                conferir("a cena existe", cena !== null);
+                conferir("a câmera existe", camera !== null);
+                conferir("o canvas está dentro do palco", palco.contains(renderizador.domElement));
+                conferirIgual("o canvas é um <canvas>", renderizador.domElement.tagName, "CANVAS");
+                conferir("o aviso de erro continua escondido", aviso.hidden === true);
+                conferir("a caixa está pendurada na cena", caixa.parent === cena);
+            });
+
+            testar("o loop roda e gira a caixa", function () {
+                const giroInicial = caixa.rotation.y;
+                conferir("o jogo pediu o primeiro quadro", avancarQuadro(16) === true);
+                // giro = VELOCIDADE_DE_GIRO (0,9 rad/s) × 0,016 s
+                conferir("a caixa girou 0,9 × 0,016", Math.abs(caixa.rotation.y - giroInicial - 0.9 * 0.016) < 1e-9,
+                    "giro = " + (caixa.rotation.y - giroInicial));
+                conferir("o jogo pede o quadro seguinte", avancarQuadro(16) === true);
+            });
+
+            testar("teto de 0,05 s por quadro", function () {
+                const giroAntes = caixa.rotation.y;
+                avancarQuadro(10000);   // aba que volta do segundo plano
+                // com o teto, o giro é 0,9 × 0,05 = 0,045 rad, não 0,9 × 10 = 9 rad
+                conferir("um quadro gigante gira só 0,045 rad", Math.abs(caixa.rotation.y - giroAntes - 0.045) < 1e-9,
+                    "giro = " + (caixa.rotation.y - giroAntes));
+                conferir("o loop segue vivo depois do quadro gigante", avancarQuadro(16) === true);
+            });
+
+            testar("redimensionar mantém a proporção", function () {
+                mudarPalcoEAvisarOResize(400, 200);
+                conferir("400x200 dá aspecto 2", Math.abs(camera.aspect - 2) < 1e-9, "aspecto = " + camera.aspect);
+
+                mudarPalcoEAvisarOResize(300, 600);
+                conferir("300x600 dá aspecto 0,5", Math.abs(camera.aspect - 0.5) < 1e-9, "aspecto = " + camera.aspect);
+                conferir("a matriz de projeção acompanha o aspecto",
+                    Math.abs(camera.projectionMatrix.elements[5] / camera.projectionMatrix.elements[0] - 0.5) < 1e-9);
+
+                const tamanhoDoDesenho = renderizador.getSize(new THREE.Vector2());
+                conferirIgual("o desenho tem a largura do palco", tamanhoDoDesenho.x, 300);
+                conferirIgual("o desenho tem a altura do palco", tamanhoDoDesenho.y, 600);
+            });
+
+            testar("densidade de pixels limitada a 2", function () {
+                mudarPalcoEAvisarOResize(400, 200);
+
+                mudarDensidadeDePixels(3);
+                window.dispatchEvent(new Event("resize"));
+                conferirIgual("tela 3x usa no máximo 2", renderizador.getPixelRatio(), 2);
+                conferirIgual("o canvas tem 2x os pixels do palco", renderizador.domElement.width, 800);
+
+                mudarDensidadeDePixels(1.5);
+                window.dispatchEvent(new Event("resize"));
+                conferirIgual("tela 1,5x usa 1,5", renderizador.getPixelRatio(), 1.5);
+
+                mudarDensidadeDePixels(1);
+                window.dispatchEvent(new Event("resize"));
+                conferirIgual("tela 1x usa 1", renderizador.getPixelRatio(), 1);
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

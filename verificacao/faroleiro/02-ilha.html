@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Faroleiro, passo 2: a ilha</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../faroleiro/02-ilha/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Faroleiro, passo 2: a ilha</h1>
+    <pre id="resultado"></pre>
+
+    <main id="palco"></main>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const TOLERANCIA = 1e-6;
+
+            function proximo(obtido, esperado) {
+                return Math.abs(obtido - esperado) < TOLERANCIA;
+            }
+
+            function descreverVetor(x, y, z) {
+                return "(" + [x, y, z].map(function (numero) { return numero.toFixed(4); }).join(", ") + ")";
+            }
+
+            function conferirVetor(nome, obtido, esperadoX, esperadoY, esperadoZ) {
+                conferir(
+                    nome,
+                    proximo(obtido.x, esperadoX) && proximo(obtido.y, esperadoY) && proximo(obtido.z, esperadoZ),
+                    "esperado " + descreverVetor(esperadoX, esperadoY, esperadoZ) +
+                    ", obtido " + descreverVetor(obtido.x, obtido.y, obtido.z)
+                );
+            }
+
+            function posicaoNoMundo(objeto) {
+                return objeto.getWorldPosition(new THREE.Vector3());
+            }
+
+            function apertarTecla(tecla) {
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: tecla }));
+            }
+
+            function acharFilhoDoFeixe(tipo) {
+                return feixe.children.find(function (filho) { return filho[tipo] === true; });
+            }
+
+            testar("hierarquia cena → barca → lanterna → feixe", function () {
+                conferir("o three.js carregou e o renderizador existe", typeof THREE !== "undefined" && renderizador !== null);
+                conferir("a barca é filha da cena", barca.parent === cena);
+                conferir("a lanterna é filha da barca", lanterna.parent === barca);
+                conferir("o feixe é filho da lanterna", feixe.parent === lanterna);
+                conferirIgual("a lanterna nasce na proa (local)", lanterna.position.toArray().join(","), "0,1,-1.4");
+                conferirIgual("o feixe nasce 20 cm à frente da lanterna (local)", feixe.position.toArray().join(","), "0,0,-0.2");
+                conferir("o SpotLight mora no feixe", acharFilhoDoFeixe("isSpotLight") !== undefined);
+                conferir("o alvo do SpotLight mora no feixe", feixe.children.includes(acharFilhoDoFeixe("isSpotLight").target));
+            });
+
+            testar("a animação só gira a barca; lanterna e feixe vão atrás", function () {
+                // primeiro quadro: fase = 0,7 × 0,05 = 0,035 rad; giro = 0,7 × sen(0,035)
+                avancarQuadro(50);
+                const giroEsperado = 0.7 * Math.sin(0.7 * 0.05);
+                conferir("a barca girou 0,7·sen(fase)", proximo(barca.rotation.y, giroEsperado), "giro = " + barca.rotation.y);
+                conferirIgual("a lanterna não mudou o próprio giro", lanterna.rotation.y, 0);
+                conferirIgual("o feixe não mudou o próprio giro", feixe.rotation.y, 0);
+                conferirVetor("a lanterna acompanha o giro da barca no mundo", posicaoNoMundo(lanterna),
+                    -1.4 * Math.sin(giroEsperado), 1, -1.4 * Math.cos(giroEsperado));
+            });
+
+            testar("posição e direção no mundo (barca em (3, 0, 2), giro 0,7 rad)", function () {
+                // O relógio é falso: sem avancarQuadro(), nada mexe na barca depois deste ajuste.
+                const giro = 0.7;
+                barca.position.set(3, 0, 2);
+                barca.rotation.y = giro;
+
+                // Girar em y por θ leva o ponto local (x, y, z) para
+                //   x' = x·cos θ + z·sen θ      y' = y      z' = −x·sen θ + z·cos θ
+                // e depois soma a posição da barca.
+                // Lanterna, local (0, 1, −1.4):  x = 3 − 1,4·sen θ ≈ 2,10;  y = 1;  z = 2 − 1,4·cos θ ≈ 0,93
+                conferirVetor("a lanterna no mundo", posicaoNoMundo(lanterna),
+                    3 - 1.4 * Math.sin(giro), 1, 2 - 1.4 * Math.cos(giro));
+                conferir("a conta do GUIA: lanterna ≈ (2,10; 1; 0,93)",
+                    Math.abs(posicaoNoMundo(lanterna).x - 2.10) < 0.005 && Math.abs(posicaoNoMundo(lanterna).z - 0.93) < 0.005);
+
+                // Feixe, local à barca: (0, 1, −1,4) + (0, 0, −0,2) = (0, 1, −1,6):
+                //   x = 3 − 1,6·sen θ;  y = 1;  z = 2 − 1,6·cos θ
+                conferirVetor("o feixe no mundo", posicaoNoMundo(feixe),
+                    3 - 1.6 * Math.sin(giro), 1, 2 - 1.6 * Math.cos(giro));
+
+                // O feixe aponta para o −z local; girado por θ, vira (−sen θ, 0, −cos θ).
+                // getWorldDirection devolve o +z local no mundo, ou seja, o oposto.
+                const sentidoDeTras = feixe.getWorldDirection(new THREE.Vector3());
+                conferirVetor("o feixe aponta para (−sen θ, 0, −cos θ)", sentidoDeTras.clone().negate(),
+                    -Math.sin(giro), 0, -Math.cos(giro));
+
+                // O alvo do SpotLight fica 12 m à frente do feixe: feixe + 12·direção.
+                const luz = acharFilhoDoFeixe("isSpotLight");
+                const origemDaLuz = posicaoNoMundo(luz);
+                const alvoDaLuz = posicaoNoMundo(luz.target);
+                conferirVetor("o alvo da luz está 12 m à frente do feixe", alvoDaLuz,
+                    origemDaLuz.x - 12 * Math.sin(giro), 1, origemDaLuz.z - 12 * Math.cos(giro));
+            });
+
+            testar("outros giros: 0, π/2 e −π/2", function () {
+                barca.position.set(-1, 0, 4);
+
+                barca.rotation.y = 0;   // sem giro: a proa é −z
+                conferirVetor("giro 0: lanterna 1,4 m à frente (−z)", posicaoNoMundo(lanterna), -1, 1, 4 - 1.4);
+
+                barca.rotation.y = Math.PI / 2;   // girar +90° leva −z para −x
+                conferirVetor("giro +90°: lanterna 1,4 m para −x", posicaoNoMundo(lanterna), -1 - 1.4, 1, 4);
+
+                barca.rotation.y = -Math.PI / 2;  // girar −90° leva −z para +x
+                conferirVetor("giro −90°: lanterna 1,4 m para +x", posicaoNoMundo(lanterna), -1 + 1.4, 1, 4);
+
+                const sentidoDeTras = feixe.getWorldDirection(new THREE.Vector3());
+                conferirVetor("giro −90°: o feixe aponta para +x", sentidoDeTras.negate(), 1, 0, 0);
+            });
+
+            testar("a posição local não muda quando a barca gira", function () {
+                barca.rotation.y = 1.1;
+                conferirIgual("lanterna local intacta", lanterna.position.toArray().join(","), "0,1,-1.4");
+                conferirIgual("feixe local intacto", feixe.position.toArray().join(","), "0,0,-0.2");
+            });
+
+            testar("a tecla H liga e desliga os eixos", function () {
+                conferirIgual("há eixos da barca e da lanterna", eixos.length, 2);
+                conferir("um eixo é filho da barca e o outro da lanterna",
+                    eixos.some(function (eixo) { return eixo.parent === barca; }) &&
+                    eixos.some(function (eixo) { return eixo.parent === lanterna; }));
+                conferir("os eixos começam escondidos", eixos.every(function (eixo) { return eixo.visible === false; }));
+
+                apertarTecla("h");
+                conferir("H mostra os eixos", eixos.every(function (eixo) { return eixo.visible === true; }));
+
+                apertarTecla("h");
+                conferir("H de novo esconde os eixos", eixos.every(function (eixo) { return eixo.visible === false; }));
+
+                apertarTecla("H");
+                conferir("H maiúsculo também alterna", eixos.every(function (eixo) { return eixo.visible === true; }));
+
+                apertarTecla("j");
+                conferir("outra tecla não mexe nos eixos", eixos.every(function (eixo) { return eixo.visible === true; }));
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>
