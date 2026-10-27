@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 2: andar</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 2: andar</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids e os botões [data-acao]. -->
+    <canvas id="jogo" width="384" height="288"></canvas>
+    <p id="leitura"></p>
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda">girarEsquerda</button>
+        <button type="button" data-acao="frente">frente</button>
+        <button type="button" data-acao="girarDireita">girarDireita</button>
+        <button type="button" data-acao="esquerda">esquerda</button>
+        <button type="button" data-acao="tras">tras</button>
+        <button type="button" data-acao="direita">direita</button>
+    </div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- O teste confere regras, não pixels: um contexto 2D que ignora o desenho acelera o robô. -->
+    <script>
+        const contextoQueIgnoraODesenho = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        HTMLCanvasElement.prototype.getContext = function () { return contextoQueIgnoraODesenho; };
+    </script>
+    <script src="../../reflexo/02-andar/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const VOLTA_COMPLETA = 2 * Math.PI;
+        const PASSO_DE_UM_QUADRO = VELOCIDADE_DE_ANDAR * 0.05;     // 0,15 casa: quadro de 50 ms
+        const CASAS_SOLIDAS_ESPERADAS = "#%DER";                   // parede, pedra, porta fechada, emissor, receptor
+
+        const TECLA_DA_ACAO = {
+            frente: "w", tras: "s", esquerda: "a", direita: "d",
+            girarEsquerda: "ArrowLeft", girarDireita: "ArrowRight"
+        };
+        const TECLAS_DE_JOGO = ["w", "s", "a", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertar(tecla) {
+            const evento = new KeyboardEvent("keydown", { key: tecla, cancelable: true });
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltar(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function botaoDaAcao(acao) {
+            return document.querySelector('[data-acao="' + acao + '"]');
+        }
+
+        function dispararPonteiro(botao, tipo) {
+            botao.dispatchEvent(new PointerEvent(tipo, { bubbles: true }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        // Põe o jogador numa pose conhecida, sem ações ativas.
+        function reiniciar(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+        }
+
+        function pose() {
+            return { x: jogador.x, y: jogador.y, angulo: jogador.angulo };
+        }
+
+        function proximo(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        // Quanto o jogador andou em UM quadro de `milissegundos` com as ações atuais.
+        function deslocamentoDeUmQuadro(milissegundos) {
+            const antes = pose();
+            avancarQuadro(milissegundos);
+            return { x: jogador.x - antes.x, y: jogador.y - antes.y, giro: jogador.angulo - antes.angulo };
+        }
+
+        // Verdade independente do jogo: o texto do mapa, o raio e a lista de casas sólidas.
+        function casaESolidaNoTexto(coluna, linha) {
+            const simbolo = MAPA_EM_TEXTO[linha] && MAPA_EM_TEXTO[linha][coluna];
+            return simbolo === undefined || CASAS_SOLIDAS_ESPERADAS.includes(simbolo);
+        }
+
+        // Devolve null se o círculo do corpo está livre, ou o motivo se invade uma casa sólida.
+        function motivoDoCorpoInvalido(x, y) {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return "posição não é número (" + x + ", " + y + ")";
+            }
+            if (x < 0 || y < 0 || x > COLUNAS || y > LINHAS) {
+                return "fora do mapa em (" + x + ", " + y + ")";
+            }
+            for (let linha = Math.floor(y - RAIO_DO_CORPO) - 1; linha <= Math.floor(y + RAIO_DO_CORPO) + 1; linha++) {
+                for (let coluna = Math.floor(x - RAIO_DO_CORPO) - 1; coluna <= Math.floor(x + RAIO_DO_CORPO) + 1; coluna++) {
+                    if (!casaESolidaNoTexto(coluna, linha)) {
+                        continue;
+                    }
+                    const pertoX = Math.min(Math.max(x, coluna), coluna + 1);
+                    const pertoY = Math.min(Math.max(y, linha), linha + 1);
+                    const distancia = Math.hypot(x - pertoX, y - pertoY);
+                    if (distancia < RAIO_DO_CORPO - TOLERANCIA) {
+                        return "círculo em (" + x.toFixed(4) + ", " + y.toFixed(4) + ") invade a casa sólida (" + coluna + ", " + linha + ") a " + distancia.toFixed(4);
+                    }
+                }
+            }
+            return null;
+        }
+
+        function motivoDoEstadoInvalido() {
+            const campos = [jogador.x, jogador.y, jogador.angulo, jogador.dx, jogador.dy];
+            if (!campos.every(Number.isFinite)) {
+                return "NaN ou infinito no jogador: " + JSON.stringify(jogador);
+            }
+            if (jogador.angulo < 0 || jogador.angulo >= VOLTA_COMPLETA) {
+                return "ângulo fora de [0, 2π): " + jogador.angulo;
+            }
+            if (!proximo(Math.hypot(jogador.dx, jogador.dy), 1)) {
+                return "direção não é unitária: " + Math.hypot(jogador.dx, jogador.dy);
+            }
+            if (!proximo(jogador.dx, Math.cos(jogador.angulo)) || !proximo(jogador.dy, Math.sin(jogador.angulo))) {
+                return "direção incoerente com o ângulo " + jogador.angulo;
+            }
+            return motivoDoCorpoInvalido(jogador.x, jogador.y);
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial", function () {
+            conferirIgual("nenhuma ação ativa ao abrir", acoesAtivas.size, 0);
+            conferirIgual("x começa no meio da casa do J", jogador.x, 1.5);
+            conferirIgual("y começa no meio da casa do J", jogador.y, 1.5);
+            conferirIgual("o J virou chão", mapa[1][1], ".");
+            conferirIgual("COLUNAS deduzido", COLUNAS, 16);
+            conferirIgual("LINHAS deduzido", LINHAS, 12);
+            conferirIgual("o estado inicial é válido", motivoDoEstadoInvalido(), null);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+        });
+
+        testar("parado, nada se mexe", function () {
+            reiniciar(8.5, 2.5, 0.7);
+            const antes = pose();
+
+            avancarQuadros(100, 16);
+            conferirIgual("100 quadros sem ação não mexem na posição", jogador.x === antes.x && jogador.y === antes.y, true);
+            // girar(0) refaz o módulo 2π a cada quadro: sobra só ruído de ponto flutuante.
+            conferir("nem no ângulo", proximo(jogador.angulo, antes.angulo, 1e-12), "ângulo = " + jogador.angulo);
+        });
+
+        testar("ehSolida: parede, pedra, porta, emissor e receptor", function () {
+            conferirIgual("tijolo é sólido", ehSolida(0, 0), true);
+            conferirIgual("pedra é sólida", ehSolida(2, 2), true);
+            conferirIgual("porta fechada é sólida", ehSolida(5, 3), true);
+            conferirIgual("emissor é sólido", ehSolida(1, 5), true);
+            conferirIgual("receptor é sólido", ehSolida(14, 1), true);
+            conferirIgual("chão é livre", ehSolida(2, 1), false);
+            conferirIgual("o J virou chão", ehSolida(1, 1), false);
+            conferirIgual("espelho / é livre", ehSolida(8, 9), false);
+            conferirIgual("espelho \\ é livre", ehSolida(7, 2), false);
+            conferirIgual("a saída X é livre", ehSolida(9, 10), false);
+            conferirIgual("a fenda S é livre", ehSolida(8, 6), false);
+            conferirIgual("fora à esquerda é parede", ehSolida(-1, 3), true);
+            conferirIgual("fora acima é parede", ehSolida(3, -1), true);
+            conferirIgual("fora à direita é parede", ehSolida(COLUNAS, 3), true);
+            conferirIgual("fora abaixo é parede", ehSolida(3, LINHAS), true);
+        });
+
+        testar("corpoBateNaParede: o corpo é um círculo", function () {
+            conferirIgual("no meio de uma sala livre não bate", corpoBateNaParede(1.5, 1.5), false);
+            conferirIgual("colado a 0,24 da parede esquerda bate", corpoBateNaParede(1.24, 1.5), true);
+            conferirIgual("a 0,26 da parede esquerda não bate", corpoBateNaParede(1.26, 1.5), false);
+            conferirIgual("a 0,24 da parede de cima bate", corpoBateNaParede(1.5, 1.24), true);
+            conferirIgual("a 0,26 da parede de cima não bate", corpoBateNaParede(1.5, 1.26), false);
+            conferirIgual("a quina da casa (7,4) a 0,28 não bate (o quadrado tocaria, o círculo não)", corpoBateNaParede(6.8, 3.8), false);
+            conferirIgual("a quina da casa (7,4) a 0,21 bate", corpoBateNaParede(6.85, 3.85), true);
+            conferirIgual("dentro da pedra bate", corpoBateNaParede(2.5, 2.5), true);
+            conferirIgual("fora do mapa bate", corpoBateNaParede(-3, 3), true);
+            conferirIgual("a porta fechada bate", corpoBateNaParede(5.5, 3.5), true);
+        });
+
+        testar("velocidade: 3 casas por segundo, na direção em que olha", function () {
+            reiniciar(8.5, 2.5, 0);
+            apertar("w");
+            const direita = deslocamentoDeUmQuadro(50);
+            conferir("olhando para a direita, 50 ms andam 0,15 em x", proximo(direita.x, PASSO_DE_UM_QUADRO) && proximo(direita.y, 0),
+                "deslocamento (" + direita.x + ", " + direita.y + ")");
+
+            reiniciar(9.5, 2.5, Math.PI / 2);
+            apertar("w");
+            const baixo = deslocamentoDeUmQuadro(50);
+            conferir("olhando para baixo, 50 ms andam 0,15 em y", proximo(baixo.x, 0) && proximo(baixo.y, PASSO_DE_UM_QUADRO),
+                "deslocamento (" + baixo.x + ", " + baixo.y + ")");
+
+            reiniciar(8.5, 2.5, 0);
+            apertar("w");
+            const curto = deslocamentoDeUmQuadro(10);
+            conferir("10 ms andam 0,03", proximo(curto.x, VELOCIDADE_DE_ANDAR * 0.01), "andou " + curto.x);
+        });
+
+        testar("a frente segue o ângulo; trás, lado e diagonais também", function () {
+            const angulos = [0, 0.3, 1, 2.2, 3.5, 4.4, 5.9, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
+            let primeiroProblema = null;
+
+            angulos.forEach(function (angulo) {
+                const dx = Math.cos(angulo);
+                const dy = Math.sin(angulo);
+                // [teclas, vetor esperado de UM quadro de 50 ms]. Lado direito = direção girada 90° (-dy, dx).
+                const casos = [
+                    [["w"], dx, dy],
+                    [["s"], -dx, -dy],
+                    [["d"], -dy, dx],
+                    [["a"], dy, -dx],
+                    [["ArrowUp"], dx, dy],
+                    [["ArrowDown"], -dx, -dy],
+                    [["w", "d"], (dx - dy) / Math.SQRT2, (dy + dx) / Math.SQRT2],
+                    [["w", "a"], (dx + dy) / Math.SQRT2, (dy - dx) / Math.SQRT2],
+                    [["s", "d"], (-dx - dy) / Math.SQRT2, (-dy + dx) / Math.SQRT2],
+                    [["s", "a"], (-dx + dy) / Math.SQRT2, (-dy - dx) / Math.SQRT2],
+                    [["w", "s"], 0, 0],
+                    [["a", "d"], 0, 0],
+                    [["w", "s", "d"], -dy, dx]
+                ];
+                casos.forEach(function (caso) {
+                    reiniciar(8.5, 2.5, angulo);
+                    caso[0].forEach(apertar);
+                    const deslocamento = deslocamentoDeUmQuadro(50);
+                    const esperadoX = caso[1] * PASSO_DE_UM_QUADRO;
+                    const esperadoY = caso[2] * PASSO_DE_UM_QUADRO;
+                    if (primeiroProblema === null && (!proximo(deslocamento.x, esperadoX) || !proximo(deslocamento.y, esperadoY))) {
+                        primeiroProblema = caso[0].join("+") + " no ângulo " + angulo + ": esperado (" + esperadoX.toFixed(5) + ", " + esperadoY.toFixed(5)
+                            + "), obtido (" + deslocamento.x.toFixed(5) + ", " + deslocamento.y.toFixed(5) + ")";
+                    }
+                });
+            });
+            conferir("em " + angulos.length + " ângulos, 13 combinações de teclas andam como o esperado", primeiroProblema === null, primeiroProblema);
+        });
+
+        testar("a diagonal não é mais rápida que a reta", function () {
+            let maiorDiferenca = 0;
+            let alguemMenor = false;
+
+            [0, 0.4, 1.3, 2.9, 4.1, 5.5].forEach(function (angulo) {
+                reiniciar(8.5, 2.5, angulo);
+                apertar("w");
+                const reta = deslocamentoDeUmQuadro(50);
+                const comprimentoDaReta = Math.hypot(reta.x, reta.y);
+
+                [["w", "d"], ["w", "a"], ["s", "d"], ["s", "a"]].forEach(function (teclas) {
+                    reiniciar(8.5, 2.5, angulo);
+                    teclas.forEach(apertar);
+                    const diagonal = deslocamentoDeUmQuadro(50);
+                    maiorDiferenca = Math.max(maiorDiferenca, Math.abs(Math.hypot(diagonal.x, diagonal.y) - comprimentoDaReta));
+                });
+                alguemMenor = alguemMenor || comprimentoDaReta < PASSO_DE_UM_QUADRO - TOLERANCIA;
+            });
+            conferir("a diagonal anda exatamente o mesmo que a reta (diferença máx. " + maiorDiferenca + ")", maiorDiferenca < TOLERANCIA);
+            conferir("e a reta anda 0,15 por quadro de 50 ms", !alguemMenor);
+        });
+
+        testar("girar", function () {
+            reiniciar(8.5, 2.5, 1);
+            apertar("ArrowRight");
+            avancarQuadro(50);
+            conferir("→ por 50 ms gira +0,125 rad (2,5 rad/s)", proximo(jogador.angulo, 1.125), "ângulo = " + jogador.angulo);
+            conferir("a direção acompanha o ângulo", proximo(jogador.dx, Math.cos(1.125)) && proximo(jogador.dy, Math.sin(1.125)));
+            conferir("girar sozinho não anda", proximo(jogador.x, 8.5) && proximo(jogador.y, 2.5));
+
+            reiniciar(8.5, 2.5, 1);
+            apertar("ArrowLeft");
+            avancarQuadro(50);
+            conferir("← por 50 ms gira −0,125 rad", proximo(jogador.angulo, 0.875), "ângulo = " + jogador.angulo);
+
+            reiniciar(8.5, 2.5, 0.05);
+            apertar("ArrowLeft");
+            avancarQuadro(50);
+            conferir("girar à esquerda passando do 0 dá a volta e fica em [0, 2π)",
+                proximo(jogador.angulo, VOLTA_COMPLETA - 0.075) && jogador.angulo < VOLTA_COMPLETA, "ângulo = " + jogador.angulo);
+
+            reiniciar(8.5, 2.5, VOLTA_COMPLETA - 0.05);
+            apertar("ArrowRight");
+            avancarQuadro(50);
+            conferir("girar à direita passando de 2π dá a volta", proximo(jogador.angulo, 0.075), "ângulo = " + jogador.angulo);
+
+            reiniciar(8.5, 2.5, 1);
+            apertar("ArrowLeft");
+            apertar("ArrowRight");
+            avancarQuadro(50);
+            conferir("← e → juntos se anulam", proximo(jogador.angulo, 1));
+
+            reiniciar(8.5, 2.5, 1);
+            apertar("ArrowRight");
+            avancarQuadros(200, 50);
+            conferir("girando por 10 s o ângulo continua em [0, 2π)", jogador.angulo >= 0 && jogador.angulo < VOLTA_COMPLETA, "ângulo = " + jogador.angulo);
+        });
+
+        testar("colisão: parede de frente para o corpo", function () {
+            reiniciar(8.5, 3.7, Math.PI / 2);      // abaixo, a parede da casa (8,4) começa em y = 4
+            apertar("w");
+            avancarQuadros(40, 50);
+            conferir("andar de frente contra a parede para a ≥ 0,25 dela", jogador.y >= 3.7 - TOLERANCIA && jogador.y <= 3.75 + TOLERANCIA, "y = " + jogador.y);
+            conferirIgual("e o corpo continua livre", motivoDoCorpoInvalido(jogador.x, jogador.y), null);
+            conferir("x não mudou", proximo(jogador.x, 8.5));
+
+            reiniciar(8.5, 3.5, 0);                // à direita, até a parede da coluna 15
+            apertar("w");
+            avancarQuadros(100, 50);
+            conferir("contra a parede direita, x para em ≤ 14,75", jogador.x <= 14.75 + TOLERANCIA && jogador.x > 14.5, "x = " + jogador.x);
+
+            reiniciar(8.5, 3.5, 0);
+            apertar("w");
+            avancarQuadros(5, 50);
+            const xAntes = jogador.x;
+            conferir("andou livre antes de bater", xAntes > 8.5);
+        });
+
+        testar("colisão: um eixo por vez, deslizando", function () {
+            // Parede embaixo (y = 4), olhando 45° para baixo-direita: y trava, x continua.
+            reiniciar(8.5, 3.7, Math.PI / 4);
+            apertar("w");
+            const aoLongoDoChao = deslocamentoDeUmQuadro(50);
+            conferir("desliza em x pela parede de baixo", proximo(aoLongoDoChao.x, PASSO_DE_UM_QUADRO * Math.SQRT1_2), "dx = " + aoLongoDoChao.x);
+            conferir("y fica onde estava", proximo(aoLongoDoChao.y, 0), "dy = " + aoLongoDoChao.y);
+
+            // Parede à direita (x = 15), olhando 45° para cima-direita: x trava, y continua.
+            reiniciar(14.7, 3.5, -Math.PI / 4 + VOLTA_COMPLETA);
+            apertar("w");
+            const aoLongoDaParede = deslocamentoDeUmQuadro(50);
+            conferir("x fica onde estava", proximo(aoLongoDaParede.x, 0), "dx = " + aoLongoDaParede.x);
+            conferir("desliza em y pela parede da direita (para cima)", proximo(aoLongoDaParede.y, -PASSO_DE_UM_QUADRO * Math.SQRT1_2), "dy = " + aoLongoDaParede.y);
+
+            // Em marcha à ré, contra a mesma parede de baixo.
+            reiniciar(8.5, 3.7, 5 * Math.PI / 4);             // olha para cima-esquerda; s leva para baixo-direita
+            apertar("s");
+            const reDeslizando = deslocamentoDeUmQuadro(50);
+            conferir("de ré também desliza", proximo(reDeslizando.x, PASSO_DE_UM_QUADRO * Math.SQRT1_2) && proximo(reDeslizando.y, 0),
+                "deslocamento (" + reDeslizando.x + ", " + reDeslizando.y + ")");
+
+            // Passo lateral contra a parede.
+            reiniciar(8.5, 3.7, 0);
+            apertar("d");                                    // lado direito de quem olha para +x é +y: contra o chão
+            const lateralBatendo = deslocamentoDeUmQuadro(50);
+            conferir("passo lateral contra a parede não anda", proximo(lateralBatendo.x, 0) && proximo(lateralBatendo.y, 0));
+
+            // moverComColisao diretamente: x bate na parede da direita, y ainda anda.
+            reiniciar(14.7, 3.7, 0);
+            moverComColisao(0.1, 0.05);
+            conferir("moverComColisao: x trava e y anda", proximo(jogador.x, 14.7) && proximo(jogador.y, 3.75), "(" + jogador.x + ", " + jogador.y + ")");
+
+            // Os dois eixos batem: fica parado (canto interno em (1, 1), vindo de dentro da sala).
+            reiniciar(1.26, 1.26, 0);
+            moverComColisao(-0.05, -0.05);
+            conferir("moverComColisao: no canto os dois eixos travam", proximo(jogador.x, 1.26) && proximo(jogador.y, 1.26), "(" + jogador.x + ", " + jogador.y + ")");
+        });
+
+        testar("o corpo não atravessa a parede mesmo com passo grande", function () {
+            reiniciar(8.5, 3.5, Math.PI / 2);
+            apertar("w");
+            avancarQuadro(10000);                             // aba voltando do segundo plano
+            conferir("um quadro de 10 s anda só 0,15, não 30 casas", proximo(jogador.y, 3.5 + 0.15), "y = " + jogador.y);
+            conferirIgual("o corpo continua livre", motivoDoCorpoInvalido(jogador.x, jogador.y), null);
+
+            reiniciar(8.5, 2.5, 0);
+            apertar("w");
+            avancarQuadro(10000);
+            conferir("o teto de 0,05 s vale também de lado", proximo(jogador.x, 8.5 + 0.15), "x = " + jogador.x);
+
+            reiniciar(8.5, 2.5, 1);
+            apertar("ArrowRight");
+            avancarQuadro(10000);
+            conferir("o teto de 0,05 s vale para o giro (+0,125)", proximo(jogador.angulo, 1.125), "ângulo = " + jogador.angulo);
+
+            reiniciar(8.5, 2.5, 0);
+            apertar("w");
+            avancarQuadro(0);
+            conferir("quadro de 0 ms não anda nem quebra", proximo(jogador.x, 8.5) && Number.isFinite(jogador.x));
+        });
+
+        testar("teclado: soltar, blur e teclas alheias", function () {
+            reiniciar(8.5, 2.5, 0);
+
+            apertar("w");
+            conferirIgual("apertar W liga 'frente'", acoesAtivas.has("frente"), true);
+            soltar("w");
+            conferirIgual("soltar W desliga 'frente'", acoesAtivas.has("frente"), false);
+            conferir("depois de soltar, o quadro não anda", proximo(deslocamentoDeUmQuadro(50).x, 0));
+
+            apertar("W");
+            conferirIgual("W maiúsculo também liga", acoesAtivas.has("frente"), true);
+            soltar("W");
+            conferirIgual("e solta", acoesAtivas.has("frente"), false);
+
+            apertar("w");
+            apertar("ArrowRight");
+            apertar("a");
+            conferirIgual("três ações juntas", acoesAtivas.size, 3);
+            soltarTudo();
+            conferirIgual("blur limpa todas as ações", acoesAtivas.size, 0);
+            const pararam = deslocamentoDeUmQuadro(50);
+            conferir("depois do blur o quadro não anda nem gira", proximo(pararam.x, 0) && proximo(pararam.y, 0) && proximo(pararam.giro, 0));
+
+            apertar("w");
+            soltar("s");
+            conferirIgual("soltar outra tecla não solta a W", acoesAtivas.has("frente"), true);
+            soltar("x");
+            conferirIgual("soltar tecla desconhecida não quebra", acoesAtivas.has("frente"), true);
+            soltarTudo();
+
+            const teclaDeJogo = apertar("w");
+            conferirIgual("tecla de jogo tem o padrão do navegador cancelado", teclaDeJogo.defaultPrevented, true);
+            const teclaAlheia = apertar("x");
+            conferirIgual("tecla alheia não é cancelada", teclaAlheia.defaultPrevented, false);
+            conferirIgual("tecla alheia não liga ação", acoesAtivas.size, 1);
+            soltarTudo();
+
+            apertar("w");
+            apertar("w");
+            conferirIgual("tecla repetida não duplica a ação", acoesAtivas.size, 1);
+            soltarTudo();
+        });
+
+        testar("a tecla H alterna a depuração sem tocar no movimento", function () {
+            reiniciar(8.5, 2.5, 0);
+            conferirIgual("começa desligada", depuracaoLigada, false);
+
+            apertar("h");
+            conferirIgual("H liga", depuracaoLigada, true);
+            avancarQuadro(16);
+            conferir("a leitura mostra os números", document.getElementById("leitura").textContent.indexOf("8.50") !== -1);
+
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna de novo", depuracaoLigada, true);
+
+            apertar("H");
+            conferirIgual("H maiúsculo desliga", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+            conferirIgual("H não liga ação nenhuma", acoesAtivas.size, 0);
+        });
+
+        testar("botões na tela: pointer events fazem o papel das teclas", function () {
+            const acoes = Object.keys(TECLA_DA_ACAO);
+            conferirIgual("há seis botões", document.querySelectorAll("[data-acao]").length, 6);
+
+            acoes.forEach(function (acao) {
+                const botao = botaoDaAcao(acao);
+
+                dispararPonteiro(botao, "pointerdown");
+                conferirIgual("pointerdown em '" + acao + "' liga a ação", acoesAtivas.has(acao), true);
+                dispararPonteiro(botao, "pointerup");
+                conferirIgual("pointerup em '" + acao + "' desliga", acoesAtivas.has(acao), false);
+
+                ["pointercancel", "pointerleave"].forEach(function (tipo) {
+                    dispararPonteiro(botao, "pointerdown");
+                    dispararPonteiro(botao, tipo);
+                    conferirIgual(tipo + " em '" + acao + "' desliga", acoesAtivas.has(acao), false);
+                });
+            });
+
+            acoes.forEach(function (acao) {
+                reiniciar(8.5, 2.5, 0.9);
+                apertar(TECLA_DA_ACAO[acao]);
+                avancarQuadro(50);
+                const porTecla = JSON.stringify(pose());
+
+                reiniciar(8.5, 2.5, 0.9);
+                dispararPonteiro(botaoDaAcao(acao), "pointerdown");
+                avancarQuadro(50);
+                const porBotao = JSON.stringify(pose());
+                dispararPonteiro(botaoDaAcao(acao), "pointerup");
+
+                conferirIgual("o botão '" + acao + "' produz o mesmo movimento que a tecla", porBotao, porTecla);
+                conferir("e o movimento de '" + acao + "' não é nulo", porBotao !== JSON.stringify({ x: 8.5, y: 2.5, angulo: 0.9 }));
+            });
+
+            reiniciar(8.5, 2.5, 0);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown");
+            dispararPonteiro(botaoDaAcao("girarDireita"), "pointerdown");
+            conferirIgual("dois botões ao mesmo tempo (dois dedos)", acoesAtivas.size, 2);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup");
+            conferirIgual("soltar um mantém o outro", acoesAtivas.has("girarDireita") && !acoesAtivas.has("frente"), true);
+            soltarTudo();
+            conferirIgual("blur também solta botões", acoesAtivas.size, 0);
+        });
+
+        testar("robô aleatório, 20.000 quadros", function () {
+            const QUADROS = 20000;
+            semearSorteio(2026);
+            reiniciar(1.5, 1.5, Math.PI / 4);
+            depuracaoLigada = false;
+
+            const botoes = Object.keys(TECLA_DA_ACAO).map(botaoDaAcao);
+            const tiposDePonteiroQueSolta = ["pointerup", "pointercancel", "pointerleave"];
+            const teclasApertadas = new Set();
+
+            let primeiraViolacao = null;
+            let caminhoPercorrido = 0;
+            let quadrosEncostando = 0;
+            let quadrosSemInstante = 0;
+            let giroTotal = 0;
+            const casasVisitadas = new Set();
+            const limiteDoQuadro = PASSO_DE_UM_QUADRO + TOLERANCIA;
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                // entrada pelas portas do jogo: teclado, blur e ponteiros
+                const sorteioDeEntrada = Math.random();
+                if (sorteioDeEntrada < 0.12) {
+                    const tecla = TECLAS_DE_JOGO[Math.floor(Math.random() * TECLAS_DE_JOGO.length)];
+                    if (teclasApertadas.has(tecla)) {
+                        soltar(tecla);
+                        teclasApertadas.delete(tecla);
+                    } else {
+                        apertar(Math.random() < 0.2 ? tecla.toUpperCase() : tecla);
+                        teclasApertadas.add(tecla);
+                    }
+                } else if (sorteioDeEntrada < 0.14) {
+                    soltarTudo();
+                    teclasApertadas.clear();
+                } else if (sorteioDeEntrada < 0.20) {
+                    const botao = botoes[Math.floor(Math.random() * botoes.length)];
+                    dispararPonteiro(botao, Math.random() < 0.5 ? "pointerdown"
+                        : tiposDePonteiroQueSolta[Math.floor(Math.random() * tiposDePonteiroQueSolta.length)]);
+                } else if (sorteioDeEntrada < 0.205) {
+                    apertar("h");
+                    soltar("h");
+                }
+
+                // tempo do quadro: quase sempre normal, às vezes lento, de vez em quando gigante (aba voltando)
+                const sorteioDeTempo = Math.random();
+                const milissegundos = sorteioDeTempo < 0.70 ? 4 + Math.floor(Math.random() * 28)
+                    : sorteioDeTempo < 0.95 ? 32 + Math.floor(Math.random() * 90)
+                    : sorteioDeTempo < 0.995 ? 120 + Math.floor(Math.random() * 900)
+                    : 5000 + Math.floor(Math.random() * 60000);
+
+                const intencao = lerIntencao();
+                const antes = pose();
+                if (!avancarQuadro(milissegundos)) {
+                    primeiraViolacao = "o loop do jogo parou de pedir quadros no quadro " + quadro;
+                    break;
+                }
+
+                const andou = Math.hypot(jogador.x - antes.x, jogador.y - antes.y);
+                caminhoPercorrido += andou;
+                giroTotal += Math.abs(Math.atan2(Math.sin(jogador.angulo - antes.angulo), Math.cos(jogador.angulo - antes.angulo)));
+                casasVisitadas.add(Math.floor(jogador.x) + "," + Math.floor(jogador.y));
+                if ((intencao.frente !== 0 || intencao.lado !== 0) && andou < Math.min(milissegundos, 50) / 1000 * VELOCIDADE_DE_ANDAR - 1e-6) {
+                    quadrosEncostando++;
+                }
+
+                const motivo = motivoDoEstadoInvalido();
+                if (motivo !== null) {
+                    primeiraViolacao = "quadro " + quadro + " (" + milissegundos + " ms): " + motivo;
+                } else if (andou > limiteDoQuadro) {
+                    primeiraViolacao = "quadro " + quadro + " (" + milissegundos + " ms): andou " + andou + " > " + PASSO_DE_UM_QUADRO + " (teto de 0,05 s)";
+                }
+            }
+
+            conferir("em " + QUADROS + " quadros: corpo nunca numa casa sólida, nunca fora do mapa, sem NaN, ângulo em [0, 2π), direção unitária, passo ≤ 0,15",
+                primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô andou muito (" + caminhoPercorrido.toFixed(0) + " casas)", caminhoPercorrido > 500);
+            conferir("o robô girou muito (" + giroTotal.toFixed(0) + " rad)", giroTotal > 200);
+            conferir("o robô encostou em paredes muitas vezes (" + quadrosEncostando + " quadros)", quadrosEncostando > 500);
+            conferir("o robô passou por muitas casas diferentes (" + casasVisitadas.size + ")", casasVisitadas.size >= 25);
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

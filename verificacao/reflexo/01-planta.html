@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 1: a planta</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 1: a planta</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids. -->
+    <canvas id="jogo" width="384" height="288"></canvas>
+    <p id="leitura"></p>
+
+    <!-- Ordem importa: o apoio troca o relógio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error da carga (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        const consoleErrorOriginal = console.error;
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../reflexo/01-planta/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const VOLTA_COMPLETA = 2 * Math.PI;
+
+        function apertarTecla(tecla, opcoes) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true }, opcoes));
+            document.dispatchEvent(evento);
+        }
+
+        function contarCaracteres(texto, caractere) {
+            return texto.split(caractere).length - 1;
+        }
+
+        function fotografarEstado() {
+            return JSON.stringify({ jogador: jogador, mapa: mapa });
+        }
+
+        // Diferença entre dois ângulos, módulo 2π, no intervalo [-π, π].
+        function diferencaDeAngulo(a, b) {
+            const diferenca = (a - b) % VOLTA_COMPLETA;
+            return Math.atan2(Math.sin(diferenca), Math.cos(diferenca));
+        }
+
+        const errosNaCarga = errosDeConsole.slice();
+
+        testar("o mapa em texto", function () {
+            conferirIgual("o mapa tem 12 linhas", MAPA_EM_TEXTO.length, 12);
+            conferirIgual("LINHAS é deduzido do texto", LINHAS, MAPA_EM_TEXTO.length);
+            conferirIgual("o mapa tem 16 colunas", MAPA_EM_TEXTO[0].length, 16);
+            conferirIgual("COLUNAS é deduzido do texto", COLUNAS, MAPA_EM_TEXTO[0].length);
+            conferir("todas as linhas têm o mesmo comprimento",
+                MAPA_EM_TEXTO.every(function (linha) { return linha.length === COLUNAS; }));
+            conferir("só aparecem símbolos da legenda",
+                MAPA_EM_TEXTO.every(function (linha) { return /^[#%.ER\/\\DSXJ]+$/.test(linha); }));
+        });
+
+        testar("bordas fechadas", function () {
+            conferir("a primeira linha é só parede", /^#+$/.test(MAPA_EM_TEXTO[0]));
+            conferir("a última linha é só parede", /^#+$/.test(MAPA_EM_TEXTO[LINHAS - 1]));
+            conferir("a primeira e a última coluna são parede em toda linha",
+                MAPA_EM_TEXTO.every(function (linha) { return linha[0] === "#" && linha[COLUNAS - 1] === "#"; }));
+        });
+
+        testar("exatamente um jogador, e embaixo dele é chão", function () {
+            conferirIgual("o texto tem um único J", contarCaracteres(MAPA_EM_TEXTO.join(""), "J"), 1);
+            conferirIgual("a grade viva não guarda J nenhum", contarCaracteres(mapa.map(function (linha) { return linha.join(""); }).join(""), "J"), 0);
+            conferirIgual("o J (coluna 1, linha 1) virou chão", mapa[1][1], ".");
+            conferirIgual("a grade viva tem as mesmas dimensões", mapa.length === LINHAS && mapa.every(function (linha) { return linha.length === COLUNAS; }), true);
+
+            const diferencas = [];
+            mapa.forEach(function (linha, y) {
+                linha.forEach(function (simbolo, x) {
+                    const simboloDoTexto = MAPA_EM_TEXTO[y][x];
+                    if (simbolo !== simboloDoTexto) {
+                        diferencas.push(simboloDoTexto + "->" + simbolo + " em (" + x + "," + y + ")");
+                    }
+                });
+            });
+            conferirIgual("a grade viva só difere do texto no J, que virou '.'", diferencas.join("; "), "J->. em (1,1)");
+        });
+
+        testar("o jogador começa onde está documentado", function () {
+            conferirIgual("x = meio da casa 1", jogador.x, 1.5);
+            conferirIgual("y = meio da casa 1", jogador.y, 1.5);
+            conferirIgual("ângulo inicial = π/4 (45°)", jogador.angulo, Math.PI / 4);
+            conferir("dx do começo ≈ 0,71", Math.abs(jogador.dx - 0.7071067811865476) < TOLERANCIA, "dx = " + jogador.dx);
+            conferir("dy do começo ≈ 0,71 (para baixo)", Math.abs(jogador.dy - 0.7071067811865476) < TOLERANCIA, "dy = " + jogador.dy);
+        });
+
+        testar("a direção é unitária e coerente com o ângulo", function () {
+            const anguloInicial = jogador.angulo;
+            const angulos = [];
+            for (let passo = -400; passo <= 400; passo++) {
+                angulos.push(passo * 0.0173);       // de ≈ −7 a +7 rad, passo irregular
+            }
+            angulos.push(0, Math.PI / 2, Math.PI, -Math.PI / 2, VOLTA_COMPLETA, 1e-12, 100, -100);
+
+            let primeiroProblema = null;
+            angulos.forEach(function (angulo) {
+                jogador.angulo = angulo;
+                atualizarDirecao();
+
+                const tamanho = Math.hypot(jogador.dx, jogador.dy);
+                const anguloLido = Math.atan2(jogador.dy, jogador.dx);
+                if (primeiroProblema === null && Math.abs(tamanho - 1) > TOLERANCIA) {
+                    primeiroProblema = "tamanho " + tamanho + " no ângulo " + angulo;
+                }
+                if (primeiroProblema === null && Math.abs(diferencaDeAngulo(anguloLido, angulo)) > 1e-9) {
+                    primeiroProblema = "direção aponta para " + anguloLido + " mas o ângulo é " + angulo;
+                }
+            });
+            conferir("em " + angulos.length + " ângulos o vetor tem tamanho 1 e aponta para o ângulo", primeiroProblema === null, primeiroProblema);
+
+            jogador.angulo = 0;
+            atualizarDirecao();
+            conferir("ângulo 0 aponta para a direita (1, 0)", Math.abs(jogador.dx - 1) < TOLERANCIA && Math.abs(jogador.dy) < TOLERANCIA);
+
+            jogador.angulo = Math.PI / 2;
+            atualizarDirecao();
+            conferir("ângulo π/2 aponta para baixo (0, 1), porque y desce", Math.abs(jogador.dx) < TOLERANCIA && Math.abs(jogador.dy - 1) < TOLERANCIA);
+
+            jogador.angulo = anguloInicial;
+            atualizarDirecao();
+        });
+
+        testar("nada se mexe sozinho", function () {
+            const antes = fotografarEstado();
+
+            avancarQuadros(600, 16);
+            conferir("jogador e mapa idênticos após 600 quadros", fotografarEstado() === antes);
+
+            avancarQuadro(10000);
+            conferir("e após um quadro gigante", fotografarEstado() === antes);
+
+            conferir("o loop segue pedindo quadros", avancarQuadro(16));
+        });
+
+        testar("a tecla H liga e desliga a depuração", function () {
+            const leitura = document.getElementById("leitura");
+
+            conferirIgual("começa desligada", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("sem H a leitura fica vazia", leitura.textContent, "");
+
+            apertarTecla("h");
+            conferirIgual("H liga", depuracaoLigada, true);
+            avancarQuadro(16);
+            conferir("ligada, a leitura mostra a posição", leitura.textContent.indexOf("1.50") !== -1, "leitura = " + JSON.stringify(leitura.textContent));
+            conferir("ligada, a leitura mostra o ângulo em graus", leitura.textContent.indexOf("45°") !== -1);
+
+            apertarTecla("h");
+            conferirIgual("H de novo desliga", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("desligada, a leitura volta a ficar vazia", leitura.textContent, "");
+
+            apertarTecla("H");
+            conferirIgual("H maiúsculo também alterna", depuracaoLigada, true);
+
+            apertarTecla("j");
+            apertarTecla("w");
+            conferirIgual("outras teclas não mexem na depuração", depuracaoLigada, true);
+
+            apertarTecla("h");
+            conferirIgual("termina desligada", depuracaoLigada, false);
+        });
+
+        testar("verificarMapa recusa mapas quebrados", function () {
+            function contarAvisosPara(indiceDaLinha, linhaTrocada) {
+                const original = MAPA_EM_TEXTO[indiceDaLinha];
+                MAPA_EM_TEXTO[indiceDaLinha] = linhaTrocada;
+                const antes = errosDeConsole.length;
+                try {
+                    verificarMapa();
+                } finally {
+                    MAPA_EM_TEXTO[indiceDaLinha] = original;
+                }
+                return errosDeConsole.length - antes;
+            }
+
+            conferirIgual("o mapa de verdade não gera aviso", contarAvisosPara(0, MAPA_EM_TEXTO[0]), 0);
+            conferirIgual("furo na borda de cima avisa", contarAvisosPara(0, "####.###########"), 1);
+            conferirIgual("furo na borda de baixo avisa", contarAvisosPara(LINHAS - 1, "###############."), 1);
+            conferirIgual("furo na borda esquerda avisa", contarAvisosPara(3, ".%%.D.........#".padStart(COLUNAS, ".")), 1);
+            conferirIgual("furo na borda direita avisa", contarAvisosPara(3, "#.%%.D..........".slice(0, COLUNAS)), 1);
+            conferirIgual("um segundo J avisa", contarAvisosPara(10, "#.%%.....X.%%J.#"), 1);
+            conferirIgual("nenhum J avisa", contarAvisosPara(1, "#....#....%%..R#"), 1);
+            conferirIgual("linha mais curta avisa", contarAvisosPara(5, "#E...#.#..#....#".slice(0, 15)), 1);
+            errosDeConsole.length = 0;
+        });
+
+        testar("sem erro de console", function () {
+            conferirIgual("a carga da página não registrou console.error", errosNaCarga.join(" | "), "");
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>
