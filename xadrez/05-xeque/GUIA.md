@@ -191,5 +191,5 @@ No código:
 
 ---
 
-**Anterior:** `04-como-andam` · **Próximo:** `06-especiais` — as três regras que todo mundo
+**Anterior:** [`04-como-andam`](../04-como-andam/) · **Próximo:** [`06-especiais`](../06-especiais/) — as três regras que todo mundo
 esquece.

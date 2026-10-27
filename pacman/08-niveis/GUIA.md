@@ -135,4 +135,4 @@ Os números agora podem ter cor: ciano para fantasmas, rosa para frutas. Um camp
 
 ---
 
-**Anterior:** `07-vidas` · **Próximo:** `final` — menu, pausa, som, recorde e toque.
+**Anterior:** [`07-vidas`](../07-vidas/) · **Próximo:** [`final`](../final/) — menu, pausa, som, recorde e toque.

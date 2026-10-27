@@ -120,5 +120,5 @@ Estrutura é estrutura, comportamento é comportamento.
 
 ---
 
-**Anterior:** `07-placar` · **Próximo:** `final` — pausa, som, menu e o guia completo com
+**Anterior:** [`07-placar`](../07-placar/) · **Próximo:** [`final`](../final/) — pausa, som, menu e o guia completo com
 todos os conceitos do módulo.

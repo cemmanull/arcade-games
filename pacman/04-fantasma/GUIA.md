@@ -137,5 +137,5 @@ com quatro fantasmas de alvos diferentes, essa tecla vai ser a melhor aula do m�
 
 ---
 
-**Anterior:** `03-pastilhas` · **Próximo:** `05-personalidades` — quatro fantasmas, quatro
+**Anterior:** [`03-pastilhas`](../03-pastilhas/) · **Próximo:** [`05-personalidades`](../05-personalidades/) — quatro fantasmas, quatro
 alvos.

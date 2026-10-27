@@ -171,5 +171,5 @@ para cada tipo de inimigo"*.
 
 ---
 
-**Anterior:** `01-sala` · **Próximo:** `03-salto` — pular, com o perdão que todo jogo de plataforma
+**Anterior:** [`01-sala`](../01-sala/) · **Próximo:** [`03-salto`](../03-salto/) — pular, com o perdão que todo jogo de plataforma
 esconde.

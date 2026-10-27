@@ -51,7 +51,8 @@ ninguém sabe mais onde procurar.
 
 ## Depois daqui
 
-**[`../jogo-da-cobrinha`](../jogo-da-cobrinha/)** — dez passos construindo um jogo do zero,
-onde entram o `<canvas>` e o game loop.
+**[`../jogo-da-cobrinha`](../jogo-da-cobrinha/)** — o primeiro jogo, em dez passos: entram o
+`<canvas>` e o game loop.
 
-Depois, os projetos completos: **[`../pong`](../pong/)** e **[`../xadrez`](../xadrez/)**.
+A ordem completa dos módulos, com o que cada um acrescenta, está no
+**[índice do curso](../README.md)**.

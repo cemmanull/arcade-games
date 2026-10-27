@@ -175,5 +175,5 @@ ninguém deveria tirar 10% da vida dele antes de ele chegar.
 
 ---
 
-**Anterior:** `07-roteiro` · **Próximo:** `final` — menu, pausa, som, recorde, armas melhores,
+**Anterior:** [`07-roteiro`](../07-roteiro/) · **Próximo:** [`final`](../final/) — menu, pausa, som, recorde, armas melhores,
 modo foco, bomba e controles de toque.

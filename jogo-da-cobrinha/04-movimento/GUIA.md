@@ -129,4 +129,4 @@ lentas esse "pisca" aparece, e a correção custa uma linha.
 
 ---
 
-**Anterior:** `03-desenho` · **Próximo:** `05-teclado` — quem manda passa a ser você.
+**Anterior:** [`03-desenho`](../03-desenho/) · **Próximo:** [`05-teclado`](../05-teclado/) — quem manda passa a ser você.

@@ -104,4 +104,4 @@ F5, Ctrl+C e a navegação por Tab, e você teria escrito uma página que prende
 
 ---
 
-**Anterior:** `03-paredes` · **Próximo:** `05-colisao` — a bola descobre as raquetes.
+**Anterior:** [`03-paredes`](../03-paredes/) · **Próximo:** [`05-colisao`](../05-colisao/) — a bola descobre as raquetes.

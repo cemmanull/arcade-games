@@ -183,4 +183,4 @@ cada tiro passa a ter **peso visual**.
 
 ---
 
-**Anterior:** `03-salto` · **Próximo:** `05-criaturas` — os casulos se abrem.
+**Anterior:** [`03-salto`](../03-salto/) · **Próximo:** [`05-criaturas`](../05-criaturas/) — os casulos se abrem.

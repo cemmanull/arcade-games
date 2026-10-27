@@ -129,4 +129,4 @@ entre 0 e 1.
 
 ---
 
-**Anterior:** `02-movimento` · **Próximo:** `04-fantasma` — alguém começa a perseguir.
+**Anterior:** [`02-movimento`](../02-movimento/) · **Próximo:** [`04-fantasma`](../04-fantasma/) — alguém começa a perseguir.

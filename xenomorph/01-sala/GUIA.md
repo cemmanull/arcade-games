@@ -158,4 +158,4 @@ que muda de uma sala para outra.
 
 ---
 
-**Próximo:** `02-gravidade` — o soldado anda, e o chão passa a segurá-lo.
+**Próximo:** [`02-gravidade`](../02-gravidade/) — o soldado anda, e o chão passa a segurá-lo.

@@ -198,4 +198,4 @@ filhote guarda a mãe (`mae`), e é assim que o ninho conta os seus. O mesmo cam
 
 ---
 
-**Anterior:** `07-impulso` · **Próximo:** `09-base` — morrer deixa de ser o fim.
+**Anterior:** [`07-impulso`](../07-impulso/) · **Próximo:** [`09-base`](../09-base/) — morrer deixa de ser o fim.

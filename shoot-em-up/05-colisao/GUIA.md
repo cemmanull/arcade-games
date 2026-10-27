@@ -149,4 +149,4 @@ direto.
 
 ---
 
-**Anterior:** `04-inimigos` · **Próximo:** `06-contra-ataque` — eles atiram de volta.
+**Anterior:** [`04-inimigos`](../04-inimigos/) · **Próximo:** [`06-contra-ataque`](../06-contra-ataque/) — eles atiram de volta.

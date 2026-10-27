@@ -83,5 +83,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../dealer-out`](../dealer-out/) (e, por ele, [`../pong`](../pong/)) ·
-**Índice:** [`../README.md`](../README.md)
+**Antes:** [`../dealer-out`](../dealer-out/) · **Depois:** [`../pacman`](../pacman/) · **Índice:** [`../README.md`](../README.md)

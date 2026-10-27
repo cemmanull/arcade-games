@@ -110,5 +110,5 @@ mundo sente quando faltam, são o que faz uma arma "pesar" na mão.
 
 ---
 
-**Anterior:** `02-nave` · **Próximo:** `04-inimigos` — alvos, cada um com o seu jeito de
+**Anterior:** [`02-nave`](../02-nave/) · **Próximo:** [`04-inimigos`](../04-inimigos/) — alvos, cada um com o seu jeito de
 voar.

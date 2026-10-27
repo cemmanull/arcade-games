@@ -27,9 +27,10 @@ Cada pasta roda sozinha: abra o `index.html` e leia o `GUIA.md` ao lado.
 
 ---
 
-## Por que este módulo vem por último
+## Por que este módulo vem depois do Pac-Man
 
-Ele usa quase tudo o que o curso ensinou — e cada passo diz de onde veio cada peça:
+Vem depois do Pac-Man (e do Shoot 'em up) porque fecha a parte 2D do curso: ele usa quase tudo
+o que o curso ensinou — e cada passo diz de onde veio cada peça:
 
 | | De onde vem |
 |---|---|
@@ -46,7 +47,7 @@ peso, e o jogo esconde perdões), **geração procedural com semente** (aleatór
 conferido antes de jogar) e **progressão entre partidas** (duas memórias com tempos de vida
 diferentes).
 
-**Pré-requisito:** o Pac-Man (e, por ele, o Tetris e o Pong); o Shoot 'em up ajuda no chefe.
+**Pré-requisito:** o Pac-Man (e, por ele, o Tetris, o Dealer? Out! e o Pong) e o Shoot 'em up, para o chefe.
 
 ---
 
@@ -119,4 +120,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../pacman`](../pacman/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../pacman`](../pacman/) e [`../shoot-em-up`](../shoot-em-up/) · **Antes:** [`../xadrez`](../xadrez/) · **Índice:** [`../README.md`](../README.md)

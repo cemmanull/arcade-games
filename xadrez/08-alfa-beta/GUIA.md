@@ -174,5 +174,5 @@ Este gerador bate todos.
 
 ---
 
-**Anterior:** `07-computador` · **Próximo:** `final` — a interface completa e o guia com
+**Anterior:** [`07-computador`](../07-computador/) · **Próximo:** [`final`](../final/) — a interface completa e o guia com
 todos os conceitos do módulo.

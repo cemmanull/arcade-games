@@ -183,4 +183,4 @@ de perseguir a tempo. Sem o aviso, o fim do susto seria uma armadilha.
 
 ---
 
-**Anterior:** `05-personalidades` · **Próximo:** `07-vidas` — agora ser pego custa caro.
+**Anterior:** [`05-personalidades`](../05-personalidades/) · **Próximo:** [`07-vidas`](../07-vidas/) — agora ser pego custa caro.

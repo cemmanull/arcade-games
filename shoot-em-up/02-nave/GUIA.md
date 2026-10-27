@@ -132,4 +132,4 @@ desde que a página abriu: todas ficam soltas.
 
 ---
 
-**Anterior:** `01-ceu` · **Próximo:** `03-tiros` — segure para atirar.
+**Anterior:** [`01-ceu`](../01-ceu/) · **Próximo:** [`03-tiros`](../03-tiros/) — segure para atirar.

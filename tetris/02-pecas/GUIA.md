@@ -129,4 +129,4 @@ Pong, 3,5 pixels era uma posição válida; numa grade, não.
 
 ---
 
-**Anterior:** `01-poco` · **Próximo:** `03-queda` — a peça cai, para, e vira poço.
+**Anterior:** [`01-poco`](../01-poco/) · **Próximo:** [`03-queda`](../03-queda/) — a peça cai, para, e vira poço.

@@ -207,5 +207,5 @@ O saltador agachado, a cuspidora acesa, as pernas do rastejador: nada disso é g
 
 ---
 
-**Anterior:** `04-armas` · **Próximo:** `06-semente` — uma sala vira um mapa inteiro, diferente a
+**Anterior:** [`04-armas`](../04-armas/) · **Próximo:** [`06-semente`](../06-semente/) — uma sala vira um mapa inteiro, diferente a
 cada expedição, mas igual a cada semente.

@@ -100,4 +100,4 @@ bola.velocidadeX = -bola.velocidadeX;   // 2. inverte
 
 ---
 
-**Anterior:** `04-raquetes` · **Próximo:** `06-angulo` — onde o jogo ganha intenção.
+**Anterior:** [`04-raquetes`](../04-raquetes/) · **Próximo:** [`06-angulo`](../06-angulo/) — onde o jogo ganha intenção.

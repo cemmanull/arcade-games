@@ -150,4 +150,4 @@ Leia da direita para a esquerda: **na linha 34**, tentou usar `getContext` **de 
 
 ---
 
-**Anterior:** `02-estilo` · **Próximo:** `04-movimento` — o quadrado ganha vida.
+**Anterior:** [`02-estilo`](../02-estilo/) · **Próximo:** [`04-movimento`](../04-movimento/) — o quadrado ganha vida.

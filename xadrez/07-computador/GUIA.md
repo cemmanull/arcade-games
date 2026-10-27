@@ -177,5 +177,5 @@ deixá-la vencível de um jeito interessante.**
 
 ---
 
-**Anterior:** `06-especiais` · **Próximo:** `08-alfa-beta` — a mesma resposta, 90% mais
+**Anterior:** [`06-especiais`](../06-especiais/) · **Próximo:** [`08-alfa-beta`](../08-alfa-beta/) — a mesma resposta, 90% mais
 rápido.

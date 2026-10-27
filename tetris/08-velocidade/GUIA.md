@@ -200,5 +200,5 @@ renovasse a espera, a peça no chão nunca travaria.
 
 ---
 
-**Anterior:** `07-proxima` · **Próximo:** `final` — menu, pausa, som, recorde, guardar uma
+**Anterior:** [`07-proxima`](../07-proxima/) · **Próximo:** [`final`](../final/) — menu, pausa, som, recorde, guardar uma
 peça e controles de toque.

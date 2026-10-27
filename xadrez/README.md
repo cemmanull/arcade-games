@@ -22,7 +22,12 @@ Cada pasta roda sozinha: abra o `index.html` e leia o `GUIA.md` ao lado.
 
 ---
 
-## Por que este módulo vem por último
+## Por que este módulo vem depois do Pac-Man
+
+Vem depois do Pac-Man por contraste: o computador do Pac-Man reage com regras de uma linha e
+busca em largura; o do xadrez **procura numa árvore de jogadas**. Só o Pong é pré-requisito
+estrito; o Pac-Man é recomendado, porque mostra a progressão regra reativa → alvos → BFS →
+minimax.
 
 Cobrinha e Pong são jogos de **reflexo**: pouca regra, muito movimento. O xadrez inverte
 tudo. Não há física, não há loop de 60 quadros por segundo, nada se move sozinho.
@@ -67,4 +72,4 @@ cinco posições, incluindo as clássicas de armadilha:
 
 ---
 
-**Antes:** [`../pong`](../pong/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../pong`](../pong/) · **Antes:** [`../pacman`](../pacman/) · **Depois:** [`../xenomorph`](../xenomorph/) · **Índice:** [`../README.md`](../README.md)

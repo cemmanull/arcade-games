@@ -129,4 +129,4 @@ fica repetitivo, é sinal de que ele deveria ser gerado.**
 
 ---
 
-**Próximo:** `02-pecas` — o tabuleiro ganha ocupantes.
+**Próximo:** [`02-pecas`](../02-pecas/) — o tabuleiro ganha ocupantes.

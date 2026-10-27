@@ -181,4 +181,4 @@ precisa de teclas presas: ele anda sozinho.
 
 ---
 
-**Anterior:** `01-labirinto` · **Próximo:** `03-pastilhas` — o labirinto vai sendo comido.
+**Anterior:** [`01-labirinto`](../01-labirinto/) · **Próximo:** [`03-pastilhas`](../03-pastilhas/) — o labirinto vai sendo comido.

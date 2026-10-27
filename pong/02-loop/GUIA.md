@@ -140,4 +140,4 @@ verdadeiro quase nunca. É o assunto do passo 5.
 
 ---
 
-**Anterior:** `01-tela` · **Próximo:** `03-paredes` — a bola descobre que existem limites.
+**Anterior:** [`01-tela`](../01-tela/) · **Próximo:** [`03-paredes`](../03-paredes/) — a bola descobre que existem limites.

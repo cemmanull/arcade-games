@@ -171,4 +171,4 @@ um clique.
 
 ---
 
-**Anterior:** `06-contra-ataque` · **Próximo:** `08-chefe` — no fim da fase, alguém maior.
+**Anterior:** [`06-contra-ataque`](../06-contra-ataque/) · **Próximo:** [`08-chefe`](../08-chefe/) — no fim da fase, alguém maior.

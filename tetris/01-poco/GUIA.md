@@ -127,4 +127,4 @@ bloco, e não há nada de 3D.
 
 ---
 
-**Próximo:** `02-pecas` — as sete peças, e a decisão de guardá-las como pequenas matrizes.
+**Próximo:** [`02-pecas`](../02-pecas/) — as sete peças, e a decisão de guardá-las como pequenas matrizes.

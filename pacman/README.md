@@ -23,7 +23,7 @@ Cada pasta roda sozinha: abra o `index.html` e leia o `GUIA.md` ao lado.
 
 ---
 
-## Por que este módulo vem por último
+## Por que este módulo vem depois do Tetris e do Dealer? Out!
 
 Ele junta quase tudo:
 
@@ -35,11 +35,11 @@ Ele junta quase tudo:
 | tabelas no lugar de código | Dealer? Out!, Tetris |
 | máquina de estados | todos |
 
-E acrescenta **inteligência de jogo de ação**: não a do xadrez, que pensa lances à frente, mas
+E acrescenta **inteligência de jogo de ação**: não a do módulo de xadrez, mais adiante, que pensa lances à frente, mas
 regras de uma linha que, juntas, parecem um plano. Quatro fantasmas, a mesma regra, alvos
 diferentes — e eles cercam.
 
-**Pré-requisito:** o Tetris (que já depende do Pong).
+**Pré-requisito:** o Tetris (que já depende do Pong) e o Dealer? Out!.
 
 ---
 
@@ -92,4 +92,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../tetris`](../tetris/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../tetris`](../tetris/) e [`../dealer-out`](../dealer-out/) · **Antes:** [`../shoot-em-up`](../shoot-em-up/) · **Depois:** [`../xadrez`](../xadrez/) · **Índice:** [`../README.md`](../README.md)

@@ -139,4 +139,4 @@ quadro em `(0, 0)` — um piscar no canto da tela.
 
 ---
 
-**Anterior:** `03-tiros` · **Próximo:** `05-colisao` — muitos contra muitos.
+**Anterior:** [`03-tiros`](../03-tiros/) · **Próximo:** [`05-colisao`](../05-colisao/) — muitos contra muitos.

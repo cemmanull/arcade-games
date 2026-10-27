@@ -122,4 +122,4 @@ cor original aparecer por baixo. É o jeito de **tingir** um elemento sem trocar
 
 ---
 
-**Anterior:** `02-pecas` · **Próximo:** `04-como-andam` — as peças aprendem a andar.
+**Anterior:** [`02-pecas`](../02-pecas/) · **Próximo:** [`04-como-andam`](../04-como-andam/) — as peças aprendem a andar.

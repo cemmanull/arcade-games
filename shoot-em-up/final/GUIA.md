@@ -287,5 +287,4 @@ usa mais.
 
 ---
 
-**Antes:** [`../../dealer-out`](../../dealer-out/) ·
-**Índice:** [`../README.md`](../README.md)
+**Antes:** [`../../dealer-out`](../../dealer-out/) · **Depois:** [`../../pacman`](../../pacman/) · **Índice:** [`../../README.md`](../../README.md)

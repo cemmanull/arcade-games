@@ -98,4 +98,4 @@ que jogos comerciais fazem, e é o exercício 6.
 
 ---
 
-**Anterior:** `05-colisao` · **Próximo:** `07-placar` — o jogo passa a ter vencedor.
+**Anterior:** [`05-colisao`](../05-colisao/) · **Próximo:** [`07-placar`](../07-placar/) — o jogo passa a ter vencedor.

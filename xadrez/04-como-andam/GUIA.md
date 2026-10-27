@@ -147,4 +147,4 @@ No código:
 
 ---
 
-**Anterior:** `03-selecionar` · **Próximo:** `05-xeque` — a regra que amarra todas as outras.
+**Anterior:** [`03-selecionar`](../03-selecionar/) · **Próximo:** [`05-xeque`](../05-xeque/) — a regra que amarra todas as outras.

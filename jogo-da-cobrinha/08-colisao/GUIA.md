@@ -121,5 +121,5 @@ depois de dez minutos e ninguém consegue reproduzir.
 
 ---
 
-**Anterior:** `07-maca` · **Próximo:** `09-interface` — o jogo passa a conversar com o
+**Anterior:** [`07-maca`](../07-maca/) · **Próximo:** [`09-interface`](../09-interface/) — o jogo passa a conversar com o
 jogador.

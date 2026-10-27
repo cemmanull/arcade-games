@@ -205,5 +205,5 @@ nada de apagar uma campanha inteira com um clique distraído.
 
 ---
 
-**Anterior:** `08-matriarca` · **Próximo:** `final` — o jogo dividido em sistemas, com som, pausa,
+**Anterior:** [`08-matriarca`](../08-matriarca/) · **Próximo:** [`final`](../final/) — o jogo dividido em sistemas, com som, pausa,
 armas novas, modificações, eventos, acessibilidade e toque.

@@ -338,7 +338,7 @@ Os botões de toque aparecem com `@media (hover: none) and (pointer: coarse)`: a
     campo de um objeto `jogador`.
 15. **Um robô que joga**: para cada peça, teste todas as rotações e colunas com `cabe` e a
     queda instantânea **numa cópia do poço**, dê uma nota a cada resultado (altura, buracos,
-    linhas limpas) e escolha a melhor. É o minimax do xadrez com uma profundidade só.
+    linhas limpas) e escolha a melhor. É o minimax — que o módulo de xadrez desenvolve mais adiante — com uma profundidade só.
 
 ---
 
@@ -355,5 +355,4 @@ Puyo Puyo, jogos de combinar três.
 
 ---
 
-**Antes:** [`../../pong`](../../pong/) ·
-**Índice:** [`../README.md`](../README.md)
+**Antes:** [`../../pong`](../../pong/) · **Depois:** [`../../dealer-out`](../../dealer-out/) · **Índice:** [`../../README.md`](../../README.md)

@@ -174,5 +174,5 @@ interessante é justamente o que ele *não* vai precisar tocar.
 
 ---
 
-**Anterior:** `08-colisao` · **Próximo:** `final` — o mesmo jogo, com cara de videogame
+**Anterior:** [`08-colisao`](../08-colisao/) · **Próximo:** [`final`](../final/) — o mesmo jogo, com cara de videogame
 antigo. E um guia com 37 exercícios.

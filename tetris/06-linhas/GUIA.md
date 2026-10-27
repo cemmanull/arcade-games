@@ -122,5 +122,5 @@ escolhido no passo 1 para "vazio de propósito" rende uma frase legível aqui.
 
 ---
 
-**Anterior:** `05-rotacao` · **Próximo:** `07-proxima` — um sorteio justo, a próxima peça
+**Anterior:** [`05-rotacao`](../05-rotacao/) · **Próximo:** [`07-proxima`](../07-proxima/) — um sorteio justo, a próxima peça
 e um fim de jogo de verdade.

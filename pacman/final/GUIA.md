@@ -23,7 +23,7 @@ Nenhuma regra de movimento, de fantasma ou de fase. O acabamento:
 
 ---
 
-## Por que este módulo vem por último
+## Por que este módulo vem depois do Tetris e do Dealer? Out!
 
 Ele junta quase tudo o que o curso ensinou:
 
@@ -35,7 +35,7 @@ Ele junta quase tudo o que o curso ensinou:
 | Dealer? Out! e Tetris | tabelas no lugar de código; temporizadores |
 | todos | a máquina de estados |
 
-E acrescenta o que faltava: **inteligência**. Não a do xadrez, que pensa lances à frente — a de
+E acrescenta o que faltava: **inteligência**. Não a do módulo de xadrez, mais adiante, que pensa lances à frente — a de
 jogo de ação, feita de regras simples que, juntas, parecem um plano.
 
 ---
@@ -246,5 +246,4 @@ teste antes de mover; e mostre o invisível quando não entender o que o program
 
 ---
 
-**Antes:** [`../../tetris`](../../tetris/) ·
-**Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../../tetris`](../../tetris/) e [`../../dealer-out`](../../dealer-out/) · **Antes:** [`../../shoot-em-up`](../../shoot-em-up/) · **Depois:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)

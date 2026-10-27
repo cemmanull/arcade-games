@@ -117,4 +117,4 @@ página.
 
 ---
 
-**Anterior:** `03-queda` · **Próximo:** `05-rotacao` — girar uma matriz.
+**Anterior:** [`03-queda`](../03-queda/) · **Próximo:** [`05-rotacao`](../05-rotacao/) — girar uma matriz.

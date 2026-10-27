@@ -128,5 +128,5 @@ da minha imagem?"*.
 
 ---
 
-**Anterior:** `01-estrutura` · **Próximo:** `03-desenho` — o JavaScript entra em cena e
+**Anterior:** [`01-estrutura`](../01-estrutura/) · **Próximo:** [`03-desenho`](../03-desenho/) — o JavaScript entra em cena e
 pinta o primeiro quadrado.

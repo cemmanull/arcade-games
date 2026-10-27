@@ -223,5 +223,5 @@ pulando por baixo. Ela foi inventada para isto.
 
 ---
 
-**Anterior:** `05-criaturas` · **Próximo:** `07-impulso` — uma habilidade que abre caminhos, e um
+**Anterior:** [`05-criaturas`](../05-criaturas/) · **Próximo:** [`07-impulso`](../07-impulso/) — uma habilidade que abre caminhos, e um
 gerador que confere o próprio trabalho.

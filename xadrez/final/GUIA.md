@@ -382,4 +382,4 @@ testar peças isoladas e testar o comportamento final.
 
 ---
 
-**Antes:** [`../pong`](../../pong/) · **Índice:** [`../README.md`](../../README.md)
+**Pré-requisito:** [`../../pong`](../../pong/) · **Antes:** [`../../pacman`](../../pacman/) · **Depois:** [`../../xenomorph`](../../xenomorph/) · **Índice:** [`../../README.md`](../../README.md)

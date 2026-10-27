@@ -169,5 +169,5 @@ com as balas da anterior no ar.
 
 ---
 
-**Anterior:** `05-colisao` · **Próximo:** `07-roteiro` — a fase deixa de ser sorteio e vira
+**Anterior:** [`05-colisao`](../05-colisao/) · **Próximo:** [`07-roteiro`](../07-roteiro/) — a fase deixa de ser sorteio e vira
 uma coreografia.

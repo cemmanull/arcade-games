@@ -149,4 +149,4 @@ No código:
 
 ---
 
-**Anterior:** `01-tabuleiro` · **Próximo:** `03-selecionar` — as peças começam a se mover.
+**Anterior:** [`01-tabuleiro`](../01-tabuleiro/) · **Próximo:** [`03-selecionar`](../03-selecionar/) — as peças começam a se mover.

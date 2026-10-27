@@ -206,5 +206,5 @@ cabia em pé sobre ela. A sala foi corrigida.
 
 ---
 
-**Anterior:** `02-gravidade` · **Próximo:** `04-armas` — mirar em oito direções, e armas que são
+**Anterior:** [`02-gravidade`](../02-gravidade/) · **Próximo:** [`04-armas`](../04-armas/) — mirar em oito direções, e armas que são
 dados.

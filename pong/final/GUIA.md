@@ -350,6 +350,4 @@ Essa lista cobre a base de praticamente qualquer jogo de ação em 2D.
 
 ---
 
-**Antes:** [`../jogo-da-cobrinha`](../../jogo-da-cobrinha/) ·
-**Depois:** [`../xadrez`](../../xadrez/) — onde o desafio deixa de ser física e passa a ser
-regras complexas e um computador que pensa à frente.
+**Antes:** [`../../jogo-da-cobrinha`](../../jogo-da-cobrinha/) · **Depois:** [`../../tetris`](../../tetris/) · **Índice:** [`../../README.md`](../../README.md)

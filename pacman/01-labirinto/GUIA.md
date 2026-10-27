@@ -149,4 +149,4 @@ desenho do curso que não é feito de retângulos: o Pac-Man **é** um círculo.
 
 ---
 
-**Próximo:** `02-movimento` — o Pac-Man anda, e só vira onde pode.
+**Próximo:** [`02-movimento`](../02-movimento/) — o Pac-Man anda, e só vira onde pode.

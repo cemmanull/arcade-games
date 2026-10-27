@@ -160,5 +160,5 @@ o poço terminou.
 
 ---
 
-**Anterior:** `06-linhas` · **Próximo:** `08-velocidade` — o jogo acelera, e precisa
+**Anterior:** [`06-linhas`](../06-linhas/) · **Próximo:** [`08-velocidade`](../08-velocidade/) — o jogo acelera, e precisa
 continuar justo.

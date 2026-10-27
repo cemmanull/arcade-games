@@ -95,4 +95,4 @@ o navegador precisa inventar meios pixels — e borra tudo.
 
 ---
 
-**Próximo:** `02-loop` — a bola ganha vida, e o tempo entra na conta.
+**Próximo:** [`02-loop`](../02-loop/) — a bola ganha vida, e o tempo entra na conta.

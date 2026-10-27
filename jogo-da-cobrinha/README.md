@@ -60,3 +60,7 @@ linhas, troque números, inverta a ordem das coisas.
 
 > **Ver o código quebrar de um jeito que você previu ensina mais do que ver o código
 > funcionar.** É a diferença entre saber que uma linha está lá e saber por que ela está.
+
+---
+
+**Antes:** [`../tutorial`](../tutorial/) · **Depois:** [`../pong`](../pong/) · **Índice:** [`../README.md`](../README.md)

@@ -39,7 +39,7 @@ Tetris junta os dois: as peças andam de casa em casa, mas o loop por baixo é o
 E uma ideia nova, que vale para o resto da carreira: quando uma peça para, **ela deixa de
 existir como objeto** e vira casas do poço. O estado inteiro do jogo é uma matriz e uma peça.
 
-Pode ser feito logo depois do Pong, ou depois do xadrez.
+Vem logo depois do Pong.
 
 ---
 
@@ -78,4 +78,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../pong`](../pong/) · **Índice:** [`../README.md`](../README.md)
+**Antes:** [`../pong`](../pong/) · **Depois:** [`../dealer-out`](../dealer-out/) · **Índice:** [`../README.md`](../README.md)

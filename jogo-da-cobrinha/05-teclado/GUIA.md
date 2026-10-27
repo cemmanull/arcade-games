@@ -129,4 +129,4 @@ Quando esse dia chegar, você vai lembrar que o problema não é o seu código: 
 
 ---
 
-**Anterior:** `04-movimento` · **Próximo:** `06-cobra` — de um quadrado para uma cobra.
+**Anterior:** [`04-movimento`](../04-movimento/) · **Próximo:** [`06-cobra`](../06-cobra/) — de um quadrado para uma cobra.

@@ -558,3 +558,7 @@ Junte tudo em um jogo novo, do zero, sem copiar e colar a cobrinha:
 
 Se você fez os 37 exercícios, não há uma linha aí que você ainda não tenha escrito.
 O trabalho agora é só de montagem — que é, quase sempre, o que programar realmente é.
+
+---
+
+**Antes:** [`../../tutorial`](../../tutorial/) · **Depois:** [`../../pong`](../../pong/) · **Índice:** [`../../README.md`](../../README.md)

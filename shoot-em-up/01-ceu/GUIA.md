@@ -119,4 +119,4 @@ depende de um relógio que o jogo controla. **Um jogo, um relógio**, como no De
 
 ---
 
-**Próximo:** `02-nave` — a nave obedece, nas oito direções.
+**Próximo:** [`02-nave`](../02-nave/) — a nave obedece, nas oito direções.

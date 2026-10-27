@@ -168,5 +168,5 @@ No código:
 
 ---
 
-**Anterior:** `05-xeque` · **Próximo:** `07-computador` — o arquivo fica grande demais, e
+**Anterior:** [`05-xeque`](../05-xeque/) · **Próximo:** [`07-computador`](../07-computador/) — o arquivo fica grande demais, e
 um adversário aparece.

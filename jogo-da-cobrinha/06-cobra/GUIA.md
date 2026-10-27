@@ -152,4 +152,4 @@ convertem os tipos sozinhos e produzem surpresas como `"5" == 5` sendo verdadeir
 
 ---
 
-**Anterior:** `05-teclado` · **Próximo:** `07-maca` — algo para comer.
+**Anterior:** [`05-teclado`](../05-teclado/) · **Próximo:** [`07-maca`](../07-maca/) — algo para comer.

@@ -133,4 +133,4 @@ exercício 5 o recria.
 
 ---
 
-**Anterior:** `04-fantasma` · **Próximo:** `06-modos` — descansar, perseguir, fugir.
+**Anterior:** [`04-fantasma`](../04-fantasma/) · **Próximo:** [`06-modos`](../06-modos/) — descansar, perseguir, fugir.

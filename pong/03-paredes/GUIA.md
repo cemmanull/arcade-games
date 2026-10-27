@@ -97,4 +97,4 @@ variação, o jogo vira decoreba.
 
 ---
 
-**Anterior:** `02-loop` · **Próximo:** `04-raquetes` — você entra no jogo.
+**Anterior:** [`02-loop`](../02-loop/) · **Próximo:** [`04-raquetes`](../04-raquetes/) — você entra no jogo.

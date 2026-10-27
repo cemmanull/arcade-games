@@ -140,4 +140,4 @@ antes?**
 
 ---
 
-**Anterior:** `06-cobra` · **Próximo:** `08-colisao` — finalmente dá para perder.
+**Anterior:** [`06-cobra`](../06-cobra/) · **Próximo:** [`08-colisao`](../08-colisao/) — finalmente dá para perder.

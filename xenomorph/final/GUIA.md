@@ -370,4 +370,4 @@ entender o que o programa está fazendo.**
 
 ---
 
-**Antes:** [`../09-base`](../09-base/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../../pacman`](../../pacman/) e [`../../shoot-em-up`](../../shoot-em-up/) · **Antes:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)

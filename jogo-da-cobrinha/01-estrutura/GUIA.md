@@ -102,4 +102,4 @@ montar um sumário. `<div>` não significa nada.
 
 ---
 
-**Próximo:** `02-estilo` — dar cor e forma a tudo isso.
+**Próximo:** [`02-estilo`](../02-estilo/) — dar cor e forma a tudo isso.

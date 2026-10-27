@@ -169,4 +169,4 @@ validador rejeitar uma semente e você não entender por quê, é aqui que se ol
 
 ---
 
-**Anterior:** `06-semente` · **Próximo:** `08-matriarca` — algo guardava os dados.
+**Anterior:** [`06-semente`](../06-semente/) · **Próximo:** [`08-matriarca`](../08-matriarca/) — algo guardava os dados.

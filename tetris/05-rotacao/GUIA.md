@@ -60,7 +60,7 @@ pecaAtual.forma = formaGirada;   // troca a referência; o catálogo fica intact
 rotação mexesse na matriz no lugar, o T girado passaria a ser o T de todas as peças T que
 ainda vão nascer.
 
-É a mesma lição do xadrez: **estado que não se altera não estraga por acidente.**
+Guarde esta frase — ela volta no xadrez: **estado que não se altera não estraga por acidente.**
 
 ---
 
@@ -128,4 +128,4 @@ se o laço continuasse, a peça poderia ser girada duas vezes.
 
 ---
 
-**Anterior:** `04-controles` · **Próximo:** `06-linhas` — o poço finalmente se esvazia.
+**Anterior:** [`04-controles`](../04-controles/) · **Próximo:** [`06-linhas`](../06-linhas/) — o poço finalmente se esvazia.

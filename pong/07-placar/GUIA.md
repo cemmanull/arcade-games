@@ -123,4 +123,4 @@ um personagem invulnerável depois de levar dano, um cursor de texto.
 
 ---
 
-**Anterior:** `06-angulo` · **Próximo:** `08-computador` — um adversário que não dorme.
+**Anterior:** [`06-angulo`](../06-angulo/) · **Próximo:** [`08-computador`](../08-computador/) — um adversário que não dorme.

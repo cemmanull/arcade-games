@@ -125,4 +125,4 @@ não deve gastar a segunda. O `break` sai do laço, e `nascerPeca` zera o acumul
 
 ---
 
-**Anterior:** `02-pecas` · **Próximo:** `04-controles` — você assume o controle.
+**Anterior:** [`02-pecas`](../02-pecas/) · **Próximo:** [`04-controles`](../04-controles/) — você assume o controle.

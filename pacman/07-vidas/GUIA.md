@@ -136,4 +136,4 @@ Inclusive os relógios deles: `tempoDesdeOInicio` só anda em `"jogando"`. Os do
 
 ---
 
-**Anterior:** `06-modos` · **Próximo:** `08-niveis` — cada fase um pouco mais difícil, e frutas.
+**Anterior:** [`06-modos`](../06-modos/) · **Próximo:** [`08-niveis`](../08-niveis/) — cada fase um pouco mais difícil, e frutas.
