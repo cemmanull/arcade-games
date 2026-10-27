@@ -1,6 +1,6 @@
 # Xadrez — passo final
 
-**Anterior:** `08-alfa-beta`
+**Anterior:** [`08-alfa-beta`](../08-alfa-beta/)
 **Rode:** abra o `index.html`.
 **Jogue:** clique numa peça para ver os lances legais, clique no destino. Roque: mova o
 rei duas casas.
@@ -381,5 +381,7 @@ alfa-beta, avaliação heurística, CSS Grid, acessibilidade com ARIA, e a difer
 testar peças isoladas e testar o comportamento final.
 
 ---
+
+**Anterior:** [`08-alfa-beta`](../08-alfa-beta/) · **Módulo:** [`README.md`](../README.md)
 
 **Pré-requisito:** [`../../pong`](../../pong/) · **Antes:** [`../../pacman`](../../pacman/) · **Depois:** [`../../xenomorph`](../../xenomorph/) · **Índice:** [`../../README.md`](../../README.md)

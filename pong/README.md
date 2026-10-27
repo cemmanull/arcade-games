@@ -55,4 +55,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Antes:** [`../jogo-da-cobrinha`](../jogo-da-cobrinha/) · **Depois:** [`../tetris`](../tetris/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../jogo-da-cobrinha`](../jogo-da-cobrinha/) · **Antes:** [`../jogo-da-cobrinha`](../jogo-da-cobrinha/) · **Depois:** [`../tetris`](../tetris/) · **Índice:** [`../README.md`](../README.md)

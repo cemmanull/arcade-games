@@ -1,6 +1,6 @@
 # Passo final — Jogo da Cobrinha
 
-**Anterior:** `09-interface`
+**Anterior:** [`09-interface`](../09-interface/)
 **Rode:** abra o `index.html`. Só isso — sem instalar nada.
 
 Este é o fim da trilha e também o material de referência: o código está comentado linha a
@@ -561,4 +561,6 @@ O trabalho agora é só de montagem — que é, quase sempre, o que programar re
 
 ---
 
-**Antes:** [`../../tutorial`](../../tutorial/) · **Depois:** [`../../pong`](../../pong/) · **Índice:** [`../../README.md`](../../README.md)
+**Anterior:** [`09-interface`](../09-interface/) · **Módulo:** [`README.md`](../README.md)
+
+**Pré-requisito:** [`../../tutorial`](../../tutorial/) · **Antes:** [`../../tutorial`](../../tutorial/) · **Depois:** [`../../pong`](../../pong/) · **Índice:** [`../../README.md`](../../README.md)

@@ -63,4 +63,4 @@ linhas, troque números, inverta a ordem das coisas.
 
 ---
 
-**Antes:** [`../tutorial`](../tutorial/) · **Depois:** [`../pong`](../pong/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../tutorial`](../tutorial/) · **Antes:** [`../tutorial`](../tutorial/) · **Depois:** [`../pong`](../pong/) · **Índice:** [`../README.md`](../README.md)

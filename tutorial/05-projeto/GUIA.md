@@ -172,7 +172,7 @@ interface completa. Tudo o que vem depois — frameworks, ferramentas de build, 
 
 ## Para onde ir agora
 
-**[`../jogo-da-cobrinha`](../../jogo-da-cobrinha/)** — dez passos construindo um jogo, onde
+**[`../jogo-da-cobrinha`](../../jogo-da-cobrinha/)** — nove passos e um final construindo um jogo, onde
 entram o `<canvas>` e o game loop.
 
 A trilha completa, módulo por módulo, está no **[índice do curso](../../README.md)**.

@@ -1,6 +1,6 @@
 # Xenomorph — passo final
 
-**Anterior:** `09-base`
+**Anterior:** [`09-base`](../09-base/)
 **Rode:** abra o `index.html`. A campanha fica salva no navegador.
 **Controles:** ← → ou A D andam · ↑ ↓ miram · Espaço, Z ou K pulam (segure para ir mais alto) ·
 ↓ + pular desce pela grade · X ou J atiram · Q troca de arma · R recarrega · Shift, C ou L esquivam
@@ -369,5 +369,7 @@ lugar só para o que precisa acontecer sempre; teste antes de mover; e mostre o 
 entender o que o programa está fazendo.**
 
 ---
+
+**Anterior:** [`09-base`](../09-base/) · **Módulo:** [`README.md`](../README.md)
 
 **Pré-requisito:** [`../../pacman`](../../pacman/) e [`../../shoot-em-up`](../../shoot-em-up/) · **Antes:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)

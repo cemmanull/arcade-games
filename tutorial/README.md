@@ -51,8 +51,12 @@ ninguém sabe mais onde procurar.
 
 ## Depois daqui
 
-**[`../jogo-da-cobrinha`](../jogo-da-cobrinha/)** — o primeiro jogo, em dez passos: entram o
+**[`../jogo-da-cobrinha`](../jogo-da-cobrinha/)** — o primeiro jogo, em nove passos e um final: entram o
 `<canvas>` e o game loop.
 
 A ordem completa dos módulos, com o que cada um acrescenta, está no
 **[índice do curso](../README.md)**.
+
+---
+
+**Depois:** [`../jogo-da-cobrinha`](../jogo-da-cobrinha/) · **Índice:** [`../README.md`](../README.md)

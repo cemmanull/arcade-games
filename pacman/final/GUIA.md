@@ -1,6 +1,6 @@
 # Pac-Man — passo final
 
-**Anterior:** `08-niveis`
+**Anterior:** [`08-niveis`](../08-niveis/)
 **Rode:** abra o `index.html`.
 **Controles:** setas ou WASD escolhem a direção · P ou Esc pausa · H mostra os alvos dos
 fantasmas. No celular: deslize o dedo sobre o labirinto.
@@ -245,5 +245,7 @@ E, do curso inteiro: **separe o que a coisa é de como ela aparece; escreva os d
 teste antes de mover; e mostre o invisível quando não entender o que o programa está fazendo.**
 
 ---
+
+**Anterior:** [`08-niveis`](../08-niveis/) · **Módulo:** [`README.md`](../README.md)
 
 **Pré-requisito:** [`../../tetris`](../../tetris/) e [`../../dealer-out`](../../dealer-out/) · **Antes:** [`../../shoot-em-up`](../../shoot-em-up/) · **Depois:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)

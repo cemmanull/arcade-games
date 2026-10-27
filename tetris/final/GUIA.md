@@ -1,6 +1,6 @@
 # Tetris — passo final
 
-**Anterior:** `08-velocidade`
+**Anterior:** [`08-velocidade`](../08-velocidade/)
 **Rode:** abra o `index.html`.
 **Controles:** ← → mover · ↑ ou X girar · Z girar ao contrário · ↓ descer · Espaço derrubar ·
 C guardar · P ou Esc pausar. Num celular, aparecem botões de toque.
@@ -355,4 +355,6 @@ Puyo Puyo, jogos de combinar três.
 
 ---
 
-**Antes:** [`../../pong`](../../pong/) · **Depois:** [`../../dealer-out`](../../dealer-out/) · **Índice:** [`../../README.md`](../../README.md)
+**Anterior:** [`08-velocidade`](../08-velocidade/) · **Módulo:** [`README.md`](../README.md)
+
+**Pré-requisito:** [`../../pong`](../../pong/) · **Antes:** [`../../pong`](../../pong/) · **Depois:** [`../../dealer-out`](../../dealer-out/) · **Índice:** [`../../README.md`](../../README.md)

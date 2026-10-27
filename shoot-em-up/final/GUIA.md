@@ -1,6 +1,6 @@
 # Shoot 'em up — passo final
 
-**Anterior:** `08-chefe`
+**Anterior:** [`08-chefe`](../08-chefe/)
 **Rode:** abra o `index.html`.
 **Controles:** setas ou WASD voam · Espaço (segure) atira · Shift (segure) foco · X bomba ·
 P ou Esc pausa · H mostra as colisões. No celular: arraste o dedo em qualquer lugar da tela.
@@ -287,4 +287,6 @@ usa mais.
 
 ---
 
-**Antes:** [`../../dealer-out`](../../dealer-out/) · **Depois:** [`../../pacman`](../../pacman/) · **Índice:** [`../../README.md`](../../README.md)
+**Anterior:** [`08-chefe`](../08-chefe/) · **Módulo:** [`README.md`](../README.md)
+
+**Pré-requisito:** [`../../dealer-out`](../../dealer-out/) · **Antes:** [`../../dealer-out`](../../dealer-out/) · **Depois:** [`../../pacman`](../../pacman/) · **Índice:** [`../../README.md`](../../README.md)

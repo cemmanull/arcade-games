@@ -141,8 +141,8 @@ jogo é mudar um número, não reescrever uma função. Aparece no Tetris, no De
 up, no Pac-Man e no Xenomorph.
 
 **Mostre o invisível.** Caixas de colisão, o alvo de cada fantasma, o estado de cada criatura: o que
-você não vê, você não consegue depurar. Nos quatro módulos mais recentes a tecla **H** liga essa
-visão (Dealer? Out!, Shoot 'em up, Pac-Man e Xenomorph).
+você não vê, você não consegue depurar. Em quatro módulos — Dealer? Out!, Shoot 'em up, Pac-Man e
+Xenomorph — a tecla **H** liga essa visão.
 
 **O que vem de fora, confira.** O `localStorage` pode estar vazio, bloqueado ou com lixo. Lê-se
 dentro de `try/catch` e campo a campo, do projeto do tutorial ao Xenomorph.
@@ -182,5 +182,19 @@ Os módulos `tetris`, `dealer-out`, `shoot-em-up`, `pacman`, `xadrez` e `xenomor
 robôs apertando teclas ao acaso, geração de mapas validada e, no xadrez, o teste de regras chamado
 perft. Leia lá o que cada afirmação cobre e o que ficou de fora.
 
-O `tutorial`, a `jogo-da-cobrinha` e o `pong` não têm essa seção; o que se garante neles é que cada
-pasta abre por `file://` e roda sozinha.
+O `tutorial`, a `jogo-da-cobrinha` e o `pong` não têm essa seção. Para todos os módulos há um
+roteiro de conferência em [`verificacao/`](verificacao/) (veja o
+[`README.md` dele](verificacao/README.md)), que roda no terminal:
+
+```
+node verificacao/rodar.mjs            # páginas de teste: roda o código real do passo e confere as regras
+node verificacao/rodar.mjs --fumaca   # abre cada index.html sem interface e lista erros de console
+node verificacao/rodar.mjs --links    # confere cada link relativo dos arquivos .md
+```
+
+As páginas de teste ficam em `verificacao/<módulo>/<passo>.html`, uma por passo conferido; a lista
+cresce com o curso. Na fumaça, duas exceções são
+esperadas e ficam listadas em `verificacao/README.md`: as imagens que faltam de propósito em
+`tutorial/01-html` (para mostrar o `alt`) e o manifesto PWA do `dealer-out/final`, que o `file://`
+bloqueia. Quem só estuda não precisa de nada disso: é para quem mantém o curso. Exige Chrome e
+Node 22 ou mais novo; nada para instalar para os alunos.

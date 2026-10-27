@@ -1,6 +1,6 @@
 # Pong — passo final
 
-**Anterior:** `08-computador`
+**Anterior:** [`08-computador`](../08-computador/)
 **Rode:** abra o `index.html`.
 **Controles:** esquerda W/S (ou setas, no modo 1 jogador) · direita ↑/↓ · P pausa.
 
@@ -350,4 +350,6 @@ Essa lista cobre a base de praticamente qualquer jogo de ação em 2D.
 
 ---
 
-**Antes:** [`../../jogo-da-cobrinha`](../../jogo-da-cobrinha/) · **Depois:** [`../../tetris`](../../tetris/) · **Índice:** [`../../README.md`](../../README.md)
+**Anterior:** [`08-computador`](../08-computador/) · **Módulo:** [`README.md`](../README.md)
+
+**Pré-requisito:** [`../../jogo-da-cobrinha`](../../jogo-da-cobrinha/) · **Antes:** [`../../jogo-da-cobrinha`](../../jogo-da-cobrinha/) · **Depois:** [`../../tetris`](../../tetris/) · **Índice:** [`../../README.md`](../../README.md)
