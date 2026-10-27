@@ -30,10 +30,17 @@
     <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
     <script src="../apoio.js"></script>
 
-    <!-- O teste confere regras, não pixels: um contexto 2D que ignora o desenho acelera o robô. -->
+    <!-- O teste confere regras, não pixels: um contexto 2D que ignora o desenho acelera o robô.
+         Só os rótulos (fillText) ficam gravados, para conferir as letras do mapa. -->
     <script>
+        const rotulosDesenhados = [];
         const contextoQueIgnoraODesenho = new Proxy({}, {
-            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            get: function (propriedades, nome) {
+                if (nome === "fillText") {
+                    return function (texto, x, y) { rotulosDesenhados.push({ texto: texto, x: x, y: y }); };
+                }
+                return nome in propriedades ? propriedades[nome] : function () { };
+            },
             set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
         });
         HTMLCanvasElement.prototype.getContext = function () { return contextoQueIgnoraODesenho; };
@@ -68,8 +75,8 @@
             return document.querySelector('[data-acao="' + acao + '"]');
         }
 
-        function dispararPonteiro(botao, tipo) {
-            botao.dispatchEvent(new PointerEvent(tipo, { bubbles: true }));
+        function dispararPonteiro(botao, tipo, identificador) {
+            botao.dispatchEvent(new PointerEvent(tipo, { bubbles: true, pointerId: identificador === undefined ? 0 : identificador }));
         }
 
         function soltarTudo() {
@@ -166,8 +173,56 @@
 
             avancarQuadros(100, 16);
             conferirIgual("100 quadros sem ação não mexem na posição", jogador.x === antes.x && jogador.y === antes.y, true);
-            // girar(0) refaz o módulo 2π a cada quadro: sobra só ruído de ponto flutuante.
-            conferir("nem no ângulo", proximo(jogador.angulo, antes.angulo, 1e-12), "ângulo = " + jogador.angulo);
+            conferirIgual("nem no ângulo (igualdade exata: sem giro, o módulo 2π nem é refeito)", jogador.angulo, antes.angulo);
+        });
+
+        testar("parado, o ângulo não deriva nem o último bit, em qualquer ângulo", function () {
+            [0, 1e-12, 0.3, 0.7, 1, Math.PI / 4, 3.14159, 5.5, VOLTA_COMPLETA - 1e-9].forEach(function (angulo) {
+                reiniciar(8.5, 2.5, angulo);
+                const antes = JSON.stringify(jogador);
+                avancarQuadros(200, 16);
+                conferirIgual("ângulo " + angulo + ": o jogador inteiro é idêntico após 200 quadros", JSON.stringify(jogador), antes);
+            });
+
+            reiniciar(8.5, 2.5, 0.7);
+            const anguloAntes = jogador.angulo;
+            apertar("ArrowLeft");
+            apertar("ArrowRight");
+            avancarQuadros(50, 16);
+            conferirIgual("← e → juntos (giro 0) também não derivam", jogador.angulo, anguloAntes);
+            soltarTudo();
+
+            reiniciar(8.5, 2.5, 0.7);
+            apertar("w");
+            avancarQuadros(5, 16);
+            conferirIgual("andar reto não mexe no ângulo", jogador.angulo, 0.7);
+            soltarTudo();
+        });
+
+        testar("o mapa rotula as sete letras, inclusive o espelho de barra invertida", function () {
+            const BARRA_INVERTIDA = "\\";
+            reiniciar(8.5, 2.5, 0);
+            rotulosDesenhados.length = 0;
+            avancarQuadro(16);
+
+            const rotulos = rotulosDesenhados.map(function (rotulo) { return rotulo.texto + "@" + (rotulo.x - 0.5) + "," + (rotulo.y - 0.5); }).sort();
+            const esperados = ["E@1,5", "R@14,1", BARRA_INVERTIDA + "@7,2", "D@5,3", "S@8,6", "/@8,9", "X@9,10"].sort();
+            conferirIgual("o quadro escreve exatamente as sete letras do mapa, cada uma no centro da sua casa", rotulos.join(" "), esperados.join(" "));
+
+            const espelhos = rotulosDesenhados.filter(function (rotulo) { return rotulo.texto === BARRA_INVERTIDA; });
+            conferirIgual("o espelho de barra invertida aparece uma vez por quadro", espelhos.length, 1);
+            conferirIgual("na casa (7, 2) do mapa", MAPA_EM_TEXTO[2][7], BARRA_INVERTIDA);
+
+            // toda letra do texto do mapa que a legenda rotula tem de aparecer no desenho
+            const rotuladasNoTexto = [];
+            MAPA_EM_TEXTO.forEach(function (linha, y) {
+                linha.split("").forEach(function (simbolo, x) {
+                    if ("ER/DSX".includes(simbolo) || simbolo === BARRA_INVERTIDA) {
+                        rotuladasNoTexto.push(simbolo + "@" + x + "," + y);
+                    }
+                });
+            });
+            conferirIgual("e coincide com as letras do texto do mapa", rotulos.join(" "), rotuladasNoTexto.sort().join(" "));
         });
 
         testar("ehSolida: parede, pedra, porta, emissor e receptor", function () {
@@ -503,6 +558,70 @@
             conferirIgual("soltar um mantém o outro", acoesAtivas.has("girarDireita") && !acoesAtivas.has("frente"), true);
             soltarTudo();
             conferirIgual("blur também solta botões", acoesAtivas.size, 0);
+        });
+
+        testar("entradas: a ação vale enquanto QUALQUER entrada a segurar", function () {
+            reiniciar(8.5, 2.5, 0);
+
+            apertar("w");
+            apertar("ArrowUp");
+            soltar("ArrowUp");
+            conferirIgual("soltar ↑ com W ainda apertada continua andando", acoesAtivas.has("frente"), true);
+            conferir("e o quadro anda", deslocamentoDeUmQuadro(50).x > 0.1);
+            soltar("w");
+            conferirIgual("soltar a última tecla para", acoesAtivas.has("frente"), false);
+
+            apertar("w");
+            apertar("ArrowUp");
+            soltar("w");
+            conferirIgual("a ordem inversa também: soltar W com ↑ apertada continua", acoesAtivas.has("frente"), true);
+            soltar("ArrowUp");
+            conferirIgual("e soltar a outra para", acoesAtivas.has("frente"), false);
+            conferirIgual("nenhuma entrada sobra", entradasAtivas.size, 0);
+
+            apertar("w");
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 7);
+            soltar("w");
+            conferirIgual("tecla + botão: soltar a tecla com o dedo no botão continua", acoesAtivas.has("frente"), true);
+            conferirIgual("o botão continua marcado como segurado", botaoDaAcao("frente").classList.contains("segurado"), true);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup", 7);
+            conferirIgual("soltar o dedo para", acoesAtivas.has("frente"), false);
+            conferirIgual("o botão desmarca", botaoDaAcao("frente").classList.contains("segurado"), false);
+
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 7);
+            apertar("w");
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup", 7);
+            conferirIgual("botão + tecla: soltar o dedo com a tecla apertada continua", acoesAtivas.has("frente"), true);
+            soltar("w");
+            conferirIgual("soltar a tecla para", acoesAtivas.has("frente"), false);
+
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 1);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 2);
+            conferirIgual("dois dedos no mesmo botão contam como duas entradas", entradasAtivas.size, 2);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerup", 1);
+            conferirIgual("soltar um dedo mantém a ação", acoesAtivas.has("tras"), true);
+            conferirIgual("e o botão marcado", botaoDaAcao("tras").classList.contains("segurado"), true);
+            dispararPonteiro(botaoDaAcao("tras"), "pointercancel", 1);
+            conferirIgual("soltar de novo o dedo 1 (já solto) não derruba o dedo 2", acoesAtivas.has("tras"), true);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerleave", 2);
+            conferirIgual("o dedo 2 saindo do botão solta", acoesAtivas.has("tras"), false);
+
+            apertar("w");
+            apertar("d");
+            apertar("ArrowRight");
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 5);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 6);
+            dispararPonteiro(botaoDaAcao("girarEsquerda"), "pointerdown", 8);
+            conferirIgual("seis entradas seguram quatro ações", entradasAtivas.size + "/" + acoesAtivas.size, "6/4");
+            soltarTudo();
+            conferirIgual("blur limpa as ações", acoesAtivas.size, 0);
+            conferirIgual("blur limpa as entradas (teclas e dedos)", entradasAtivas.size, 0);
+            conferirIgual("blur desmarca todos os botões", document.querySelectorAll(".segurado").length, 0);
+            const parou = deslocamentoDeUmQuadro(50);
+            conferir("depois do blur o quadro não anda nem gira", proximo(parou.x, 0) && proximo(parou.y, 0) && proximo(parou.giro, 0));
+
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup", 99);
+            conferirIgual("soltar um dedo que nunca apertou não quebra nem liga nada", acoesAtivas.size, 0);
         });
 
         testar("robô aleatório, 20.000 quadros", function () {

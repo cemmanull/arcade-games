@@ -206,7 +206,64 @@
             conferirIgual("a carga da página não registrou console.error", errosNaCarga.join(" | "), "");
         });
 
-        finalizar();
+        // Carrega o script do passo NUMA PÁGINA NOVA (iframe srcdoc, mesma origem) cujo mapa não tem J.
+        // O jogo lê o mapa ao carregar, então o único gancho é o primeiro `.map` sobre ele: o gancho
+        // tira o J do texto e se desfaz. Se o gancho não disparar, a preparação falhou, e o teste diz.
+        function montarPaginaSemJ() {
+            const fecharScript = "<" + "/script>";
+            return "<!DOCTYPE html><html><body>"
+                + '<canvas id="jogo" width="384" height="288"></canvas><p id="leitura"></p>'
+                + "<script>"
+                + "window.errosDeConsole = []; window.errosNaoTratados = []; window.quadrosPedidos = 0; window.ganchoDisparou = false;"
+                + "console.error = function () { window.errosDeConsole.push(Array.prototype.join.call(arguments, ' ')); };"
+                + "window.requestAnimationFrame = function () { window.quadrosPedidos++; return 1; };"
+                + "window.addEventListener('error', function (evento) { window.errosNaoTratados.push(evento.message); });"
+                + "var mapOriginal = Array.prototype.map;"
+                + "Array.prototype.map = function () {"
+                + "  Array.prototype.map = mapOriginal;"
+                + "  if (!window.ganchoDisparou && this[0] === '################') {"
+                + "    window.ganchoDisparou = true;"
+                + "    for (var i = 0; i < this.length; i++) { this[i] = this[i].replace('J', '.'); }"
+                + "  }"
+                + "  return mapOriginal.apply(this, arguments);"
+                + "};"
+                + fecharScript
+                + '<script src="../../reflexo/01-planta/script.js">' + fecharScript
+                + "</body></html>";
+        }
+
+        let jaFinalizou = false;
+        function terminarUmaVez() {
+            if (!jaFinalizou) {
+                jaFinalizou = true;
+                finalizar();
+            }
+        }
+
+        const quadroSemJ = document.createElement("iframe");
+        quadroSemJ.style.display = "none";
+        quadroSemJ.addEventListener("load", function () {
+            testar("mapa sem J: um único console.error, nenhum quadro pedido, nenhum erro", function () {
+                const janela = quadroSemJ.contentWindow;
+                conferirIgual("a preparação funcionou (o gancho tirou o J)", janela.ganchoDisparou, true);
+                conferirIgual("o script do passo carregou (a função existe)", typeof janela.verificarMapa, "function");
+                conferirIgual("exatamente um console.error", janela.errosDeConsole.length, 1);
+                conferir("e ele diz '0 jogadores'", janela.errosDeConsole[0] !== undefined && janela.errosDeConsole[0].indexOf("0 jogadores") !== -1, janela.errosDeConsole[0]);
+                conferirIgual("nenhum quadro foi pedido", janela.quadrosPedidos, 0);
+                conferirIgual("nenhum erro não tratado (nada de TypeError)", janela.errosNaoTratados.join(" | "), "");
+            });
+            terminarUmaVez();
+        });
+        quadroSemJ.srcdoc = montarPaginaSemJ();
+        document.body.appendChild(quadroSemJ);
+
+        // Se o iframe nunca carregar, o teste falha em vez de ficar sem resultado.
+        setTimeout(function () {
+            if (!jaFinalizou) {
+                conferir("o iframe do mapa sem J carregou", false);
+                terminarUmaVez();
+            }
+        }, 5000);
     </script>
 </body>
 
