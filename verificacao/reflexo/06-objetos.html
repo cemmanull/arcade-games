@@ -15,20 +15,27 @@
     <h1>Teste — Reflexo, passo 6: objetos</h1>
     <pre id="resultado"></pre>
 
-    <!-- O esqueleto do passo: o script dele procura estes ids e os botões [data-acao]. -->
-    <div id="palco">
-        <canvas id="visao" width="320" height="200"></canvas>
-        <canvas id="jogo" width="384" height="288" hidden></canvas>
-    </div>
-    <p id="leitura"></p>
-    <div id="controles">
-        <button type="button" data-acao="girarEsquerda">girarEsquerda</button>
-        <button type="button" data-acao="frente">frente</button>
-        <button type="button" data-acao="girarDireita">girarDireita</button>
-        <button type="button" data-acao="esquerda">esquerda</button>
-        <button type="button" data-acao="tras">tras</button>
-        <button type="button" data-acao="direita">direita</button>
-    </div>
+    <!-- O esqueleto do passo (o mesmo do index.html). Uma cópia viva vai para #aplicacao, escondida, para as
+         afirmações; outra, com o style.css de verdade, vai para os iframes (rolagem e alvos de toque). -->
+    <template id="esqueleto">
+        <h1>Reflexo</h1>
+        <div id="palco">
+            <canvas id="visao" width="320" height="200"></canvas>
+            <canvas id="jogo" width="384" height="288" hidden></canvas>
+        </div>
+        <p id="leitura"></p>
+        <div id="controles">
+            <button type="button" data-acao="girarEsquerda">⟲</button>
+            <button type="button" data-acao="frente">▲</button>
+            <button type="button" data-acao="girarDireita">⟳</button>
+            <button type="button" data-acao="esquerda">◀&#xFE0E;</button>
+            <button type="button" data-acao="tras">▼</button>
+            <button type="button" data-acao="direita">▶&#xFE0E;</button>
+            <button type="button" data-comando="planta" aria-pressed="false">Planta (H)</button>
+        </div>
+        <p id="ajuda">W S ou ↑ ↓: andar · A D: passo lateral · ← →: girar<br>H: planta (● linha vertical cruzada · ■ horizontal · círculo sombra · losango cristal)</p>
+    </template>
+    <div id="aplicacao" hidden></div>
 
     <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
     <script src="../apoio.js"></script>
@@ -38,6 +45,7 @@
         const janelaFalsa = { largura: 1280, altura: 720 };
         Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
         Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+        document.getElementById("aplicacao").appendChild(document.getElementById("esqueleto").content.cloneNode(true));
     </script>
 
     <!-- Este passo é sobre PIXELS: a imagem (#visao) usa o canvas de verdade e o teste lê o buffer e o canvas.
@@ -64,8 +72,9 @@
         const NIVEIS = 32;
         const DISTANCIA_DA_NEVOA_ESPERADA = 10;
         const NIVEIS_EXTRAS_DA_FACE_Y = 5;
-        const NEVOA = [8, 8, 14];
-        const HORIZONTE = [10, 10, 18];
+        // A cor da névoa e a do horizonte vêm do PASSO (uma cópia só); o que o teste afirma é a regra: são a mesma.
+        const NEVOA = COR_DA_NEVOA;
+        const HORIZONTE = COR_DO_HORIZONTE;
         const TETO_ALTO = [4, 4, 9];
         const PISO_BAIXO = [38, 38, 56];
         const TAMANHO_DA_TEXTURA_ESPERADO = 16;
@@ -484,6 +493,8 @@
             conferirIgual("com uma entrada por coluna: 320", zBuffer.length, 320);
             conferir("a lista de sprites é um array", Array.isArray(spritesDaTela));
             conferir("a profundidade mínima é pequena e positiva (" + PROFUNDIDADE_MINIMA + ")", PROFUNDIDADE_MINIMA > 0 && PROFUNDIDADE_MINIMA <= 0.5);
+            conferirIgual("a névoa é exatamente a cor do horizonte (parede e sprite enevoados somem nele)", JSON.stringify(COR_DA_NEVOA), JSON.stringify(COR_DO_HORIZONTE));
+            conferir("e são três canais inteiros de 0 a 255", COR_DA_NEVOA.length === 3 && COR_DA_NEVOA.every(function (canal) { return Number.isInteger(canal) && canal >= 0 && canal <= 255; }));
             conferirIgual("seis objetos no mapa", OBJETOS.length, 6);
             conferir("cada objeto tem um tipo do catálogo e está numa casa livre",
                 OBJETOS.every(function (objeto) { return CATALOGO_DE_SPRITES[objeto.tipo] !== undefined && !casaSolidaNoTexto(Math.floor(objeto.x), Math.floor(objeto.y)); }));
@@ -871,28 +882,144 @@
             });
         });
 
-        testar("a leitura do H conta os sprites na frente e os que aparecem", function () {
-            reiniciarEVer(1.5, 9.5, 0);
+        // Quantos sprites aparecem, ficam fora do campo e ficam tapados por parede: contados à mão sobre a projeção de referência.
+        // Fora do campo = o retângulo inteiro está à esquerda ou à direita da imagem; tapado = dentro do campo, mas nenhuma coluna passa.
+        function categoriasDeReferencia() {
+            const projecoes = projecoesDeReferencia(paredesDeReferencia());
+            const aparecem = projecoes.filter(function (projecao) { return projecao.colunas.length > 0; }).length;
+            const foraDoCampo = projecoes.filter(function (projecao) { return projecao.colunas.length === 0 && (projecao.direita <= 0 || projecao.esquerda >= larguraDaVisao); }).length;
+            return { naFrente: projecoes.length, aparecem: aparecem, foraDoCampo: foraDoCampo, tapados: projecoes.length - aparecem - foraDoCampo };
+        }
+
+        // Liga o H, lê a leitura de um quadro e desliga de novo.
+        function leituraComH() {
             apertarTecla("h");
             avancarQuadro(16);
             const texto = document.getElementById("leitura").textContent;
-            const esperados = projecoesDeReferencia(paredesDeReferencia());
-            const aparecem = esperados.filter(function (projecao) { return projecao.colunas.length > 0; }).length;
-            conferir("a leitura diz quantos sprites estão na frente de 6: " + esperados.length, texto.indexOf("sprites: " + esperados.length + " na frente de 6") !== -1, texto);
-            conferir("e quantos aparecem (z-buffer): " + aparecem, texto.indexOf(aparecem + " aparecem (z-buffer); os outros: parede") !== -1, texto);
+            apertarTecla("h");
+            avancarQuadro(16);
+            return texto;
+        }
+
+        function motivoDaLeituraErrada(texto, categorias, total) {
+            const esperado = "aparecem " + categorias.aparecem + " · fora do campo " + categorias.foraDoCampo + " · tapados " + categorias.tapados;
+            if (texto.indexOf("sprites: " + categorias.naFrente + " na frente de " + total) === -1) {
+                return "esperava 'sprites: " + categorias.naFrente + " na frente de " + total + "' em: " + texto;
+            }
+            if (texto.split("\n").indexOf(esperado) === -1) {
+                return "esperava a linha '" + esperado + "' em: " + texto;
+            }
+            if (categorias.aparecem + categorias.foraDoCampo + categorias.tapados !== categorias.naFrente) {
+                return "a referência não fecha a soma";
+            }
+            return null;
+        }
+
+        testar("a leitura do H: 'aparecem K · fora do campo F · tapados T', e K + F + T = os sprites na frente", function () {
+            reiniciarEVer(1.5, 9.5, 0);
+            const categorias = categoriasDeReferencia();
+            conferirIgual("corredor da fileira 9: 6 na frente; 3 aparecem, 2 ficam à esquerda da imagem (y = 1,5) e 1 está atrás da parede da fileira 8", JSON.stringify(categorias), JSON.stringify({ naFrente: 6, aparecem: 3, foraDoCampo: 2, tapados: 1 }));
+            apertarTecla("h");
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            conferirIgual("a leitura bate com a referência", motivoDaLeituraErrada(texto, categorias, 6), null);
             conferir("sem NaN, Infinity nem undefined", !/NaN|Infinity|undefined/.test(texto), texto);
             conferir("nenhuma linha passa de 40 letras", texto.split("\n").every(function (linha) { return linha.length <= 40; }), texto.split("\n").map(function (linha) { return linha.length; }).join(","));
             conferirIgual("com H a imagem some", visao.hidden, true);
-
-            reiniciarEVer(8.5, 9.5, Math.PI);
-            const deCostas = document.getElementById("leitura").textContent;
-            const esperadosDeCostas = projecoesDeReferencia(paredesDeReferencia());
-            conferir("de costas para o corredor: " + esperadosDeCostas.length + " na frente", deCostas.indexOf("sprites: " + esperadosDeCostas.length + " na frente de 6") !== -1, deCostas);
-
             apertarTecla("h");
             avancarQuadro(16);
-            conferirIgual("H de novo: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+
+            reiniciarEVer(8.5, 9.5, Math.PI);
+            conferirIgual("de costas para o corredor", motivoDaLeituraErrada(leituraComH(), categoriasDeReferencia(), 6), null);
+
+            // Um de cada: o da frente aparece, o do lado fica fora do campo (na frente do olho, mas à direita da imagem) e o
+            // de trás da parede da casa (5, 1) fica tapado.
+            const visivel = { tipo: "sombra", x: 3.5, y: 1.5 };
+            const foraDoCampo = { tipo: "cristal", x: 3.5, y: 8.5 };
+            const tapado = { tipo: "cristal", x: 6.5, y: 1.5 };
+            comObjetos([visivel, foraDoCampo, tapado], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                const umDeCada = categoriasDeReferencia();
+                conferirIgual("um de cada: a referência conta 1, 1 e 1", JSON.stringify(umDeCada), JSON.stringify({ naFrente: 3, aparecem: 1, foraDoCampo: 1, tapados: 1 }));
+                const projecaoFora = projecaoDeReferencia(foraDoCampo);
+                conferir("o de fora tem o retângulo todo à direita da imagem (esquerda " + projecaoFora.esquerda.toFixed(0) + " ≥ 320)", projecaoFora.esquerda >= 320);
+                const textoDeUmDeCada = leituraComH();
+                conferirIgual("a leitura diz aparecem 1 · fora do campo 1 · tapados 1", motivoDaLeituraErrada(textoDeUmDeCada, umDeCada, 3), null);
+                conferir("e as linhas cabem em 40 letras", textoDeUmDeCada.split("\n").every(function (linha) { return linha.length <= 40; }));
+            });
+
+            semearSorteio(861);
+            let problema = null;
+            let posesComFora = 0;
+            let posesComTapados = 0;
+            for (let indice = 0; indice < 60 && problema === null; indice++) {
+                const pose = sortearPoseLivre();
+                reiniciarEVer(pose.x, pose.y, pose.angulo);
+                const categoriasSorteadas = categoriasDeReferencia();
+                posesComFora += categoriasSorteadas.foraDoCampo > 0 ? 1 : 0;
+                posesComTapados += categoriasSorteadas.tapados > 0 ? 1 : 0;
+                problema = motivoDaLeituraErrada(leituraComH(), categoriasSorteadas, 6);
+            }
+            conferir("60 poses sorteadas: a leitura bate com a referência (fora do campo em " + posesComFora + " poses, tapados em " + posesComTapados + ")", problema === null, problema);
+            conferir("o sorteio exercitou as três categorias", posesComFora >= 10 && posesComTapados >= 3);
+            conferirIgual("H desligado: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
             conferirIgual("e a imagem volta", visao.hidden, false);
+        });
+
+        testar("a arte da sombra é a do catálogo e é a usada pelo tipo 'sombra'", function () {
+            const arte = CATALOGO_DE_SPRITES.sombra.arte;
+            conferir("a arte tem 16 linhas de 16 letras da paleta ou '.'", arte.length === 16 && arte.every(function (linha) { return linha.length === 16 && [...linha].every(function (letra) { return letra === "." || PALETA_DAS_TEXTURAS[letra] !== undefined; }); }));
+            conferirIgual("as sombras do mapa são do tipo 'sombra'", OBJETOS.filter(function (objeto) { return objeto.tipo === "sombra"; }).length, 3);
+
+            const sombra = { tipo: "sombra", x: 4.5, y: 9.5 };
+            comObjetos([sombra], function () {
+                reiniciarEVer(1.5, 9.5, 0);
+                const doSprite = spritesDaTela[0];
+                const nivel = nivelDeReferencia(doSprite.profundidade, "x");
+                const permitidas = new Set();
+                [...arte.join("")].filter(function (letra) { return letra !== "."; }).forEach(function (letra) {
+                    const cor = misturarComANevoa(corDoHex(PALETA_DAS_TEXTURAS[letra]), nivel);
+                    permitidas.add(((255 << 24) | (cor[2] << 16) | (cor[1] << 8) | cor[0]) >>> 0);
+                });
+                const comASombra = copiaDoBuffer();
+                conferirIgual("a imagem com a sombra é igual à referência (que lê a mesma arte do catálogo)", motivoDeBufferErrado(), null);
+                OBJETOS.length = 0;
+                avancarQuadro(16);
+                const semASombra = copiaDoBuffer();
+                OBJETOS.push(sombra);
+                let diferentes = 0;
+                let foraDaPaleta = 0;
+                comASombra.forEach(function (pixel, posicao) {
+                    if (pixel !== semASombra[posicao]) {
+                        diferentes++;
+                        foraDaPaleta += permitidas.has(pixel) ? 0 : 1;
+                    }
+                });
+                conferir("a sombra desenha pixels (" + diferentes + ")", diferentes > 100);
+                conferirIgual("todo pixel dela é uma cor da arte do catálogo no nível de névoa " + nivel, foraDaPaleta, 0);
+            });
+        });
+
+        testar("o botão Planta (H) é a mesma intenção da tecla H, e mostra se está ligado (aria-pressed)", function () {
+            reiniciarEVer(1.5, 9.5, 0);
+            const botao = document.querySelector('[data-comando="planta"]');
+            conferirIgual("existe o botão 'Planta (H)'", botao !== null && botao.textContent === "Planta (H)", true);
+            conferirIgual("começa desligado: aria-pressed=false", botao.getAttribute("aria-pressed"), "false");
+            botao.click();
+            avancarQuadro(16);
+            conferirIgual("clicar liga a planta", depuracaoLigada, true);
+            conferirIgual("aria-pressed=true", botao.getAttribute("aria-pressed"), "true");
+            conferirIgual("a imagem some e a planta aparece", visao.hidden + "," + tela.hidden, "true,false");
+            conferir("e a leitura aparece", document.getElementById("leitura").textContent.indexOf("sprites:") !== -1);
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("a tecla H desliga e o botão acompanha", depuracaoLigada + "," + botao.getAttribute("aria-pressed"), "false,false");
+            botao.click();
+            botao.click();
+            avancarQuadro(16);
+            conferirIgual("dois cliques voltam ao desligado", depuracaoLigada + "," + visao.hidden, "false,false");
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna", depuracaoLigada, false);
         });
 
         testar("robô aleatório: sprites, z-buffer e imagem em todo quadro", function () {
@@ -1028,7 +1155,75 @@
             conferirIgual("a lista original de objetos foi restaurada", OBJETOS.length, 6);
         });
 
-        finalizar();
+        // ---- iframes: o passo inteiro com o style.css de verdade, num tamanho de tela conhecido ----
+
+        function montarDocumentoDoIframe() {
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../reflexo/06-objetos/style.css"></head><body>'
+                + document.getElementById("esqueleto").innerHTML
+                + '<script>window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };<\/script>'
+                + '<script src="../../reflexo/06-objetos/script.js"><\/script></body></html>';
+        }
+
+        function abrirNumIframe(largura, altura) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe();
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirSemRolagem(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura);
+            try {
+                const janela = quadro.contentWindow;
+                const documento = janela.document;
+                const nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                darQuadro(janela, 16);
+                [false, true].forEach(function (comPlanta) {
+                    if (comPlanta) {
+                        documento.querySelector('[data-comando="planta"]').click();
+                        darQuadro(janela, 32);
+                    }
+                    const estado = nome + (comPlanta ? " com a planta (H)" : "");
+                    conferir(estado + ": não rola na vertical (altura do conteúdo " + documento.documentElement.scrollHeight + " ≤ " + janela.innerHeight + ")", documento.documentElement.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + documento.documentElement.scrollWidth + " ≤ " + janela.innerWidth + ")", documento.documentElement.scrollWidth <= janela.innerWidth);
+                });
+                const pequenos = Array.from(documento.querySelectorAll("#controles button")).filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 || caixa.height < 48;
+                }).map(function (botao) { return (botao.dataset.acao || botao.dataset.comando) + " " + botao.getBoundingClientRect().width.toFixed(0) + "×" + botao.getBoundingClientRect().height.toFixed(0); });
+                conferir(nome + ": todo botão de toque tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("rolagem 390×750", function () { return conferirSemRolagem(390, 750); });
+            await testarNoIframe("rolagem 360×640", function () { return conferirSemRolagem(360, 640); });
+            await testarNoIframe("rolagem 1280×800", function () { return conferirSemRolagem(1280, 800); });
+        }
+
+        principal().finally(finalizar);
     </script>
 </body>
 

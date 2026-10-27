@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 7: espelhos</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 7: espelhos</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo (o mesmo do index.html). Uma cópia viva vai para #aplicacao, escondida, para as
+         afirmações; outra, com o style.css de verdade, vai para os iframes (rolagem e movimento reduzido). -->
+    <template id="esqueleto">
+        <h1>Reflexo</h1>
+        <div id="palco">
+            <canvas id="visao" width="320" height="200"></canvas>
+            <canvas id="jogo" width="384" height="288" hidden></canvas>
+        </div>
+        <p id="leitura"></p>
+        <p id="aviso" class="so-leitor" role="status"></p>
+        <div id="controles">
+            <button type="button" data-acao="girarEsquerda">⟲</button>
+            <button type="button" data-acao="frente">▲</button>
+            <button type="button" data-acao="girarDireita">⟳</button>
+            <button type="button" data-acao="esquerda">◀&#xFE0E;</button>
+            <button type="button" data-acao="tras">▼</button>
+            <button type="button" data-acao="direita">▶&#xFE0E;</button>
+            <button type="button" data-comando="espelho">Espelho</button>
+            <button type="button" data-comando="planta" aria-pressed="false">Planta</button>
+            <button type="button" data-comando="reiniciar">Reiniciar</button>
+        </div>
+        <p id="ajuda">W S ou ↑ ↓: andar · A D: passo · ← →: girar<br>E ou Espaço: girar o espelho à frente · R: reiniciar a sala · H: planta (anel = receptor aceso)</p>
+    </template>
+    <div id="aplicacao" hidden></div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- A janela do teste é falsa e mutável (1280×720); o movimento reduzido está DESLIGADO nesta página
+         (o iframe liga). O esqueleto vira DOM antes do script do jogo procurar os ids. -->
+    <script>
+        const janelaFalsa = { largura: 1280, altura: 720 };
+        Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
+        Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+        window.matchMedia = function (consulta) {
+            return { matches: false, media: consulta, addEventListener: function () { }, removeEventListener: function () { } };
+        };
+        document.getElementById("aplicacao").appendChild(document.getElementById("esqueleto").content.cloneNode(true));
+    </script>
+
+    <!-- Este passo é sobre PIXELS do feixe e do espelho: a imagem (#visao) usa o canvas de verdade; só a planta ignora o desenho. -->
+    <script>
+        const contextoDaPlanta = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        const obterContextoDeVerdade = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (tipo, opcoes) {
+            return this.id === "jogo" ? contextoDaPlanta : obterContextoDeVerdade.call(this, tipo, opcoes);
+        };
+    </script>
+    <script src="../../reflexo/07-espelhos/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const PLANO_ESPERADO = Math.tan(33 * Math.PI / 180);   // campo de visão de 66°
+        const BARRA_INVERTIDA = "\\";
+
+        // A especificação (GDD 4.3 e 4.5), escrita aqui, não lida do jogo.
+        const LIMITE_DE_QUIQUES_ESPERADO = 8;
+        const ALCANCE_ESPERADO = 1.5;
+        const PARAM_O_FEIXE = "#%DER/\\";      // parede, pedra, porta (aberta ou fechada), emissor, receptor, espelho
+        const SOLIDOS_SEM_PORTA = "#%ER";
+        // Reflexão (eixo y para baixo): direção que chega → direção que sai.
+        const REFLEXAO_ESPERADA = {
+            "/": { "1,0": [0, -1], "0,-1": [1, 0], "-1,0": [0, 1], "0,1": [-1, 0] },
+            "\\": { "1,0": [0, 1], "0,1": [1, 0], "-1,0": [0, -1], "0,-1": [-1, 0] }
+        };
+        const QUATRO_DIRECOES = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+        // O traçado do mapa fixo (GDD 4.1 do passo): o primeiro espelho vira o feixe para baixo, o segundo para a esquerda.
+        const SEGMENTOS_INICIAIS = [[1.5, 5.5, 3.5, 5.5], [3.5, 5.5, 3.5, 8.5], [3.5, 8.5, 1, 8.5]];
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertarTecla(tecla, alvoDoEvento, extras) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, extras));
+            (alvoDoEvento || document).dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        function teclar(tecla) {
+            apertarTecla(tecla);
+            soltarTecla(tecla);
+        }
+
+        function quadros(quantidade) {
+            for (let indice = 0; indice < quantidade; indice++) {
+                avancarQuadro(16);
+            }
+        }
+
+        function segundos(duracao) {
+            quadros(Math.round(duracao * 1000 / 16));
+        }
+
+        // Põe o zelador numa pose conhecida, sem ações ativas, e roda UM quadro.
+        function posar(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+            avancarQuadro(16);
+        }
+
+        function botaoDe(comando) {
+            return document.querySelector('[data-comando="' + comando + '"]');
+        }
+
+        function perto(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        function indice(coluna, linha) {
+            return linha * COLUNAS + coluna;
+        }
+
+        function textoDoAviso() {
+            return document.getElementById("aviso").textContent;
+        }
+
+        function copiaDasLinhas(umaSala) {
+            return Array.from(umaSala.celulas);
+        }
+
+        const SALA_INICIAL_ESPERADA = MAPA_EM_TEXTO.map(function (linha) { return linha.replace("J", "."); });
+
+        // Volta ao começo pela porta do jogo e limpa o aviso.
+        function comecarDoZero() {
+            reiniciarSala();
+            avancarQuadro(16);
+        }
+
+        // ---- salas montadas à mão ----
+
+        function gradeVazia() {
+            return Array.from({ length: LINHAS }, function (_, linha) {
+                return linha === 0 || linha === LINHAS - 1 ? "#".repeat(COLUNAS) : "#" + ".".repeat(COLUNAS - 2) + "#";
+            });
+        }
+
+        // simbolos: [[coluna, linha, símbolo], ...]
+        function gradeCom(simbolos, base) {
+            const grade = (base || gradeVazia()).map(function (linha) { return linha.split(""); });
+            simbolos.forEach(function (item) { grade[item[1]][item[0]] = item[2]; });
+            return grade.map(function (linha) { return linha.join(""); });
+        }
+
+        // Troca a sala, os emissores e as portas do jogo (arrays const: muda-se o conteúdo) e devolve tudo ao sair.
+        function comLayout(grade, emissores, portas, funcao) {
+            const salaGuardada = sala;
+            const inicialGuardada = salaInicial;
+            const emissoresGuardados = EMISSORES.slice();
+            const portasGuardadas = PORTAS.slice();
+            EMISSORES.length = 0;
+            emissores.forEach(function (emissor) { EMISSORES.push(emissor); });
+            PORTAS.length = 0;
+            portas.forEach(function (porta) { PORTAS.push(porta); });
+            sala = salaInicial = congelar(grade);
+            portasAbertas.clear();
+            refazerLuz();
+            try {
+                funcao();
+            } finally {
+                EMISSORES.length = 0;
+                emissoresGuardados.forEach(function (emissor) { EMISSORES.push(emissor); });
+                PORTAS.length = 0;
+                portasGuardadas.forEach(function (porta) { PORTAS.push(porta); });
+                sala = salaGuardada;
+                salaInicial = inicialGuardada;
+                portasAbertas.clear();
+                refazerLuz();
+                soltarTudo();
+            }
+        }
+
+        // ---- a verdade independente: o feixe casa a casa, com a TABELA de reflexão (não a fórmula do jogo) ----
+
+        function simboloNaGrade(grade, coluna, linha) {
+            return grade[linha] === undefined ? undefined : grade[linha][coluna];
+        }
+
+        function luzDeReferencia(grade, emissores) {
+            const resultado = { segmentos: [], quiques: [], fins: [], casas: new Set(), acesos: new Set() };
+            emissores.forEach(function (emissor) {
+                let coluna = emissor.coluna;
+                let linha = emissor.linha;
+                let direcao = [emissor.dx, emissor.dy];
+                let x = coluna + 0.5;
+                let y = linha + 0.5;
+                for (let quique = 0; ; quique++) {
+                    let proximaColuna = coluna;
+                    let proximaLinha = linha;
+                    do {
+                        proximaColuna += direcao[0];
+                        proximaLinha += direcao[1];
+                        resultado.casas.add(indice(proximaColuna, proximaLinha));
+                    } while (!(simboloNaGrade(grade, proximaColuna, proximaLinha) === undefined || PARAM_O_FEIXE.includes(simboloNaGrade(grade, proximaColuna, proximaLinha))));
+
+                    const simbolo = simboloNaGrade(grade, proximaColuna, proximaLinha);
+                    const noEspelho = simbolo === "/" || simbolo === BARRA_INVERTIDA;
+                    const fimX = noEspelho ? proximaColuna + 0.5 : (direcao[0] > 0 ? proximaColuna : direcao[0] < 0 ? proximaColuna + 1 : x);
+                    const fimY = noEspelho ? proximaLinha + 0.5 : (direcao[1] > 0 ? proximaLinha : direcao[1] < 0 ? proximaLinha + 1 : y);
+                    resultado.segmentos.push([x, y, fimX, fimY]);
+                    if (!noEspelho || quique === LIMITE_DE_QUIQUES_ESPERADO) {
+                        resultado.fins.push({ coluna: proximaColuna, linha: proximaLinha, simbolo: simbolo, preso: noEspelho });
+                        if (simbolo === "R") {
+                            resultado.acesos.add(indice(proximaColuna, proximaLinha));
+                        }
+                        return;
+                    }
+                    resultado.quiques.push({ coluna: proximaColuna, linha: proximaLinha, simbolo: simbolo });
+                    direcao = REFLEXAO_ESPERADA[simbolo][direcao.join(",")];
+                    coluna = proximaColuna;
+                    linha = proximaLinha;
+                    x = fimX;
+                    y = fimY;
+                }
+            });
+            return resultado;
+        }
+
+        function casasSemSolidos(conjunto, grade) {
+            return Array.from(conjunto).filter(function (casa) {
+                return !SOLIDOS_SEM_PORTA.includes(grade[Math.floor(casa / COLUNAS)][casa % COLUNAS]) && grade[Math.floor(casa / COLUNAS)][casa % COLUNAS] !== "D";
+            }).sort(function (a, b) { return a - b; }).join(",");
+        }
+
+        // A luz do jogo contra a de referência para a sala atual. null ou o motivo.
+        function motivoDaLuzErrada(grade) {
+            const esperada = luzDeReferencia(grade, EMISSORES);
+            if (luz.segmentos.length !== esperada.segmentos.length) {
+                return luz.segmentos.length + " trechos em vez de " + esperada.segmentos.length;
+            }
+            for (let posicao = 0; posicao < esperada.segmentos.length; posicao++) {
+                const obtido = luz.segmentos[posicao];
+                const ref = esperada.segmentos[posicao];
+                if (![obtido.x0, obtido.y0, obtido.x1, obtido.y1].every(function (valor, campo) { return perto(valor, ref[campo], 1e-12); })) {
+                    return "trecho " + posicao + " é " + [obtido.x0, obtido.y0, obtido.x1, obtido.y1] + " em vez de " + ref;
+                }
+                if (!perto(obtido.comprimento, Math.hypot(ref[2] - ref[0], ref[3] - ref[1]), 1e-12)) {
+                    return "trecho " + posicao + ": comprimento " + obtido.comprimento;
+                }
+            }
+            const quiquesObtidos = JSON.stringify(luz.quiques.map(function (q) { return [q.coluna, q.linha, q.simbolo]; }));
+            const quiquesEsperados = JSON.stringify(esperada.quiques.map(function (q) { return [q.coluna, q.linha, q.simbolo]; }));
+            if (quiquesObtidos !== quiquesEsperados) {
+                return "quiques " + quiquesObtidos + " em vez de " + quiquesEsperados;
+            }
+            const finsObtidos = JSON.stringify(luz.fins.map(function (f) { return [f.coluna, f.linha, f.simbolo, f.preso]; }));
+            const finsEsperados = JSON.stringify(esperada.fins.map(function (f) { return [f.coluna, f.linha, f.simbolo, f.preso]; }));
+            if (finsObtidos !== finsEsperados) {
+                return "fins " + finsObtidos + " em vez de " + finsEsperados;
+            }
+            if (Array.from(luz.acesos).sort().join(",") !== Array.from(esperada.acesos).sort().join(",")) {
+                return "acesos " + Array.from(luz.acesos) + " em vez de " + Array.from(esperada.acesos);
+            }
+            if (casasSemSolidos(luz.casas, grade) !== casasSemSolidos(esperada.casas, grade)) {
+                return "casas iluminadas " + casasSemSolidos(luz.casas, grade) + " em vez de " + casasSemSolidos(esperada.casas, grade);
+            }
+            return null;
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial: sala congelada, luz do mapa fixo, nada aceso, constantes do GDD", function () {
+            comecarDoZero();
+            conferirIgual("nenhuma ação ativa ao abrir", acoesAtivas.size, 0);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            conferirIgual("o movimento reduzido está desligado nesta página", SEM_ANIMACAO, false);
+            const horizonteEmpacotado = ((255 << 24) | (COR_DO_HORIZONTE[2] << 16) | (COR_DO_HORIZONTE[1] << 8) | COR_DO_HORIZONTE[0]) >>> 0;
+            conferirIgual("a névoa é exatamente a cor do horizonte (a parede longe some nele)", JSON.stringify(COR_DA_NEVOA), JSON.stringify(COR_DO_HORIZONTE));
+            conferirIgual("a parede 100% enevoada (nível 31) tem só o pixel do horizonte", texturasSombreadas["#"][31].every(function (pixel) { return pixel === horizonteEmpacotado; }), true);
+            conferirIgual("o fundo na linha do horizonte tem a mesma cor", fundo[(alturaDaVisao / 2 - 1) * larguraDaVisao] === horizonteEmpacotado && fundo[(alturaDaVisao / 2) * larguraDaVisao] === horizonteEmpacotado, true);
+            conferirIgual("o limite de quiques é 8 (GDD 4.3)", LIMITE_DE_QUIQUES, LIMITE_DE_QUIQUES_ESPERADO);
+            conferirIgual("o alcance do botão Espelho é 1,5 casa (GDD 3)", ALCANCE_DO_ESPELHO, ALCANCE_ESPERADO);
+            conferir("a sala é um objeto congelado, e as linhas dela também", Object.isFrozen(sala) && Object.isFrozen(sala.celulas));
+            conferir("a cópia do começo também", Object.isFrozen(salaInicial) && Object.isFrozen(salaInicial.celulas));
+            conferirIgual("no começo a sala é a cópia inicial", sala === salaInicial, true);
+            conferirIgual("o texto da sala é o do mapa, com o J virado chão", JSON.stringify(copiaDasLinhas(sala)), JSON.stringify(SALA_INICIAL_ESPERADA));
+            conferirIgual("o zelador começa no J (1,5; 1,5)", jogador.x + "," + jogador.y, "1.5,1.5");
+            conferirIgual("olhando a 0,8 rad", jogador.angulo, 0.8);
+
+            conferirIgual("o mapa fixo tem 3 trechos de feixe", luz.segmentos.length, 3);
+            conferirIgual("e 2 quiques", luz.quiques.length, 2);
+            SEGMENTOS_INICIAIS.forEach(function (ref, posicao) {
+                const trecho = luz.segmentos[posicao];
+                conferir("trecho " + posicao + " vai de (" + ref[0] + ", " + ref[1] + ") a (" + ref[2] + ", " + ref[3] + ")",
+                    [trecho.x0, trecho.y0, trecho.x1, trecho.y1].every(function (valor, campo) { return perto(valor, ref[campo]); }),
+                    JSON.stringify(trecho));
+            });
+            conferirIgual("o feixe acaba na parede da borda esquerda (0, 8), sem ficar preso",
+                JSON.stringify([luz.fins[0].coluna, luz.fins[0].linha, luz.fins[0].simbolo, luz.fins[0].preso]), JSON.stringify([0, 8, "#", false]));
+            conferirIgual("nenhum receptor aceso", luz.acesos.size, 0);
+            conferirIgual("nenhuma porta aberta", portasAbertas.size, 0);
+            conferirIgual("a luz bate com a referência", motivoDaLuzErrada(SALA_INICIAL_ESPERADA), null);
+
+            conferirIgual("a porta (5, 4) fechada é sólida", ehSolida(5, 4), true);
+            conferirIgual("espelho não bloqueia o zelador", ehSolida(3, 5), false);
+            conferirIgual("emissor e receptor são sólidos", ehSolida(1, 5) && ehSolida(5, 2), true);
+            conferirIgual("o painel mostra 0 de 1 receptor e 0 de 1 porta", leitura.textContent.indexOf("Receptores 0/1 · Portas 0/1"), 0);
+        });
+
+        testar("refletir: a tabela dos 8 casos, sem −0, e refletir duas vezes volta ao começo", function () {
+            ["/", BARRA_INVERTIDA].forEach(function (simbolo) {
+                QUATRO_DIRECOES.forEach(function (entrada) {
+                    const esperado = REFLEXAO_ESPERADA[simbolo][entrada.join(",")];
+                    const obtido = refletir(simbolo, entrada[0], entrada[1]);
+                    conferir("'" + simbolo + "' leva (" + entrada + ") a (" + esperado + ")", Object.is(obtido.dx, esperado[0]) && Object.is(obtido.dy, esperado[1]), JSON.stringify(obtido) + " (Object.is distingue −0)");
+                    const devolta = refletir(simbolo, obtido.dx, obtido.dy);
+                    conferir("'" + simbolo + "' duas vezes devolve (" + entrada + ")", Object.is(devolta.dx, entrada[0]) && Object.is(devolta.dy, entrada[1]), JSON.stringify(devolta));
+                });
+            });
+            conferir("'/' leva (1, 0) a (0, −1): leste vira norte", Object.is(refletir("/", 1, 0).dy, -1) && Object.is(refletir("/", 1, 0).dx, 0));
+            conferir("'\\' leva (1, 0) a (0, 1): leste vira sul", Object.is(refletir(BARRA_INVERTIDA, 1, 0).dy, 1) && Object.is(refletir(BARRA_INVERTIDA, 1, 0).dx, 0));
+        });
+
+        testar("cada tipo de espelho, em cada direção, leva o feixe só ao receptor certo", function () {
+            ["/", BARRA_INVERTIDA].forEach(function (simbolo) {
+                QUATRO_DIRECOES.forEach(function (entrada) {
+                    const saida = REFLEXAO_ESPERADA[simbolo][entrada.join(",")];
+                    const espelho = [8, 5];
+                    const emissor = { coluna: espelho[0] - 2 * entrada[0], linha: espelho[1] - 2 * entrada[1], dx: entrada[0], dy: entrada[1] };
+                    const receptores = QUATRO_DIRECOES.map(function (direcao) { return [espelho[0] + 2 * direcao[0], espelho[1] + 2 * direcao[1]]; })
+                        .filter(function (casa) { return !(casa[0] === emissor.coluna && casa[1] === emissor.linha); });
+                    const grade = gradeCom([[emissor.coluna, emissor.linha, "E"], [espelho[0], espelho[1], simbolo]]
+                        .concat(receptores.map(function (casa) { return [casa[0], casa[1], "R"]; })));
+                    comLayout(grade, [emissor], [], function () {
+                        const certo = indice(espelho[0] + 2 * saida[0], espelho[1] + 2 * saida[1]);
+                        const nome = "'" + simbolo + "' com o feixe indo para (" + entrada + ")";
+                        conferirIgual(nome + ": só o receptor da direção (" + saida + ") acende", Array.from(luz.acesos).join(","), String(certo));
+                        conferirIgual(nome + ": um quique, dois trechos", luz.quiques.length + "," + luz.segmentos.length, "1,2");
+                        conferirIgual(nome + ": o quique é no espelho", JSON.stringify([luz.quiques[0].coluna, luz.quiques[0].linha, luz.quiques[0].simbolo]), JSON.stringify([espelho[0], espelho[1], simbolo]));
+                        conferirIgual(nome + ": igual à referência", motivoDaLuzErrada(grade), null);
+                    });
+                });
+            });
+        });
+
+        testar("o mapa fixo: dois espelhos girados levam o feixe ao receptor, e a luz é refeita no MESMO quadro", function () {
+            comecarDoZero();
+            posar(2.5, 5.5, 0);
+            conferir("primeiro espelho (3, 5) a 0,5 casa", alvo !== null && alvo.coluna === 3 && alvo.linha === 5 && perto(alvo.distancia, 0.5), JSON.stringify(alvo));
+            const antes = sala;
+            const textoAntes = JSON.stringify(copiaDasLinhas(antes));
+            teclar("e");
+            conferirIgual("sem esperar quadro nenhum: o espelho virou '/'", sala.celulas[5][3], "/");
+            conferirIgual("a sala é OUTRA", sala !== antes, true);
+            conferirIgual("a antiga não mudou", JSON.stringify(copiaDasLinhas(antes)), textoAntes);
+            conferirIgual("a luz já foi refeita: sobe e acaba na parede de cima", luz.segmentos.length + "," + luz.quiques.length, "3,2");
+            conferirIgual("o segundo trecho sobe de (3,5; 5,5) a (3,5; 2,5)",
+                [luz.segmentos[1].x0, luz.segmentos[1].y0, luz.segmentos[1].x1, luz.segmentos[1].y1].join(","), "3.5,5.5,3.5,2.5");
+            conferirIgual("a luz bate com a referência", motivoDaLuzErrada(copiaDasLinhas(sala)), null);
+            conferirIgual("ainda nenhum receptor", luz.acesos.size, 0);
+
+            posar(2.5, 2.5, 0);
+            conferir("segundo espelho (3, 2)", alvo !== null && alvo.coluna === 3 && alvo.linha === 2, JSON.stringify(alvo));
+            botaoDe("espelho").click();
+            conferirIgual("o botão Espelho faz o mesmo que a tecla: o feixe chega ao receptor (5, 2) na hora", luz.acesos.has(indice(5, 2)), true);
+            conferirIgual("o último trecho acaba na quina do receptor (5; 2,5)", [luz.segmentos[2].x1, luz.segmentos[2].y1].join(","), "5,2.5");
+            conferirIgual("o fim do feixe é o R", luz.fins[0].simbolo, "R");
+            conferirIgual("a luz bate com a referência", motivoDaLuzErrada(copiaDasLinhas(sala)), null);
+            quadros(2);
+            conferirIgual("o painel diz Receptores 1/1", leitura.textContent.indexOf("Receptores 1/1"), 0);
+            conferirIgual("e a porta abriu", portasAbertas.has(indice(5, 4)), true);
+            conferirIgual("a porta aberta não é sólida", ehSolida(5, 4), false);
+            conferirIgual("o painel diz Portas 1/1", leitura.textContent.indexOf("Receptores 1/1 · Portas 1/1"), 0);
+
+            teclar(" ");
+            conferirIgual("Espaço gira o espelho de novo: o feixe volta para a esquerda", luz.acesos.size, 0);
+            quadros(2);
+            conferirIgual("sem luz e sem corpo na porta, ela fecha", portasAbertas.size, 0);
+            conferirIgual("e volta a ser sólida", ehSolida(5, 4), true);
+        });
+
+        testar("layouts montados à mão: o feixe segue o traçado de referência", function () {
+            const casos = [
+                { nome: "reta até a parede", grade: gradeCom([[2, 6, "E"]]), emissores: [{ coluna: 2, linha: 6, dx: 1, dy: 0 }], quiques: 0, fim: "#" },
+                { nome: "espelho colado ao emissor", grade: gradeCom([[5, 5, "E"], [6, 5, "/"]]), emissores: [{ coluna: 5, linha: 5, dx: 1, dy: 0 }], quiques: 1, fim: "#" },
+                { nome: "dois espelhos em zigue-zague", grade: gradeCom([[2, 8, "E"], [6, 8, "/"], [6, 4, BARRA_INVERTIDA]]), emissores: [{ coluna: 2, linha: 8, dx: 1, dy: 0 }], quiques: 2, fim: "#" },
+                { nome: "pedra no caminho", grade: gradeCom([[2, 6, "E"], [6, 6, "%"], [9, 6, "/"]]), emissores: [{ coluna: 2, linha: 6, dx: 1, dy: 0 }], quiques: 0, fim: "%" },
+                { nome: "feixe para cima, para baixo e para a esquerda", grade: gradeCom([[8, 6, "E"], [8, 3, BARRA_INVERTIDA], [4, 3, "/"]]), emissores: [{ coluna: 8, linha: 6, dx: 0, dy: -1 }], quiques: 2, fim: "#" },
+                { nome: "dois emissores, cada um com o seu feixe", grade: gradeCom([[2, 2, "E"], [13, 9, "E"], [8, 2, BARRA_INVERTIDA], [10, 9, "/"]]), emissores: [{ coluna: 2, linha: 2, dx: 1, dy: 0 }, { coluna: 13, linha: 9, dx: -1, dy: 0 }], quiques: 2, fim: "#" },
+                { nome: "um feixe que bate no outro emissor", grade: gradeCom([[2, 6, "E"], [10, 6, "E"]]), emissores: [{ coluna: 2, linha: 6, dx: 1, dy: 0 }], quiques: 0, fim: "E" },
+                { nome: "o feixe passa pela fenda e pela saída", grade: gradeCom([[2, 6, "E"], [5, 6, "S"], [7, 6, "X"]]), emissores: [{ coluna: 2, linha: 6, dx: 1, dy: 0 }], quiques: 0, fim: "#" }
+            ];
+            casos.forEach(function (caso) {
+                comLayout(caso.grade, caso.emissores, [], function () {
+                    conferirIgual(caso.nome + ": igual à referência", motivoDaLuzErrada(caso.grade), null);
+                    conferirIgual(caso.nome + ": " + caso.quiques + " quiques", luz.quiques.length, caso.quiques);
+                    conferirIgual(caso.nome + ": termina em " + caso.fim, luz.fins[luz.fins.length - 1].simbolo, caso.fim);
+                });
+            });
+        });
+
+        // A escada de espelhos: cada '/' leva o feixe de leste a norte e de norte a leste, de novo e de novo.
+        const DEGRAUS = [[3, 10], [3, 8], [5, 8], [5, 6], [7, 6], [7, 4], [9, 4], [9, 2], [11, 2]];
+
+        testar("limite de 8 quiques: uma escada de 8 espelhos passa, a de 9 prende o feixe no último", function () {
+            const emissor = { coluna: 1, linha: 10, dx: 1, dy: 0 };
+            [8, 9].forEach(function (quantidade) {
+                const grade = gradeCom([[1, 10, "E"]].concat(DEGRAUS.slice(0, quantidade).map(function (casa) { return [casa[0], casa[1], "/"]; })));
+                comLayout(grade, [emissor], [], function () {
+                    conferirIgual(quantidade + " espelhos: 9 trechos", luz.segmentos.length, 9);
+                    conferirIgual(quantidade + " espelhos: no máximo 8 quiques", luz.quiques.length, 8);
+                    conferirIgual(quantidade + " espelhos: igual à referência", motivoDaLuzErrada(grade), null);
+                    const fim = luz.fins[0];
+                    if (quantidade === 8) {
+                        conferirIgual("8 espelhos: o oitavo ainda reflete e o feixe acaba na parede (15, 2), sem ficar preso", JSON.stringify([fim.coluna, fim.linha, fim.simbolo, fim.preso]), JSON.stringify([15, 2, "#", false]));
+                    } else {
+                        conferirIgual("9 espelhos: preso: true no nono, em (11, 2)", JSON.stringify([fim.coluna, fim.linha, fim.simbolo, fim.preso]), JSON.stringify([11, 2, "/", true]));
+                        conferirIgual("9 espelhos: o nono NÃO reflete (nenhum trecho sai dele)", luz.segmentos[luz.segmentos.length - 1].x1 + "," + luz.segmentos[luz.segmentos.length - 1].y1, "11.5,2.5");
+                    }
+                });
+            });
+            const quatro = gradeCom([[1, 10, "E"]].concat(DEGRAUS.slice(0, 4).map(function (casa) { return [casa[0], casa[1], "/"]; })));
+            comLayout(quatro, [emissor], [], function () {
+                conferirIgual("4 espelhos: 5 trechos, 4 quiques, não preso", luz.segmentos.length + "," + luz.quiques.length + "," + luz.fins[0].preso, "5,4,false");
+            });
+        });
+
+        testar("um anel de espelhos termina: o feixe volta ao emissor e para", function () {
+            const anel = gradeCom([[4, 2, "E"], [3, 2, "/"], [8, 2, BARRA_INVERTIDA], [8, 6, "/"], [3, 6, BARRA_INVERTIDA]]);
+            const emissor = { coluna: 4, linha: 2, dx: 1, dy: 0 };
+            comLayout(anel, [emissor], [], function () {
+                conferirIgual("anel: 4 quiques, um em cada canto", luz.quiques.length, 4);
+                conferirIgual("anel: 5 trechos", luz.segmentos.length, 5);
+                conferirIgual("anel: o feixe acaba no próprio emissor, sem ficar preso", JSON.stringify([luz.fins[0].coluna, luz.fins[0].linha, luz.fins[0].simbolo, luz.fins[0].preso]), JSON.stringify([4, 2, "E", false]));
+                conferirIgual("anel: igual à referência", motivoDaLuzErrada(anel), null);
+            });
+            const anelDeDentro = gradeCom([[5, 5, "E"], [3, 5, "/"], [3, 8, BARRA_INVERTIDA], [8, 8, "/"], [8, 5, BARRA_INVERTIDA]]);
+            comLayout(anelDeDentro, [{ coluna: 5, linha: 5, dx: -1, dy: 0 }], [], function () {
+                conferir("anel pelo outro lado: termina com no máximo 8 quiques", luz.quiques.length <= 8 && luz.segmentos.length <= 9, luz.quiques.length + " quiques");
+                conferirIgual("anel pelo outro lado: igual à referência", motivoDaLuzErrada(anelDeDentro), null);
+            });
+        });
+
+        testar("400 layouts sorteados (espelhos, pedras, 1 ou 2 emissores): a luz é igual à referência", function () {
+            semearSorteio(707);
+            const sorteio = function (quantidade) { return Math.floor(Math.random() * quantidade); };
+            const tipos = ["/", BARRA_INVERTIDA, "/", BARRA_INVERTIDA, "/", BARRA_INVERTIDA, "#", "%", "R", "D", "S"];
+            let problema = null;
+            let comTresQuiquesOuMais = 0;
+            let comReceptorAceso = 0;
+            let comFeixePreso = 0;
+
+            for (let rodada = 0; rodada < 400 && problema === null; rodada++) {
+                const simbolos = [];
+                const quantidade = 8 + sorteio(40);
+                for (let item = 0; item < quantidade; item++) {
+                    simbolos.push([1 + sorteio(COLUNAS - 2), 1 + sorteio(LINHAS - 2), tipos[sorteio(tipos.length)]]);
+                }
+                const emissores = [];
+                const quantosEmissores = 1 + sorteio(2);
+                for (let item = 0; item < quantosEmissores; item++) {
+                    const direcao = QUATRO_DIRECOES[sorteio(4)];
+                    const emissor = { coluna: 1 + sorteio(COLUNAS - 2), linha: 1 + sorteio(LINHAS - 2), dx: direcao[0], dy: direcao[1] };
+                    emissores.push(emissor);
+                    simbolos.push([emissor.coluna, emissor.linha, "E"]);
+                }
+                if (emissores.length === 2 && emissores[0].coluna === emissores[1].coluna && emissores[0].linha === emissores[1].linha) {
+                    emissores.pop();
+                }
+                const grade = gradeCom(simbolos);
+                comLayout(grade, emissores, [], function () {
+                    problema = motivoDaLuzErrada(grade);
+                    if (problema !== null) {
+                        problema = "rodada " + rodada + " (" + grade.join("|") + ", emissores " + JSON.stringify(emissores) + "): " + problema;
+                    }
+                    comTresQuiquesOuMais += luz.quiques.length >= 3 ? 1 : 0;
+                    comReceptorAceso += luz.acesos.size > 0 ? 1 : 0;
+                    comFeixePreso += luz.fins.some(function (fim) { return fim.preso; }) ? 1 : 0;
+                });
+            }
+            conferir("400 layouts: trechos, quiques, fins, receptores acesos e casas iguais à referência", problema === null, problema);
+            conferir("o sorteio exercitou o bastante: " + comTresQuiquesOuMais + " layouts com 3 ou mais quiques e " + comReceptorAceso + " com receptor aceso",
+                comTresQuiquesOuMais >= 15 && comReceptorAceso >= 15);
+        });
+
+        // Uma porta, um receptor atrás de um espelho, e o zelador que pode estar na casa da porta.
+        const PORTA_E_ESPELHO = {
+            grade: gradeCom([[2, 6, "E"], [4, 6, "/"], [4, 3, "R"], [6, 6, "D"]]),
+            emissores: [{ coluna: 2, linha: 6, dx: 1, dy: 0 }],
+            portas: [{ coluna: 6, linha: 6, receptores: [{ coluna: 4, linha: 3 }] }]
+        };
+
+        testar("a porta nunca fecha sobre o zelador: fica aberta enquanto o corpo toca a casa, e fecha quando ele sai", function () {
+            comLayout(PORTA_E_ESPELHO.grade, PORTA_E_ESPELHO.emissores, PORTA_E_ESPELHO.portas, function () {
+                posar(9.5, 9.5, 0);
+                conferirIgual("o receptor está aceso", luz.acesos.has(indice(4, 3)), true);
+                conferirIgual("a porta abre com a luz", portasAbertas.has(indice(6, 6)), true);
+                conferirIgual("o aviso diz Porta aberta", textoDoAviso(), "Porta aberta");
+
+                posar(6.5, 6.5, Math.PI);   // dentro da casa da porta, olhando o espelho (4, 6) a 1,5 casa
+                conferir("estando na porta, o espelho a 1,5 casa é o alvo", alvo !== null && alvo.coluna === 4 && alvo.linha === 6 && perto(alvo.distancia, 1.5), JSON.stringify(alvo));
+                teclar("e");
+                conferirIgual("o espelho virou '\\' e a luz sumiu", luz.acesos.size, 0);
+                conferirIgual("na hora, a porta continua aberta (a luz só é lida no quadro)", portasAbertas.size, 1);
+                segundos(2);
+                conferirIgual("2 s sem luz com o corpo na casa: a porta continua aberta", portasAbertas.has(indice(6, 6)), true);
+                conferirIgual("e continua passável", ehSolida(6, 6), false);
+                conferir("o aviso não disse Porta fechada", textoDoAviso() !== "Porta fechada", textoDoAviso());
+                conferir("o zelador não foi empurrado nem esmagado: ainda em (6,5; 6,5)", perto(jogador.x, 6.5) && perto(jogador.y, 6.5));
+
+                posar(7.24, 6.5, 0);   // o corpo (raio 0,25) ainda encosta na casa: a quina está a 0,24
+                conferirIgual("a 0,24 da porta o corpo ainda toca: aberta", portasAbertas.has(indice(6, 6)), true);
+                posar(7.26, 6.5, 0);   // a 0,26: já não toca
+                conferirIgual("a 0,26 da porta o corpo não toca mais: ela fecha", portasAbertas.has(indice(6, 6)), false);
+                conferirIgual("o aviso diz Porta fechada", textoDoAviso(), "Porta fechada");
+                conferirIgual("e voltou a ser sólida", ehSolida(6, 6), true);
+                conferirIgual("o zelador nunca ficou dentro de casa sólida", ehSolida(Math.floor(jogador.x), Math.floor(jogador.y)), false);
+
+                posar(6.5, 6.5, Math.PI);   // proibido: a porta fechada com o corpo dentro NÃO reabre sozinha sem luz
+                conferirIgual("sem luz, a porta que fechou não reabre só porque o corpo voltou", portasAbertas.size, 0);
+            });
+        });
+
+        testar("a porta só abre com TODOS os receptores acesos agora, e fecha quando um se apaga", function () {
+            const emissores = [{ coluna: 2, linha: 3, dx: 1, dy: 0 }, { coluna: 2, linha: 8, dx: 1, dy: 0 }];
+            const portas = [{ coluna: 10, linha: 5, receptores: [{ coluna: 6, linha: 3 }, { coluna: 6, linha: 8 }] }];
+            const base = [[2, 3, "E"], [2, 8, "E"], [6, 3, "R"], [6, 8, "R"], [10, 5, "D"]];
+            const variantes = [
+                { nome: "os dois acesos", bloqueios: [], aberta: true },
+                { nome: "só o de cima aceso", bloqueios: [[4, 8, "#"]], aberta: false },
+                { nome: "só o de baixo aceso", bloqueios: [[4, 3, "#"]], aberta: false },
+                { nome: "nenhum aceso", bloqueios: [[4, 3, "#"], [4, 8, "#"]], aberta: false }
+            ];
+            variantes.forEach(function (variante) {
+                const grade = gradeCom(base.concat(variante.bloqueios));
+                comLayout(grade, emissores, portas, function () {
+                    posar(8.5, 5.5, 0);
+                    conferirIgual(variante.nome + ": porta " + (variante.aberta ? "aberta" : "fechada"), portasAbertas.has(indice(10, 5)), variante.aberta);
+                    conferirIgual(variante.nome + ": a contagem de receptores bate", luz.acesos.size, 2 - variante.bloqueios.length);
+                });
+            });
+
+            comLayout(gradeCom(base), emissores, portas, function () {
+                posar(8.5, 5.5, 0);
+                conferirIgual("com os dois acesos a porta está aberta", portasAbertas.size, 1);
+                sala = congelar(gradeCom(base.concat([[4, 8, "#"]])));   // apaga um receptor (a sala nova, como o jogo faz)
+                refazerLuz();
+                quadros(2);
+                conferirIgual("apagou um dos dois: a porta fecha (o zelador está longe dela)", portasAbertas.size, 0);
+                sala = congelar(gradeCom(base));
+                refazerLuz();
+                quadros(2);
+                conferirIgual("voltou a luz: a porta reabre", portasAbertas.size, 1);
+            });
+        });
+
+        testar("uma porta aberta ainda bloqueia o feixe (de propósito: evita o laço luz → porta → luz)", function () {
+            const emissores = [{ coluna: 2, linha: 3, dx: 1, dy: 0 }, { coluna: 2, linha: 8, dx: 1, dy: 0 }];
+            const portas = [{ coluna: 5, linha: 8, receptores: [{ coluna: 6, linha: 3 }] }];
+            const grade = gradeCom([[2, 3, "E"], [2, 8, "E"], [6, 3, "R"], [5, 8, "D"], [8, 8, "R"]]);
+            comLayout(grade, emissores, portas, function () {
+                posar(8.5, 5.5, 0);
+                const antes = JSON.stringify(luz.segmentos);
+                conferirIgual("a porta (5, 8) abriu com a luz do outro receptor", portasAbertas.has(indice(5, 8)), true);
+                conferirIgual("e dá passagem ao zelador", ehSolida(5, 8), false);
+                const segundoFim = luz.fins[1];
+                conferirIgual("mesmo aberta, o feixe do segundo emissor acaba na porta", JSON.stringify([segundoFim.coluna, segundoFim.linha, segundoFim.simbolo]), JSON.stringify([5, 8, "D"]));
+                conferirIgual("o receptor atrás da porta (8, 8) NÃO acende", luz.acesos.has(indice(8, 8)), false);
+                quadros(5);
+                conferirIgual("a luz é a mesma antes e depois de a porta abrir", JSON.stringify(luz.segmentos), antes);
+                conferirIgual("e a porta segue aberta, sem oscilar", portasAbertas.has(indice(5, 8)), true);
+                refazerLuz();   // o que acontece ao girar qualquer espelho com a porta já aberta
+                conferirIgual("refeita a luz COM a porta aberta, o feixe ainda para na porta", JSON.stringify([luz.fins[1].coluna, luz.fins[1].linha, luz.fins[1].simbolo]), JSON.stringify([5, 8, "D"]));
+                conferirIgual("o receptor de trás continua apagado", luz.acesos.has(indice(8, 8)), false);
+                conferirIgual("e a luz refeita é a mesma", JSON.stringify(luz.segmentos), antes);
+                conferirIgual("igual à referência (que trata a porta como obstáculo)", motivoDaLuzErrada(grade), null);
+                quadros(3);
+                conferirIgual("a porta não pisca: segue aberta", portasAbertas.has(indice(5, 8)), true);
+            });
+        });
+
+        testar("sala e sala inicial são congeladas: escrever na propriedade ou no aninhado não muda nada (em modo estrito lança)", function () {
+            comecarDoZero();
+            const alvos = [["sala", sala], ["salaInicial", salaInicial]];
+            alvos.forEach(function (par) {
+                const nome = par[0];
+                const objeto = par[1];
+                const textoAntes = JSON.stringify(copiaDasLinhas(objeto));
+                const escritas = {
+                    "propriedade: celulas = []": "objeto.celulas = [];",
+                    "propriedade nova: nova = 1": "objeto.nova = 1;",
+                    "aninhado: celulas[5] = 'x'": "objeto.celulas[5] = 'xxx';",
+                    "aninhado: celulas.push": "objeto.celulas.push('x');",
+                    "aninhado: celulas.length = 0": "objeto.celulas.length = 0;",
+                    "aninhado: celulas.pop": "objeto.celulas.pop();"
+                };
+                Object.keys(escritas).forEach(function (escrita) {
+                    let lancou = false;
+                    try {
+                        new Function("objeto", '"use strict"; ' + escritas[escrita])(objeto);
+                    } catch (erro) {
+                        lancou = erro instanceof TypeError;
+                    }
+                    conferirIgual(nome + ", modo estrito, " + escrita + ": lança TypeError", lancou, true);
+                    try {
+                        new Function("objeto", escritas[escrita])(objeto);   // modo comum: ignorada em silêncio (ou lança); nunca muda
+                    } catch (erro) { /* tudo bem */ }
+                    conferirIgual(nome + ", " + escrita + ": o conteúdo continua o mesmo", JSON.stringify(copiaDasLinhas(objeto)), textoAntes);
+                });
+                conferirIgual(nome + ": ainda 12 linhas", objeto.celulas.length, 12);
+            });
+        });
+
+        testar("salaComEspelhoGirado devolve uma sala NOVA e congelada, e deixa a antiga intacta", function () {
+            comecarDoZero();
+            const original = sala;
+            const textoOriginal = JSON.stringify(copiaDasLinhas(original));
+            const girada = salaComEspelhoGirado(original, 3, 5);
+            conferirIgual("é outro objeto", girada !== original, true);
+            conferirIgual("a antiga não mudou", JSON.stringify(copiaDasLinhas(original)), textoOriginal);
+            conferir("a nova é congelada, as linhas também", Object.isFrozen(girada) && Object.isFrozen(girada.celulas));
+            conferirIgual("o espelho (3, 5) era '\\' e virou '/'", original.celulas[5][3] + girada.celulas[5][3], BARRA_INVERTIDA + "/");
+            const diferentes = girada.celulas.map(function (linha, posicao) { return linha !== original.celulas[posicao]; }).filter(Boolean).length;
+            conferirIgual("só uma linha mudou", diferentes, 1);
+            conferirIgual("e a linha só mudou naquela casa", girada.celulas[5].split("").filter(function (letra, coluna) { return letra !== original.celulas[5][coluna]; }).length, 1);
+            const devolta = salaComEspelhoGirado(girada, 3, 5);
+            conferirIgual("girar duas vezes volta ao texto original (sala nova, mesmo texto)", JSON.stringify(copiaDasLinhas(devolta)) === textoOriginal && devolta !== original, true);
+            conferirIgual("a segunda sala também não foi alterada", girada.celulas[5][3], "/");
+        });
+
+        testar("reiniciar volta ao estado inicial EXATO, venha do estado que vier", function () {
+            comecarDoZero();
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            posar(2.5, 2.5, 0);
+            teclar("e");
+            quadros(2);
+            posar(12.5, 10.5, 1.1);   // na saída
+            conferirIgual("antes de reiniciar: porta aberta", portasAbertas.size, 1);
+            conferirIgual("e saída alcançada", saidaAlcancada, true);
+            conferirIgual("e a sala é outra", JSON.stringify(copiaDasLinhas(sala)) !== JSON.stringify(SALA_INICIAL_ESPERADA), true);
+
+            teclar("r");
+            conferirIgual("depois do R: a sala é a cópia inicial (mesmo objeto)", sala === salaInicial, true);
+            conferirIgual("e é igual, em profundidade, ao texto do mapa com o J virado chão", JSON.stringify(copiaDasLinhas(sala)), JSON.stringify(SALA_INICIAL_ESPERADA));
+            conferirIgual("o zelador volta ao J, olhando a 0,8 rad", jogador.x + "," + jogador.y + "," + jogador.angulo, "1.5,1.5,0.8");
+            conferirIgual("a direção acompanha o ângulo", perto(jogador.dx, Math.cos(0.8)) && perto(jogador.dy, Math.sin(0.8)), true);
+            conferirIgual("portas fechadas", portasAbertas.size, 0);
+            conferirIgual("saída não alcançada", saidaAlcancada, false);
+            conferirIgual("a luz volta a ser a do começo (3 trechos, nada aceso)", luz.segmentos.length + "," + luz.acesos.size, "3,0");
+            conferirIgual("o aviso diz Sala reiniciada", textoDoAviso(), "Sala reiniciada");
+            quadros(3);
+            conferirIgual("e depois de alguns quadros nada reabre", portasAbertas.size, 0);
+
+            botaoDe("reiniciar").click();
+            conferirIgual("o botão Reiniciar também deixa a sala = a inicial", sala === salaInicial, true);
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", repeat: true }));
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", repeat: true }));
+            conferirIgual("R segurado (repeat) não reinicia", sala !== salaInicial, true);
+            comecarDoZero();
+        });
+
+        testar("o alvo do botão Espelho: o PRIMEIRO espelho a até 1,5 casa ao longo do olhar", function () {
+            comecarDoZero();
+            const casos = [
+                { nome: "a 1,5 casa exatas (limite incluído)", pose: [3.5, 3.5, Math.PI / 2], esperado: [3, 5, 1.5] },
+                { nome: "a 1,4 casa", pose: [3.5, 3.6, Math.PI / 2], esperado: [3, 5, 1.4] },
+                { nome: "a 1,6 casa: fora do alcance", pose: [3.5, 3.4, Math.PI / 2], esperado: null },
+                { nome: "colado, a 0,5 casa", pose: [3.5, 4.5, Math.PI / 2], esperado: [3, 5, 0.5] },
+                { nome: "dois espelhos na linha: vale o mais perto (3, 8), não o (3, 5) que ficou para trás", pose: [3.5, 6.5, Math.PI / 2], esperado: [3, 8, 1.5] },
+                { nome: "olhando para cima: o mais perto é o (3, 5), não o (3, 2) além dele", pose: [3.5, 6.5, -Math.PI / 2], esperado: [3, 5, 0.5] },
+                { nome: "espelho atrás do zelador: nenhum", pose: [3.5, 6.5, 0], esperado: null },
+                { nome: "espelho na diagonal, fora da linha do olhar: nenhum", pose: [2.5, 4.5, 0], esperado: null },
+                { nome: "emissor à frente a 1 casa: não é espelho", pose: [2.5, 5.5, Math.PI], esperado: null },
+                { nome: "longe de tudo", pose: [1.5, 1.5, 0.8], esperado: null }
+            ];
+            casos.forEach(function (caso) {
+                posar(caso.pose[0], caso.pose[1], caso.pose[2]);
+                if (caso.esperado === null) {
+                    conferirIgual(caso.nome + ": sem alvo", alvo, null);
+                } else {
+                    conferir(caso.nome + ": alvo (" + caso.esperado[0] + ", " + caso.esperado[1] + ") a " + caso.esperado[2],
+                        alvo !== null && alvo.coluna === caso.esperado[0] && alvo.linha === caso.esperado[1] && perto(alvo.distancia, caso.esperado[2], 1e-9), JSON.stringify(alvo));
+                }
+            });
+
+            const parede = gradeCom([[4, 5, "E"], [6, 5, "#"], [7, 5, "/"], [9, 8, "D"], [9, 7, "/"]]);
+            comLayout(parede, [{ coluna: 4, linha: 5, dx: 1, dy: 0 }], [], function () {
+                posar(5.5, 5.5, 0);
+                conferirIgual("uma parede entre o zelador e o espelho tapa o alvo (parede a 0,5, espelho a 1,5)", alvo, null);
+                posar(9.5, 9.5, -Math.PI / 2);
+                conferirIgual("uma porta entre o zelador e o espelho também tapa o alvo", alvo, null);
+            });
+
+            comecarDoZero();
+            posar(1.5, 1.5, 0.8);
+            const antes = sala;
+            teclar("e");
+            conferirIgual("sem espelho ao alcance a sala não muda", sala === antes, true);
+            conferirIgual("e o aviso diz que não há espelho", textoDoAviso(), "Nenhum espelho ao alcance");
+        });
+
+        testar("os avisos para o leitor de tela (#aviso, role=status) aparecem nos eventos certos", function () {
+            comecarDoZero();
+            teclar("e");
+            conferirIgual("sem espelho", textoDoAviso(), "Nenhum espelho ao alcance");
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            conferirIgual("espelho girado", textoDoAviso(), "Espelho girado");
+            posar(2.5, 2.5, 0);
+            teclar("e");
+            conferirIgual("o segundo giro também avisa", textoDoAviso(), "Espelho girado");
+            avancarQuadro(16);
+            conferirIgual("porta aberta", textoDoAviso(), "Porta aberta");
+            teclar("e");
+            avancarQuadro(16);
+            conferirIgual("a luz some e a porta (o zelador está longe) fecha: Porta fechada", textoDoAviso(), "Porta fechada");
+            teclar("r");
+            conferirIgual("reiniciar", textoDoAviso(), "Sala reiniciada");
+            posar(12.5, 10.5, 0);
+            conferirIgual("a saída", textoDoAviso(), "Saída alcançada");
+            conferirIgual("e o painel diz Saída alcançada!", leitura.textContent.indexOf("Saída alcançada!") !== -1, true);
+            conferir("o aviso fica fora da vista mas existe para o leitor de tela (role=status no esqueleto)", document.getElementById("aviso").getAttribute("role") === "status");
+        });
+
+        testar("botões e teclas são a mesma intenção (Espaço, E, maiúscula, repeat, Espaço em botão)", function () {
+            comecarDoZero();
+            posar(2.5, 5.5, 0);
+            conferirIgual("o botão Planta começa com aria-pressed=false", botaoDe("planta").getAttribute("aria-pressed"), "false");
+            botaoDe("planta").click();
+            avancarQuadro(16);
+            conferirIgual("clicar em Planta liga a depuração", depuracaoLigada, true);
+            conferirIgual("aria-pressed=true", botaoDe("planta").getAttribute("aria-pressed"), "true");
+            conferirIgual("a imagem some e a planta aparece", visao.hidden + "," + tela.hidden, "true,false");
+            teclar("h");
+            avancarQuadro(16);
+            conferirIgual("a tecla H desliga, e o botão acompanha", depuracaoLigada + "," + botaoDe("planta").getAttribute("aria-pressed"), "false,false");
+            conferirIgual("a imagem volta", visao.hidden + "," + tela.hidden, "false,true");
+
+            const antes = sala;
+            apertarTecla("e", document, { repeat: true });
+            conferirIgual("E segurado (repeat) não gira", sala === antes, true);
+            apertarTecla("E");
+            conferirIgual("E maiúsculo gira", sala !== antes, true);
+            const depoisDoE = sala;
+            apertarTecla(" ", botaoDe("espelho"));
+            conferirIgual("Espaço com o foco num botão não gira (o botão já conta o Espaço: evita girar duas vezes)", sala === depoisDoE, true);
+            const evento = apertarTecla(" ");
+            conferirIgual("Espaço fora de botão gira o espelho", sala !== depoisDoE, true);
+            conferirIgual("e não rola a página (preventDefault)", evento.defaultPrevented, true);
+            comecarDoZero();
+        });
+
+        testar("a leitura do H (6 linhas curtas) e o painel (2 linhas curtas) não têm NaN", function () {
+            comecarDoZero();
+            posar(2.5, 5.5, 0.3);
+            teclar("h");
+            avancarQuadro(16);
+            const linhas = leitura.textContent.split("\n");
+            conferirIgual("a leitura do H tem 6 linhas", linhas.length, 6);
+            conferir("nenhuma linha passa de 40 letras: " + linhas.map(function (linha) { return linha.length; }), linhas.every(function (linha) { return linha.length <= 40; }));
+            conferir("sem NaN, Infinity nem undefined", !/NaN|Infinity|undefined/.test(leitura.textContent), leitura.textContent);
+            conferirIgual("conta os trechos e os quiques do mapa fixo", linhas[2], "feixe: 3 trechos · 2 quiques");
+            teclar("h");
+            avancarQuadro(16);
+            const painel = leitura.textContent.split("\n");
+            conferirIgual("o painel tem 2 linhas", painel.length, 2);
+            conferir("nenhuma passa de 40 letras: " + painel.map(function (linha) { return linha.length; }), painel.every(function (linha) { return linha.length <= 40; }));
+        });
+
+        // ---- o desenho: o feixe e o espelho contra a interseção raio × segmento calculada à mão ----
+
+        function direcaoDaColuna(coluna) {
+            const camera = 2 * (coluna + 0.5) / larguraDaVisao - 1;
+            const inclinadoX = jogador.dx - jogador.dy * PLANO_ESPERADO * camera;
+            const inclinadoY = jogador.dy + jogador.dx * PLANO_ESPERADO * camera;
+            const tamanho = Math.hypot(inclinadoX, inclinadoY);
+            const dirX = inclinadoX / tamanho;
+            const dirY = inclinadoY / tamanho;
+            return { x: dirX, y: dirY, cosseno: jogador.dx * dirX + jogador.dy * dirY };
+        }
+
+        // Distância perpendicular até o segmento (ou Infinity). Resolve P + t·r = S0 + u·e.
+        function distanciaAoSegmentoDeReferencia(segmento, direcao) {
+            const ex = segmento[2] - segmento[0];
+            const ey = segmento[3] - segmento[1];
+            const denominador = direcao.x * ey - direcao.y * ex;
+            if (Math.abs(denominador) < 1e-12) {
+                return Infinity;
+            }
+            const ax = segmento[0] - jogador.x;
+            const ay = segmento[1] - jogador.y;
+            const t = (ax * ey - ay * ex) / denominador;
+            const u = (ax * direcao.y - ay * direcao.x) / denominador;
+            const perpendicular = t * direcao.cosseno;
+            return u >= 0 && u <= 1 && perpendicular >= PROFUNDIDADE_MINIMA ? perpendicular : Infinity;
+        }
+
+        function ehCorDoFeixe(pixel) {
+            return pixel === CORES_DO_FEIXE[0] || pixel === CORES_DO_FEIXE[1];
+        }
+
+        const CORES_DE_PRATA = new Set(prataSombreada[0].concat(prataSombreada[1], molduraSombreada, [COR_DO_ALVO]));
+
+        // Em cada coluna: o feixe aparece na altura dos olhos SE está mais perto que parede e espelho; o espelho
+        // aparece (perto da base dele) SE está mais perto que a parede. null ou o motivo; conta o que foi visto.
+        function motivoDeFeixeEEspelhoErrados(contagem) {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const espelhos = Array.from(luz.espelhos).map(function (espelho) { return [espelho.x0, espelho.y0, espelho.x1, espelho.y1]; });
+            const segmentos = luz.segmentos.map(function (trecho) { return [trecho.x0, trecho.y0, trecho.x1, trecho.y1]; });
+            const nome = "pose (" + jogador.x.toFixed(3) + ", " + jogador.y.toFixed(3) + ", " + jogador.angulo.toFixed(3) + ")";
+
+            for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
+                const direcao = direcaoDaColuna(coluna);
+                const parede = raiosDaTela[coluna].perpendicular;
+                const simboloDaParede = sala.celulas[raiosDaTela[coluna].linha][raiosDaTela[coluna].coluna];
+                const doEspelho = Math.min.apply(null, espelhos.map(function (espelho) { return distanciaAoSegmentoDeReferencia(espelho, direcao); }).concat([Infinity]));
+                const doFeixe = Math.min.apply(null, segmentos.map(function (trecho) { return distanciaAoSegmentoDeReferencia(trecho, direcao); }).concat([Infinity]));
+                const maisPertoQueTudo = Math.min(parede, doEspelho);
+                const pixelDosOlhos = pixels[olhos * larguraDaVisao + coluna];
+
+                if (simboloDaParede !== "E" && simboloDaParede !== "R" && Math.abs(doFeixe - maisPertoQueTudo) > 1e-6) {
+                    const devia = doFeixe < maisPertoQueTudo;
+                    if (devia !== ehCorDoFeixe(pixelDosOlhos)) {
+                        return nome + ": coluna " + coluna + " " + (devia ? "devia" : "não devia") + " ter feixe na altura dos olhos (feixe a " + doFeixe.toFixed(3) + ", o resto a " + maisPertoQueTudo.toFixed(3) + ")";
+                    }
+                    contagem.feixe += devia ? 1 : 0;
+                }
+                if (doEspelho < parede - 1e-6 && doEspelho < doFeixe - 1e-6) {
+                    const altura = larguraDaVisao / (2 * PLANO_ESPERADO) / doEspelho;
+                    const base = (alturaDaVisao + altura) / 2;
+                    const linha = Math.min(alturaDaVisao - 1, Math.ceil(base - 0.5) - 3);
+                    if (linha > olhos + 12 && linha > Math.ceil(base - 0.85 * altura - 0.5) + 2) {
+                        if (!CORES_DE_PRATA.has(pixels[linha * larguraDaVisao + coluna])) {
+                            return nome + ": coluna " + coluna + " devia mostrar o espelho (a " + doEspelho.toFixed(3) + ", parede a " + parede.toFixed(3) + ") na linha " + linha;
+                        }
+                        contagem.espelho++;
+                    }
+                }
+            }
+            return null;
+        }
+
+        function poseLivreSemEspelhoPerto() {
+            for (let tentativa = 0; tentativa < 1000; tentativa++) {
+                const x = 1.3 + Math.random() * (COLUNAS - 2.6);
+                const y = 1.3 + Math.random() * (LINHAS - 2.6);
+                const casaLivre = !ehSolida(Math.floor(x), Math.floor(y)) && !ehEspelho(Math.floor(x), Math.floor(y));
+                const longeDosEspelhos = Array.from(luz.espelhos).every(function (espelho) { return Math.hypot(espelho.coluna + 0.5 - x, espelho.linha + 0.5 - y) > 0.8; });
+                const longeDosObjetos = OBJETOS.every(function (objeto) { return Math.hypot(objeto.x - x, objeto.y - y) > 1.5; });   // a lente do cristal tem a cor do feixe
+                if (casaLivre && longeDosEspelhos && longeDosObjetos) {
+                    return [x, y, Math.random() * 2 * Math.PI];
+                }
+            }
+            throw new Error("não achei pose livre");
+        }
+
+        testar("a imagem: feixe na altura dos olhos e espelho prateado nas colunas certas, e nada de pixel vazio", function () {
+            comecarDoZero();
+            const contagem = { feixe: 0, espelho: 0 };
+            posar(2.5, 4.5, Math.PI / 2);
+            conferirIgual("olhando o feixe horizontal de cima (2,5; 4,5): colunas certas", motivoDeFeixeEEspelhoErrados(contagem), null);
+            conferir("o feixe apareceu em várias colunas (" + contagem.feixe + ")", contagem.feixe >= 20);
+            conferir("sem pixel vazio no buffer", pixels.every(function (pixel) { return pixel !== 0; }));
+
+            posar(3.5, 3.6, Math.PI / 2);
+            conferirIgual("olhando o espelho (3, 5) de perto: colunas certas", motivoDeFeixeEEspelhoErrados(contagem), null);
+            conferir("o espelho apareceu em várias colunas (" + contagem.espelho + ")", contagem.espelho >= 5);
+            conferirIgual("o espelho ao alcance ganha a moldura amarela", pixels.some(function (pixel) { return pixel === COR_DO_ALVO; }), true);
+
+            posar(8.5, 6.5, 0);
+            conferirIgual("olhando a sala do leste, onde não há espelho nem feixe: nenhum pixel de prata", pixels.filter(function (pixel) { return CORES_DE_PRATA.has(pixel); }).length, 0);
+            conferirIgual("e nenhum pixel de feixe", pixels.filter(ehCorDoFeixe).length, 0);
+
+            semearSorteio(7007);
+            let problema = null;
+            for (let rodada = 0; rodada < 60 && problema === null; rodada++) {
+                if (rodada === 30) {
+                    posar(2.5, 5.5, 0);
+                    teclar("e");
+                    posar(2.5, 2.5, 0);
+                    teclar("e");   // do meio em diante, o quebra-cabeça está resolvido: o feixe tem outro caminho
+                }
+                const pose = poseLivreSemEspelhoPerto();
+                posar(pose[0], pose[1], pose[2]);
+                problema = motivoDeFeixeEEspelhoErrados(contagem);
+                if (problema === null && !pixels.every(function (pixel) { return pixel !== 0; })) {
+                    problema = "pixel vazio no buffer";
+                }
+            }
+            conferir("60 poses sorteadas (metade com o quebra-cabeça resolvido): feixe e espelho nas colunas certas", problema === null, problema);
+            conferir("o sorteio viu feixe em " + contagem.feixe + " colunas e espelho em " + contagem.espelho, contagem.feixe >= 100 && contagem.espelho >= 50);
+            comecarDoZero();
+        });
+
+        testar("o receptor aceso usa outra textura (Ra); apagado, a comum", function () {
+            comecarDoZero();
+            conferirIgual("apagado: R", chaveDaTextura(5, 2), "R");
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            posar(2.5, 2.5, 0);
+            teclar("e");
+            conferirIgual("aceso: Ra", chaveDaTextura(5, 2), "Ra");
+            conferir("a textura Ra existe e tem 32 níveis", texturasSombreadas.Ra !== undefined && texturasSombreadas.Ra.length === 32);
+            comecarDoZero();
+        });
+
+        testar("robô aleatório (semente fixa): luz = referência, portas coerentes, zelador fora de parede, sem NaN", function () {
+            const QUADROS = 1500;
+            semearSorteio(77);
+            comecarDoZero();
+            const teclas = ["w", "s", "a", "d", "ArrowLeft", "ArrowRight"];
+            let primeiraViolacao = null;
+            let quadrosComReferencia = 0;
+            let giros = 0;
+            let portasAbriram = 0;
+            let ultimaPorta = false;
+            let caminho = 0;
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                const sorteio = Math.random();
+                if (sorteio < 0.5) {
+                    apertarTecla(teclas[Math.floor(Math.random() * teclas.length)]);
+                } else if (sorteio < 0.62) {
+                    soltarTudo();
+                } else if (sorteio < 0.75) {
+                    const antes = sala;
+                    teclar("e");
+                    giros += sala !== antes ? 1 : 0;
+                } else if (sorteio < 0.755) {
+                    teclar("r");
+                } else if (sorteio < 0.775) {
+                    teclar("h");
+                }
+                const antesX = jogador.x;
+                const antesY = jogador.y;
+                avancarQuadro(10 + Math.floor(Math.random() * 40));
+                caminho += Math.hypot(jogador.x - antesX, jogador.y - antesY);
+
+                const aberta = portasAbertas.has(indice(5, 4));
+                const acesa = luz.acesos.has(indice(5, 2));
+                if (![jogador.x, jogador.y, jogador.angulo].every(Number.isFinite)) {
+                    primeiraViolacao = "quadro " + quadro + ": zelador " + [jogador.x, jogador.y, jogador.angulo];
+                } else if (ehSolida(Math.floor(jogador.x), Math.floor(jogador.y))) {
+                    primeiraViolacao = "quadro " + quadro + ": zelador dentro de casa sólida em (" + jogador.x + ", " + jogador.y + ")";
+                } else if (acesa && !aberta) {
+                    primeiraViolacao = "quadro " + quadro + ": receptor aceso e porta fechada";
+                } else if (aberta && !acesa && !corpoToca(jogador.x, jogador.y, 5, 4)) {
+                    primeiraViolacao = "quadro " + quadro + ": porta aberta sem luz e sem corpo nela";
+                } else if (!Array.from(zBuffer).every(Number.isFinite)) {
+                    primeiraViolacao = "quadro " + quadro + ": z-buffer com valor não finito";
+                } else if (luz.segmentos.some(function (trecho) { return ![trecho.x0, trecho.y0, trecho.x1, trecho.y1, trecho.comprimento].every(Number.isFinite); })) {
+                    primeiraViolacao = "quadro " + quadro + ": trecho de feixe não finito";
+                } else if (/NaN|undefined|Infinity/.test(leitura.textContent)) {
+                    primeiraViolacao = "quadro " + quadro + ": texto " + leitura.textContent;
+                } else if (!depuracaoLigada && pixels.some(function (pixel) { return pixel === 0; })) {
+                    primeiraViolacao = "quadro " + quadro + ": pixel vazio no buffer";
+                } else if (quadro % 20 === 0) {
+                    quadrosComReferencia++;
+                    const motivo = motivoDaLuzErrada(copiaDasLinhas(sala));
+                    if (motivo !== null) {
+                        primeiraViolacao = "quadro " + quadro + ": " + motivo;
+                    }
+                }
+                portasAbriram += aberta && !ultimaPorta ? 1 : 0;
+                ultimaPorta = aberta;
+            }
+            if (depuracaoLigada) {
+                teclar("h");
+            }
+            conferir("em " + QUADROS + " quadros: invariantes mantidos, luz = referência em " + quadrosComReferencia + " quadros", primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô girou espelhos (" + giros + "×), abriu a porta (" + portasAbriram + "×) e andou (" + caminho.toFixed(0) + " casas)", giros >= 10 && caminho > 10);
+            soltarTudo();
+            comecarDoZero();
+        });
+
+        // ---- iframes: o passo inteiro com o style.css de verdade, num tamanho de tela conhecido ----
+
+        function montarDocumentoDoIframe(movimentoReduzido) {
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../reflexo/07-espelhos/style.css"></head><body>'
+                + document.getElementById("esqueleto").innerHTML
+                + '<script>'
+                + 'window.matchMedia = function (consulta) { return { matches: ' + movimentoReduzido + ' && /prefers-reduced-motion/.test(consulta), media: consulta, addEventListener: function () { }, removeEventListener: function () { } }; };'
+                + 'window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };'
+                + '<\/script>'
+                + '<script src="../../reflexo/07-espelhos/script.js"><\/script></body></html>';
+        }
+
+        function abrirNumIframe(largura, altura, movimentoReduzido) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe(movimentoReduzido);
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirSemRolagem(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura, false);
+            try {
+                const janela = quadro.contentWindow;
+                const documento = janela.document;
+                const nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                darQuadro(janela, 16);
+                [false, true].forEach(function (comPlanta) {
+                    if (comPlanta) {
+                        documento.querySelector('[data-comando="planta"]').click();
+                        darQuadro(janela, 32);
+                    }
+                    const estado = nome + (comPlanta ? " com a planta (H)" : "");
+                    conferir(estado + ": não rola na vertical (altura do conteúdo " + documento.documentElement.scrollHeight + " ≤ " + janela.innerHeight + ")", documento.documentElement.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + documento.documentElement.scrollWidth + " ≤ " + janela.innerWidth + ")", documento.documentElement.scrollWidth <= janela.innerWidth);
+                });
+                const pequenos = Array.from(documento.querySelectorAll("#controles button")).filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 || caixa.height < 48;
+                }).map(function (botao) { return (botao.dataset.acao || botao.dataset.comando) + " " + botao.getBoundingClientRect().width.toFixed(0) + "×" + botao.getBoundingClientRect().height.toFixed(0); });
+                conferir(nome + ": todo botão de toque tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        // A imagem de um quadro, copiada, com o zelador olhando o feixe horizontal do mapa fixo.
+        function imagemNoInstante(janela, instante) {
+            darQuadro(janela, instante);
+            return Uint32Array.from(janela.eval("pixels"));
+        }
+
+        async function conferirFeixeEMovimento(movimentoReduzido) {
+            const quadro = await abrirNumIframe(390, 750, movimentoReduzido);
+            try {
+                const janela = quadro.contentWindow;
+                const nome = movimentoReduzido ? "com prefers-reduced-motion" : "sem prefers-reduced-motion";
+                janela.eval("jogador.x = 2.5; jogador.y = 4.5; jogador.angulo = Math.PI / 2; atualizarDirecao();");
+                darQuadro(janela, 1000);
+                conferirIgual(nome + ": o jogo lê a preferência", janela.eval("SEM_ANIMACAO"), movimentoReduzido);
+                const coresDoFeixe = janela.eval("CORES_DO_FEIXE");
+                const primeira = imagemNoInstante(janela, 1000);
+                const meiaCasaDepois = imagemNoInstante(janela, 1250);
+                const muitoDepois = imagemNoInstante(janela, 9000);
+                const diferentes = [];
+                primeira.forEach(function (pixel, posicao) {
+                    if (pixel !== meiaCasaDepois[posicao]) {
+                        diferentes.push(posicao);
+                    }
+                });
+                const sohFeixe = diferentes.every(function (posicao) { return coresDoFeixe.includes(primeira[posicao]) || coresDoFeixe.includes(meiaCasaDepois[posicao]); });
+                const pixelsDoFeixe = Array.from(primeira).filter(function (pixel) { return coresDoFeixe.includes(pixel); }).length;
+                conferir(nome + ": o feixe está na imagem (" + pixelsDoFeixe + " pixels)", pixelsDoFeixe > 50);
+                if (movimentoReduzido) {
+                    conferirIgual(nome + ": o feixe fica PARADO — 0,25 s depois a imagem é idêntica", diferentes.length, 0);
+                    conferirIgual(nome + ": e 8 s depois também", muitoDepois.every(function (pixel, posicao) { return pixel === primeira[posicao]; }), true);
+                } else {
+                    conferir(nome + ": os pulsos andam — 0,25 s depois a imagem mudou (" + diferentes.length + " pixels)", diferentes.length > 0);
+                    conferirIgual(nome + ": só o feixe mudou (nada mais pisca)", sohFeixe, true);
+                }
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("rolagem 390×750", function () { return conferirSemRolagem(390, 750); });
+            await testarNoIframe("rolagem 360×640", function () { return conferirSemRolagem(360, 640); });
+            await testarNoIframe("rolagem 1280×800", function () { return conferirSemRolagem(1280, 800); });
+            await testarNoIframe("movimento normal", function () { return conferirFeixeEMovimento(false); });
+            await testarNoIframe("movimento reduzido", function () { return conferirFeixeEMovimento(true); });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

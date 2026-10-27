@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 8: sombras</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 8: sombras</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo (o mesmo do index.html). Uma cópia viva vai para #aplicacao, escondida, para as
+         afirmações; outra, com o style.css de verdade, vai para os iframes (rolagem, movimento reduzido, contorno). -->
+    <template id="esqueleto">
+        <h1>Reflexo</h1>
+        <div id="palco">
+            <canvas id="visao" width="320" height="200"></canvas>
+            <canvas id="jogo" width="384" height="288" hidden></canvas>
+        </div>
+        <p id="leitura"></p>
+        <p id="aviso" class="so-leitor" role="status"></p>
+        <div id="controles">
+            <button type="button" data-acao="girarEsquerda">⟲</button>
+            <button type="button" data-acao="frente">▲</button>
+            <button type="button" data-acao="girarDireita">⟳</button>
+            <button type="button" data-acao="esquerda">◀&#xFE0E;</button>
+            <button type="button" data-acao="tras">▼</button>
+            <button type="button" data-acao="direita">▶&#xFE0E;</button>
+            <button type="button" data-comando="espelho">Espelho</button>
+            <button type="button" data-comando="planta" aria-pressed="false">Planta</button>
+            <button type="button" data-comando="reiniciar">Reiniciar</button>
+        </div>
+        <p id="ajuda">W S ou ↑ ↓: andar · A D: passo · ← →: girar<br>E ou Espaço: girar o espelho à frente · R: reiniciar a sala · H: planta (anel = receptor aceso · números = passos até você)</p>
+    </template>
+    <div id="aplicacao" hidden></div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- A janela do teste é falsa e mutável (1280×720); o movimento reduzido está DESLIGADO nesta página
+         (o iframe liga). O esqueleto vira DOM antes do script do jogo procurar os ids. -->
+    <script>
+        const janelaFalsa = { largura: 1280, altura: 720 };
+        Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
+        Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+        window.matchMedia = function (consulta) {
+            return { matches: false, media: consulta, addEventListener: function () { }, removeEventListener: function () { } };
+        };
+        document.getElementById("aplicacao").appendChild(document.getElementById("esqueleto").content.cloneNode(true));
+    </script>
+
+    <!-- A imagem (#visao) usa o canvas de verdade (o teste lê o buffer); só a planta ignora o desenho. -->
+    <script>
+        const contextoDaPlanta = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        const obterContextoDeVerdade = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (tipo, opcoes) {
+            return this.id === "jogo" ? contextoDaPlanta : obterContextoDeVerdade.call(this, tipo, opcoes);
+        };
+    </script>
+    <script src="../../reflexo/08-sombras/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const BARRA_INVERTIDA = "\\";
+        const QUATRO_DIRECOES = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+
+        // A especificação (GDD 4.7 e 4.8), escrita aqui, não lida do jogo.
+        const VIDAS_ESPERADAS = 3;
+        const SEGUNDOS_DE_NASCIMENTO_ESPERADOS = 1;
+        const SEGUNDOS_DE_RECUO_ESPERADOS = 1.5;
+        const SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS = 1.5;
+        const SEGUNDOS_DE_EXPOSICAO_ESPERADOS = 0.5;
+        const SEGUNDOS_DE_DISSOLUCAO_ESPERADOS = 0.4;
+        const PASSOS_DE_PERCEPCAO_ESPERADOS = 8;
+        const PONTOS_DA_SOMBRA_ESPERADOS = 50;
+        const PONTOS_DO_RECEPTOR_ESPERADOS = 100;
+        const VELOCIDADE_DO_ZELADOR = 3;                  // casas por segundo
+        const INTERVALO_ENTRE_NASCIMENTOS = 12;
+        const PRIMEIRO_NASCIMENTO = 2;
+        const MAXIMO_DE_SOMBRAS = 2;
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertarTecla(tecla, extras) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, extras));
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        function teclar(tecla) {
+            apertarTecla(tecla);
+            soltarTecla(tecla);
+        }
+
+        function quadros(quantidade) {
+            for (let contador = 0; contador < quantidade; contador++) {
+                avancarQuadro(16);
+            }
+        }
+
+        function segundos(duracao) {
+            quadros(Math.round(duracao * 1000 / 16));
+        }
+
+        // Quadro a quadro, até a condição valer ou o tempo de JOGO passar do teto. Devolve os segundos de jogo gastos (ou null).
+        function ate(condicao, tetoEmSegundos) {
+            const inicio = tempoDeJogo;
+            while (tempoDeJogo - inicio <= tetoEmSegundos) {
+                if (condicao()) {
+                    return tempoDeJogo - inicio;
+                }
+                avancarQuadro(16);
+            }
+            return condicao() ? tempoDeJogo - inicio : null;
+        }
+
+        function posar(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+            avancarQuadro(16);
+        }
+
+        function botaoDe(comando) {
+            return document.querySelector('[data-comando="' + comando + '"]');
+        }
+
+        function perto(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        function indice(coluna, linha) {
+            return linha * COLUNAS + coluna;
+        }
+
+        function textoDoAviso() {
+            return document.getElementById("aviso").textContent;
+        }
+
+        // Estado limpo pelas portas do jogo: sala inicial, 3 vidas, nenhum ponto, nenhuma sombra e NENHUM nascimento marcado.
+        function limpar() {
+            fimDeJogo = false;
+            vidas = VIDAS_ESPERADAS;
+            pontos = 0;
+            receptoresPontuados.clear();
+            reiniciarSala();
+            proximoNascimento = Infinity;
+            avancarQuadro(16);
+        }
+
+        function novaSombra(x, y, estado) {
+            const sombra = { tipo: "sombra", x: x, y: y, estado: estado, desde: tempoDeJogo, exposicao: 0, escala: 1, alvoX: x, alvoY: y, anterior: -1 };
+            sombras.push(sombra);
+            return sombra;
+        }
+
+        // Segura a sombra onde está: o movimento dela, a cada quadro, é desfeito antes do próximo.
+        function quadrosComSombraParada(sombra, quantidade) {
+            const x = sombra.x;
+            const y = sombra.y;
+            for (let contador = 0; contador < quantidade; contador++) {
+                sombra.x = sombra.alvoX = x;
+                sombra.y = sombra.alvoY = y;
+                avancarQuadro(16);
+            }
+        }
+
+        // O quebra-cabeça do mapa fixo, pelas teclas: o feixe chega ao receptor e a porta abre.
+        function resolverOQuebraCabeca() {
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            posar(2.5, 2.5, 0);
+            teclar("e");
+            quadros(2);
+        }
+
+        // ---- a verdade independente: a busca em largura por camadas, sobre a sala e as portas de AGORA ----
+
+        function solidaNaReferencia(coluna, linha) {
+            const simbolo = sala.celulas[linha] === undefined ? undefined : sala.celulas[linha][coluna];
+            if (simbolo === undefined || "#%ER".includes(simbolo)) {
+                return true;
+            }
+            return simbolo === "D" && !portasAbertas.has(indice(coluna, linha));
+        }
+
+        function campoDeReferencia(coluna, linha) {
+            const passosPorCasa = new Map([[indice(coluna, linha), 0]]);
+            let fronteira = [[coluna, linha]];
+            for (let passo = 1; fronteira.length > 0; passo++) {
+                const proxima = [];
+                fronteira.forEach(function (casa) {
+                    QUATRO_DIRECOES.forEach(function (direcao) {
+                        const vizinhaColuna = casa[0] + direcao[0];
+                        const vizinhaLinha = casa[1] + direcao[1];
+                        const dentro = vizinhaColuna >= 0 && vizinhaLinha >= 0 && vizinhaColuna < COLUNAS && vizinhaLinha < LINHAS;
+                        if (dentro && !passosPorCasa.has(indice(vizinhaColuna, vizinhaLinha)) && !solidaNaReferencia(vizinhaColuna, vizinhaLinha)) {
+                            passosPorCasa.set(indice(vizinhaColuna, vizinhaLinha), passo);
+                            proxima.push([vizinhaColuna, vizinhaLinha]);
+                        }
+                    });
+                });
+                fronteira = proxima;
+            }
+            return passosPorCasa;
+        }
+
+        // O campo do jogo contra a referência, a partir da casa do zelador. null ou o motivo.
+        function motivoDoCampoErrado() {
+            const coluna = Math.floor(jogador.x);
+            const linha = Math.floor(jogador.y);
+            const referencia = campoDeReferencia(coluna, linha);
+            for (let casa = 0; casa < COLUNAS * LINHAS; casa++) {
+                const esperado = referencia.has(casa) ? referencia.get(casa) : -1;
+                if (campoDeDistancia[casa] !== esperado) {
+                    return "zelador em (" + coluna + ", " + linha + ") portas " + portasAbertas.size + ": casa (" + casa % COLUNAS + ", " + Math.floor(casa / COLUNAS) + ") tem " + campoDeDistancia[casa] + " em vez de " + esperado;
+                }
+            }
+            return null;
+        }
+
+        // Uma casa livre do oeste a `passos` do zelador (pela referência), ou null.
+        function casaAPassos(passos) {
+            const referencia = campoDeReferencia(Math.floor(jogador.x), Math.floor(jogador.y));
+            for (const par of referencia) {
+                if (par[1] === passos) {
+                    return [par[0] % COLUNAS, Math.floor(par[0] / COLUNAS)];
+                }
+            }
+            return null;
+        }
+
+        function contarChamadasDe(nomeDaFuncao, funcao) {
+            const original = window[nomeDaFuncao];
+            let chamadas = 0;
+            window[nomeDaFuncao] = function () {
+                chamadas++;
+                return original.apply(this, arguments);
+            };
+            try {
+                funcao();
+            } finally {
+                window[nomeDaFuncao] = original;
+            }
+            return chamadas;
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial e os números do GDD", function () {
+            limpar();
+            conferirIgual("3 vidas", vidas, VIDAS_ESPERADAS);
+            conferirIgual("nenhum ponto", pontos, 0);
+            conferirIgual("sem fim de jogo", fimDeJogo, false);
+            conferirIgual("nenhuma sombra", sombras.length, 0);
+            const horizonteEmpacotado = ((255 << 24) | (COR_DO_HORIZONTE[2] << 16) | (COR_DO_HORIZONTE[1] << 8) | COR_DO_HORIZONTE[0]) >>> 0;
+            conferirIgual("a névoa é exatamente a cor do horizonte (a parede longe some nele)", JSON.stringify(COR_DA_NEVOA), JSON.stringify(COR_DO_HORIZONTE));
+            conferirIgual("a parede 100% enevoada (nível 31) tem só o pixel do horizonte", texturasSombreadas["#"][31].every(function (pixel) { return pixel === horizonteEmpacotado; }), true);
+            conferirIgual("o fundo na linha do horizonte tem a mesma cor", fundo[(alturaDaVisao / 2 - 1) * larguraDaVisao] === horizonteEmpacotado && fundo[(alturaDaVisao / 2) * larguraDaVisao] === horizonteEmpacotado, true);
+            conferirIgual("o campo é um Int16Array de 192 casas", campoDeDistancia instanceof Int16Array && campoDeDistancia.length === 192, true);
+            conferirIgual("o campo é 0 na casa do zelador (1, 1)", campoDeDistancia[indice(1, 1)], 0);
+            conferirIgual("duas fendas S no mapa", sala.celulas.join("").split("S").length - 1, 2);
+            conferirIgual("a fenda não é sólida", ehSolida(4, 9), false);
+            conferirIgual("nascer: 1 s", SEGUNDOS_DE_NASCIMENTO, SEGUNDOS_DE_NASCIMENTO_ESPERADOS);
+            conferirIgual("recuar: 1,5 s", SEGUNDOS_DE_RECUO, SEGUNDOS_DE_RECUO_ESPERADOS);
+            conferirIgual("invulnerabilidade: 1,5 s", SEGUNDOS_DE_INVULNERABILIDADE, SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS);
+            conferirIgual("exposição para dissolver: 0,5 s", SEGUNDOS_PARA_DISSOLVER, SEGUNDOS_DE_EXPOSICAO_ESPERADOS);
+            conferirIgual("dissolver: 0,4 s", SEGUNDOS_DE_DISSOLUCAO, SEGUNDOS_DE_DISSOLUCAO_ESPERADOS);
+            conferirIgual("percepção: 8 passos", RAIO_DE_PERCEPCAO, PASSOS_DE_PERCEPCAO_ESPERADOS);
+            conferirIgual("a sombra persegue a 70% do zelador", PROPORCAO_DA_VELOCIDADE, 0.7);
+            conferirIgual("pontos: 100 por receptor e 50 por sombra", PONTOS_POR_RECEPTOR + "," + PONTOS_POR_SOMBRA, PONTOS_DO_RECEPTOR_ESPERADOS + "," + PONTOS_DA_SOMBRA_ESPERADOS);
+            conferirIgual("fase: no máximo 2 sombras, a cada 12 s, a primeira em 2 s", SOMBRAS.max + "," + SOMBRAS.intervalo + "," + SOMBRAS.primeira, [MAXIMO_DE_SOMBRAS, INTERVALO_ENTRE_NASCIMENTOS, PRIMEIRO_NASCIMENTO].join(","));
+            conferir("o tempo do último quadro está exposto (a medição de celular lê isto)", Number.isFinite(ultimoTempoDeQuadro) && ultimoTempoDeQuadro >= 0);
+            conferirIgual("a arte da sombra usa o tipo 'sombra' do catálogo", CATALOGO_DE_SPRITES.sombra !== undefined && CATALOGO_DE_SPRITES.sombra.arte.length === 16, true);
+        });
+
+        testar("campo de distância: igual a uma busca independente, com porta fechada e aberta (−1 = não chega)", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            conferirIgual("porta fechada: o campo é igual à referência", motivoDoCampoErrado(), null);
+            conferirIgual("a porta fechada é parede para a busca: o leste não é alcançado", campoDeDistancia[indice(12, 10)], -1);
+            conferirIgual("nem a porta (5, 4), que é sólida", campoDeDistancia[indice(5, 4)], -1);
+            conferirIgual("o vizinho do zelador está a 1 passo", campoDeDistancia[indice(2, 1)], 1);
+            conferirIgual("paredes são −1", campoDeDistancia[indice(0, 0)], -1);
+            const alcancadas = Array.from(campoDeDistancia).filter(function (passos) { return passos >= 0; }).length;
+            conferirIgual("o número de casas alcançadas é o da referência", alcancadas, campoDeReferencia(1, 1).size);
+
+            resolverOQuebraCabeca();
+            posar(1.5, 1.5, 0.8);
+            conferirIgual("a porta está aberta", portasAbertas.size, 1);
+            conferirIgual("porta aberta: o campo é igual à referência", motivoDoCampoErrado(), null);
+            conferir("o leste agora é alcançado (" + campoDeDistancia[indice(12, 10)] + " passos)", campoDeDistancia[indice(12, 10)] > 0);
+            conferirIgual("a porta aberta é uma casa do campo", campoDeDistancia[indice(5, 4)] > 0, true);
+
+            semearSorteio(808);
+            let problema = null;
+            for (let tentativa = 0; tentativa < 80 && problema === null; tentativa++) {
+                const coluna = 1 + Math.floor(Math.random() * (COLUNAS - 2));
+                const linha = 1 + Math.floor(Math.random() * (LINHAS - 2));
+                if (!ehSolida(coluna, linha)) {
+                    posar(coluna + Math.random() * 0.4 + 0.3, linha + Math.random() * 0.4 + 0.3, 0);
+                    problema = motivoDoCampoErrado();
+                }
+            }
+            conferir("80 casas sorteadas com a porta aberta: o campo é igual à referência", problema === null, problema);
+        });
+
+        testar("o campo só é refeito quando o zelador troca de casa ou uma porta abre/fecha", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const dentroDaCasa = contarChamadasDe("calcularCampo", function () {
+                [1.6, 1.7, 1.45, 1.3, 1.5, 1.8].forEach(function (x) { posar(x, 1.5 + (x - 1.5) * 0.3, 0.8); });
+                quadros(10);
+            });
+            conferirIgual("andar dentro da MESMA casa não refaz o campo", dentroDaCasa, 0);
+
+            posar(1.9, 1.5, 0);
+            const trocaDeCasa = contarChamadasDe("calcularCampo", function () { posar(2.1, 1.5, 0); });
+            conferirIgual("passar para a casa vizinha refaz o campo UMA vez", trocaDeCasa, 1);
+            conferirIgual("e o resultado é o certo", motivoDoCampoErrado(), null);
+
+            const andandoSemTrocar = contarChamadasDe("calcularCampo", function () { quadros(20); });
+            conferirIgual("parado, 20 quadros não refazem nada", andandoSemTrocar, 0);
+
+            const abrindoAPorta = contarChamadasDe("calcularCampo", function () { resolverOQuebraCabeca(); });
+            conferir("abrir a porta refaz o campo (pelo menos uma vez além das trocas de casa)", abrindoAPorta >= 1, abrindoAPorta);
+            posar(2.5, 2.5, 0);
+            conferirIgual("depois de abrir, o campo está certo mesmo sem trocar de casa", motivoDoCampoErrado(), null);
+            const fechandoAPorta = contarChamadasDe("calcularCampo", function () {
+                posar(2.5, 2.5, 0);
+                teclar("e");   // gira o espelho de novo: a luz some e a porta fecha, com o zelador na MESMA casa
+                quadros(3);
+            });
+            conferirIgual("a porta fechou", portasAbertas.size, 0);
+            conferirIgual("fechar a porta, com o zelador na mesma casa, refaz o campo UMA vez", fechandoAPorta, 1);
+            conferirIgual("e o leste voltou a ser inalcançável", campoDeDistancia[indice(12, 10)], -1);
+            conferirIgual("o campo continua igual à referência", motivoDoCampoErrado(), null);
+        });
+
+        testar("nasce: 1 s crescendo na fenda, sem fazer nem sofrer nada; depois vira ronda", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const naFenda = novaSombra(14.5, 1.5, "nasce");   // a fenda do leste: a porta fechada a isola do zelador
+            naFenda.escala = 0.2;
+            const noFeixe = novaSombra(3.5, 7.0, "nasce");    // em cima do feixe
+            const noZelador = novaSombra(1.7, 1.5, "nasce");  // colada no zelador
+            const inicio = tempoDeJogo;
+            let escalaAnterior = 0;
+            let escalaCresceuSempre = true;
+            let exposicaoDuranteONascimento = 0;
+            let vidasDuranteONascimento = vidas;
+            let transicao = null;
+            while (transicao === null && tempoDeJogo - inicio < 2) {
+                quadrosComSombraParada(noFeixe, 1);
+                if (naFenda.estado === "nasce") {
+                    escalaCresceuSempre = escalaCresceuSempre && naFenda.escala >= escalaAnterior - 1e-12 && naFenda.escala <= 1;
+                    escalaAnterior = naFenda.escala;
+                    exposicaoDuranteONascimento = Math.max(exposicaoDuranteONascimento, noFeixe.exposicao);
+                    vidasDuranteONascimento = Math.min(vidasDuranteONascimento, vidas);
+                } else {
+                    transicao = tempoDeJogo - inicio;
+                }
+            }
+            conferir("saiu de 'nasce' depois de 1 s (e no máximo 2 quadros além): " + transicao, transicao !== null && transicao >= SEGUNDOS_DE_NASCIMENTO_ESPERADOS - 1e-9 && transicao <= SEGUNDOS_DE_NASCIMENTO_ESPERADOS + 0.04);
+            conferirIgual("e virou 'ronda' (o zelador está isolado, longe demais para perseguir)", naFenda.estado, "ronda");
+            conferir("a escala cresce de 0,2 até 1, sem diminuir", escalaCresceuSempre && escalaAnterior > 0.9, escalaAnterior);
+            conferirIgual("nascendo em cima do feixe, não acumulou exposição", exposicaoDuranteONascimento, 0);
+            conferirIgual("nascendo colada no zelador, não tirou vida", vidasDuranteONascimento, VIDAS_ESPERADAS);
+            conferirIgual("a que nasceu na fenda ficou parada enquanto nascia", naFenda.x + "," + naFenda.y, "14.5,1.5");
+            conferir("a que nasceu colada no zelador só vira outra coisa depois do nascimento", noZelador.estado !== "nasce");
+        });
+
+        testar("ronda sente o zelador a até 8 passos pelo campo (não em linha reta) e passa a perseguir", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const aOito = casaAPassos(8);
+            const aNove = casaAPassos(9);
+            conferir("existem casas a 8 e a 9 passos no oeste", aOito !== null && aNove !== null, JSON.stringify([aOito, aNove]));
+            const a8 = novaSombra(aOito[0] + 0.5, aOito[1] + 0.5, "ronda");
+            const a9 = novaSombra(aNove[0] + 0.5, aNove[1] + 0.5, "ronda");
+            const naPortaFechada = novaSombra(8.5, 4.5, "ronda");   // a 4 casas de distância em linha reta, mas atrás da parede e da porta
+            avancarQuadro(16);
+            conferirIgual("a 8 passos: persegue", a8.estado, "persegue");
+            conferirIgual("a 9 passos: continua rondando", a9.estado, "ronda");
+            conferirIgual("atrás da parede, em linha reta mais perto que 8: continua rondando (o campo não chega)", naPortaFechada.estado, "ronda");
+            segundos(3);
+            conferirIgual("e segue rondando 3 s depois, sem alcance", naPortaFechada.estado, "ronda");
+
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const perto = novaSombra(4.5, 1.5, "ronda");
+            avancarQuadro(16);
+            conferirIgual("a 3 passos, persegue na hora", perto.estado, "persegue");
+        });
+
+        testar("persegue perde o rastro se o campo não chega ou chega a mais de 16 passos", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const isolada = novaSombra(12.5, 8.5, "persegue");
+            avancarQuadro(16);
+            conferirIgual("persegue sem caminho até o zelador (porta fechada): volta a rondar", isolada.estado, "ronda");
+
+            resolverOQuebraCabeca();
+            posar(1.5, 1.5, 0.8);
+            const a16 = casaAPassos(16);
+            const a17 = casaAPassos(17);
+            conferir("com a porta aberta existem casas a 16 e a 17 passos", a16 !== null && a17 !== null);
+            const longe = novaSombra(a17[0] + 0.5, a17[1] + 0.5, "persegue");
+            const limite = novaSombra(a16[0] + 0.5, a16[1] + 0.5, "persegue");
+            avancarQuadro(16);
+            conferirIgual("a 17 passos: perde o rastro", longe.estado, "ronda");
+            conferirIgual("a 16 passos: segue perseguindo", limite.estado, "persegue");
+        });
+
+        testar("a sombra alcança um zelador PARADO (a ~70% da velocidade dele) e o contato tira UMA vida", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const partida = [4.5, 4.5];   // longe do feixe: a sombra chega sem ser desfeita
+            const passosAteOZelador = campoDeReferencia(1, 1).get(indice(4, 4));
+            const sombra = novaSombra(partida[0], partida[1], "persegue");
+            const gasto = ate(function () { return vidas < VIDAS_ESPERADAS; }, 15);
+            const maisRapidoPossivel = (passosAteOZelador - 1) / VELOCIDADE_DO_ZELADOR;
+            const maisLentoAceitavel = passosAteOZelador / (0.7 * VELOCIDADE_DO_ZELADOR) + 1.5;
+            conferir("tocou o zelador parado depois de " + (gasto === null ? "?" : gasto.toFixed(2)) + " s (entre " + maisRapidoPossivel.toFixed(1) + " e " + maisLentoAceitavel.toFixed(1) + " s para " + passosAteOZelador + " passos)",
+                gasto !== null && gasto > maisRapidoPossivel && gasto < maisLentoAceitavel);
+            conferirIgual("uma vida a menos, não duas", vidas, VIDAS_ESPERADAS - 1);
+            conferirIgual("o aviso diz Vida perdida", textoDoAviso(), "Vida perdida");
+            conferirIgual("a sombra que tocou recua", sombra.estado, "recua");
+            conferirIgual("o jogo não acabou", fimDeJogo, false);
+        });
+
+        testar("recua: dura 1,5 s depois do contato, foge pelo campo e depois volta a rondar; recuando, não machuca", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const sombra = novaSombra(2.0, 1.5, "persegue");
+            avancarQuadro(16);
+            conferirIgual("contato: recua", sombra.estado, "recua");
+            const contato = tempoDeJogo;
+            const passosNoContato = campoDeDistancia[indice(Math.floor(sombra.x), Math.floor(sombra.y))];
+            const vidasDepoisDoContato = vidas;
+            let saiuDoRecuo = null;
+            let tiroUmaVidaRecuando = false;
+            while (saiuDoRecuo === null && tempoDeJogo - contato < 3) {
+                avancarQuadro(16);
+                if (sombra.estado !== "recua") {
+                    saiuDoRecuo = tempoDeJogo - contato;
+                } else if (vidas < vidasDepoisDoContato) {
+                    tiroUmaVidaRecuando = true;
+                }
+            }
+            conferir("o recuo acabou 1,5 s depois do contato: " + saiuDoRecuo, saiuDoRecuo !== null && saiuDoRecuo >= SEGUNDOS_DE_RECUO_ESPERADOS - 0.04 && saiuDoRecuo <= SEGUNDOS_DE_RECUO_ESPERADOS + 0.04);
+            conferirIgual("e a sombra volta a rondar (ou a perseguir, se sente o zelador)", ["ronda", "persegue"].includes(sombra.estado), true);
+            conferirIgual("recuando, não tirou outra vida", tiroUmaVidaRecuando, false);
+            const passosDepois = campoDeDistancia[indice(Math.floor(sombra.x), Math.floor(sombra.y))];
+            conferir("fugiu: estava a " + passosNoContato + " passos e acabou a " + passosDepois, passosDepois > passosNoContato + 1);
+        });
+
+        testar("a invulnerabilidade dura 1,5 s, o contorno fica PARADO (nada pisca) e dois contatos juntos tiram uma vida só", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            novaSombra(1.8, 1.5, "persegue");
+            novaSombra(1.5, 1.8, "persegue");
+            avancarQuadro(16);
+            conferirIgual("duas sombras tocam no mesmo quadro: UMA vida a menos", vidas, VIDAS_ESPERADAS - 1);
+            const contato = tempoDeJogo;
+
+            const vistoNoContorno = [];
+            while (tempoDeJogo - contato < SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS - 0.1) {
+                avancarQuadro(16);
+                vistoNoContorno.push(palco.classList.contains("invulneravel"));
+            }
+            conferirIgual("durante 1,4 s a segunda sombra continua colada e nenhuma vida cai", vidas, VIDAS_ESPERADAS - 1);
+            conferirIgual("o contorno da invulnerabilidade está ligado em TODOS os " + vistoNoContorno.length + " quadros (sem piscar)", vistoNoContorno.every(Boolean), true);
+            conferir("o painel avisa que está invulnerável", leitura.textContent.indexOf("Invulnerável") !== -1, leitura.textContent);
+
+            const caiu = ate(function () { return vidas < VIDAS_ESPERADAS - 1; }, 1);
+            const decorrido = tempoDeJogo - contato;
+            conferir("acabada a invulnerabilidade, a sombra que continuava colada tira a próxima vida entre 1,5 s e 1,54 s após o primeiro contato (" + decorrido.toFixed(3) + " s)",
+                caiu !== null && decorrido >= SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS - 1e-6 && decorrido <= SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS + 0.04);
+            quadros(2);
+            conferirIgual("e o segundo contato começa a SUA invulnerabilidade: o contorno volta", palco.classList.contains("invulneravel"), true);
+        });
+
+        testar("o contorno da invulnerabilidade existe e some quando ela acaba", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            conferirIgual("antes de qualquer contato, sem contorno", palco.classList.contains("invulneravel"), false);
+            novaSombra(1.8, 1.5, "persegue");
+            quadros(2);
+            conferirIgual("depois do contato, com contorno", palco.classList.contains("invulneravel"), true);
+            sombras.length = 0;
+            segundos(1.7);
+            conferirIgual("1,7 s depois (sem outra sombra), sem contorno", palco.classList.contains("invulneravel"), false);
+        });
+
+        testar("o feixe desfaz a sombra que fica 0,5 s nele: +50 pontos, anunciado; encolhe 0,4 s e some", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const sombra = novaSombra(3.5, 7.0, "ronda");   // em cima do feixe vertical (x = 3,5, de y = 5,5 a 8,5)
+            const antes = pontos;
+            const gasto = (function () {
+                const inicio = tempoDeJogo;
+                for (let contador = 0; contador < 60 && sombra.estado !== "dissolve"; contador++) {
+                    quadrosComSombraParada(sombra, 1);
+                }
+                return tempoDeJogo - inicio;
+            })();
+            conferirIgual("dissolveu", sombra.estado, "dissolve");
+            conferir("com 0,5 s de luz (e não antes): " + gasto.toFixed(3) + " s", gasto >= SEGUNDOS_DE_EXPOSICAO_ESPERADOS - 1e-9 && gasto <= SEGUNDOS_DE_EXPOSICAO_ESPERADOS + 0.02);
+            conferirIgual("+50 pontos", pontos - antes, PONTOS_DA_SOMBRA_ESPERADOS);
+            conferirIgual("o aviso diz Sombra desfeita", textoDoAviso(), "Sombra desfeita");
+            conferirIgual("nenhuma vida perdida", vidas, VIDAS_ESPERADAS);
+
+            const inicioDaDissolucao = tempoDeJogo;
+            let escalaAnterior = Infinity;
+            let encolheuSempre = true;
+            while (sombras.indexOf(sombra) !== -1 && tempoDeJogo - inicioDaDissolucao < 1) {
+                avancarQuadro(16);
+                if (sombras.indexOf(sombra) !== -1) {
+                    encolheuSempre = encolheuSempre && sombra.escala <= escalaAnterior + 1e-12 && sombra.escala >= 0;
+                    escalaAnterior = sombra.escala;
+                }
+            }
+            const duracao = tempoDeJogo - inicioDaDissolucao;
+            conferir("sumiu da lista 0,4 s depois: " + duracao.toFixed(3) + " s", duracao >= SEGUNDOS_DE_DISSOLUCAO_ESPERADOS - 0.02 && duracao <= SEGUNDOS_DE_DISSOLUCAO_ESPERADOS + 0.04);
+            conferirIgual("a escala só diminui até o fim", encolheuSempre, true);
+            segundos(1);
+            conferirIgual("e os 50 pontos não se repetem", pontos - antes, PONTOS_DA_SOMBRA_ESPERADOS);
+        });
+
+        testar("exposição: 0,3 s de luz, 0,3 s de sombra e 0,3 s de luz não dissolvem (a exposição esfria); fora do feixe nunca", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const sombra = novaSombra(3.5, 7.0, "ronda");
+            const noFeixe = [3.5, 7.0];
+            const forado = [4.5, 2.5];
+            const posicoes = [noFeixe, forado, noFeixe];
+            posicoes.forEach(function (posicao) {
+                sombra.x = sombra.alvoX = posicao[0];
+                sombra.y = sombra.alvoY = posicao[1];
+                for (let contador = 0; contador < 18; contador++) {
+                    sombra.x = sombra.alvoX = posicao[0];
+                    sombra.y = sombra.alvoY = posicao[1];
+                    avancarQuadro(16);
+                }
+            });
+            conferir("a exposição de cada trecho não passou de 0,3 s: não dissolveu (estado " + sombra.estado + ", exposição " + sombra.exposicao.toFixed(3) + ")", sombra.estado !== "dissolve");
+
+            const sempreFora = novaSombra(4.5, 2.5, "ronda");
+            quadrosComSombraParada(sempreFora, 190);
+            conferirIgual("3 s fora do feixe: exposição zero e viva", sempreFora.exposicao === 0 && sempreFora.estado !== "dissolve", true);
+        });
+
+        testar("o feixe pega a sombra que o atravessa perseguindo o zelador, antes de ela alcançá-lo", function () {
+            limpar();
+            posar(4.5, 7.5, 0);   // do outro lado do feixe vertical (x = 3,5)
+            const sombra = novaSombra(1.5, 7.5, "persegue");
+            const antes = pontos;
+            const gasto = ate(function () { return sombra.estado === "dissolve"; }, 4);
+            conferir("dissolveu ao cruzar o feixe (" + (gasto === null ? "nunca" : gasto.toFixed(2) + " s") + ")", gasto !== null);
+            conferir("ainda antes de chegar ao zelador (x = " + sombra.x.toFixed(2) + ")", sombra.x < 4.0, sombra.x);
+            conferirIgual("+50 pontos", pontos - antes, PONTOS_DA_SOMBRA_ESPERADOS);
+            conferirIgual("nenhuma vida perdida", vidas, VIDAS_ESPERADAS);
+        });
+
+        testar("ficar NO feixe não protege o zelador (GDD 11): a sombra tira a vida igual, e a luz nunca o machuca", function () {
+            limpar();
+            posar(3.5, 6.5, 0);   // em cima do feixe vertical
+            segundos(3);
+            conferirIgual("3 s parado no feixe, sem sombra: 3 vidas", vidas, VIDAS_ESPERADAS);
+            conferirIgual("nenhum ponto", pontos, 0);
+            conferirIgual("e sem invulnerabilidade de graça", palco.classList.contains("invulneravel"), false);
+
+            const sombra = novaSombra(4.45, 6.5, "persegue");
+            segundos(1);
+            conferirIgual("a sombra que chega ao zelador DENTRO do feixe tira a vida", vidas, VIDAS_ESPERADAS - 1);
+            conferirIgual("a sombra recuou (tocou)", sombra.estado === "recua" || sombra.estado === "dissolve", true);
+
+            limpar();
+            posar(3.5, 6.5, 0);
+            novaSombra(3.8, 6.5, "persegue");   // colada, também dentro do feixe: o contato vem antes de 0,5 s de exposição
+            avancarQuadro(16);
+            conferirIgual("colada no zelador, dentro do feixe: perde a vida no primeiro quadro", vidas, VIDAS_ESPERADAS - 1);
+        });
+
+        testar("três contatos acabam o jogo: congela tudo; R começa um jogo novo com 3 vidas", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            for (let rodada = 1; rodada <= 3; rodada++) {
+                novaSombra(jogador.x + 0.3, jogador.y, "persegue");
+                avancarQuadro(16);
+                conferirIgual("contato " + rodada + ": restam " + (VIDAS_ESPERADAS - rodada) + " vidas", vidas, VIDAS_ESPERADAS - rodada);
+                sombras.length = 0;
+                if (rodada < 3) {
+                    segundos(SEGUNDOS_DE_INVULNERABILIDADE_ESPERADOS + 0.1);
+                }
+            }
+            conferirIgual("0 vidas", vidas, 0);
+            conferirIgual("fim de jogo", fimDeJogo, true);
+            conferirIgual("o aviso diz Fim de jogo", textoDoAviso(), "Fim de jogo");
+            avancarQuadro(16);
+            conferirIgual("o painel diz Fim de jogo: R recomeça", leitura.textContent.indexOf("Fim de jogo: R recomeça") !== -1, true);
+
+            const congeladas = novaSombra(8.5, 6.5, "persegue");
+            const colada = novaSombra(jogador.x + 0.2, jogador.y, "persegue");
+            const posicaoDoZelador = jogador.x + "," + jogador.y + "," + jogador.angulo;
+            const posicaoDaSombra = congeladas.x + "," + congeladas.y;
+            const relogio = tempoDeJogo;
+            apertarTecla("w");
+            apertarTecla("ArrowLeft");
+            segundos(1);
+            conferirIgual("no fim de jogo o zelador não anda nem gira", jogador.x + "," + jogador.y + "," + jogador.angulo, posicaoDoZelador);
+            conferirIgual("as sombras ficam paradas", congeladas.x + "," + congeladas.y, posicaoDaSombra);
+            conferirIgual("o relógio do jogo não passa", tempoDeJogo, relogio);
+            conferirIgual("uma sombra colada não tira vida abaixo de zero", vidas, 0);
+            soltarTudo();
+            conferirIgual("a imagem continua sendo desenhada (o buffer não está vazio)", pixels.every(function (pixel) { return pixel !== 0; }), true);
+
+            teclar("r");
+            conferirIgual("R depois do fim: 3 vidas", vidas, VIDAS_ESPERADAS);
+            conferirIgual("sem fim de jogo", fimDeJogo, false);
+            conferirIgual("placar zerado", pontos, 0);
+            conferirIgual("a sala é a cópia inicial", sala === salaInicial, true);
+            conferirIgual("sem sombras", sombras.length, 0);
+            conferirIgual("o zelador volta ao J", jogador.x + "," + jogador.y, "1.5,1.5");
+            conferirIgual("e a invulnerabilidade foi zerada", tempoDeJogo < invulneravelAte, false);
+            apertarTecla("w");
+            segundos(0.3);
+            soltarTudo();
+            conferir("o zelador anda de novo", Math.hypot(jogador.x - 1.5, jogador.y - 1.5) > 0.3);
+            conferir("a sombra colada de antes não existe mais (" + (sombras.indexOf(colada) === -1) + ")", sombras.indexOf(colada) === -1);
+        });
+
+        testar("R no meio do jogo guarda vidas e pontos, restaura a sala pela cópia e limpa as sombras", function () {
+            limpar();
+            resolverOQuebraCabeca();
+            conferirIgual("o receptor aceso deu 100 pontos", pontos, PONTOS_DO_RECEPTOR_ESPERADOS);
+            posar(1.5, 1.5, 0.8);
+            novaSombra(1.8, 1.5, "persegue");
+            avancarQuadro(16);
+            novaSombra(8.5, 6.5, "ronda");
+            conferirIgual("antes do R: 2 vidas", vidas, VIDAS_ESPERADAS - 1);
+            conferirIgual("e a porta aberta", portasAbertas.size, 1);
+
+            teclar("r");
+            conferirIgual("vidas guardadas", vidas, VIDAS_ESPERADAS - 1);
+            conferirIgual("pontos guardados", pontos, PONTOS_DO_RECEPTOR_ESPERADOS);
+            conferirIgual("a sala é a cópia inicial (mesmo objeto)", sala === salaInicial, true);
+            conferirIgual("portas fechadas", portasAbertas.size, 0);
+            conferirIgual("sombras limpas", sombras.length, 0);
+            conferirIgual("sem fim de jogo", fimDeJogo, false);
+            conferirIgual("o zelador volta ao J", jogador.x + "," + jogador.y, "1.5,1.5");
+            conferirIgual("invulnerabilidade zerada", tempoDeJogo < invulneravelAte, false);
+            conferirIgual("a luz é a do começo", luz.segmentos.length + "," + luz.acesos.size, "3,0");
+            conferirIgual("o aviso diz Sala reiniciada", textoDoAviso(), "Sala reiniciada");
+            botaoDe("reiniciar").click();
+            conferirIgual("o botão Reiniciar faz o mesmo", sala === salaInicial && vidas === VIDAS_ESPERADAS - 1 && pontos === PONTOS_DO_RECEPTOR_ESPERADOS, true);
+
+            resolverOQuebraCabeca();
+            conferirIgual("resolver de novo depois do R não paga o receptor outra vez", pontos, PONTOS_DO_RECEPTOR_ESPERADOS);
+        });
+
+        testar("nascimento: a primeira aos 2 s numa fenda longe do zelador, no máximo 2 vivas, 12 s entre uma e outra", function () {
+            limpar();
+            proximoNascimento = tempoDeJogo + PRIMEIRO_NASCIMENTO;
+            const inicio = tempoDeJogo;
+            posar(1.5, 1.5, 0.8);
+            segundos(1.7);
+            conferirIgual("aos ~1,8 s, nenhuma ainda", sombras.length, 0);
+            const gasto = ate(function () { return sombras.length > 0; }, 1);
+            conferir("a primeira nasce aos 2 s (" + (tempoDeJogo - inicio).toFixed(3) + ")", gasto !== null && tempoDeJogo - inicio >= PRIMEIRO_NASCIMENTO - 0.05 && tempoDeJogo - inicio <= PRIMEIRO_NASCIMENTO + 0.1);
+            const primeira = sombras[0];
+            conferirIgual("nasce no estado nasce", primeira.estado, "nasce");
+            conferir("no centro de uma fenda S", sala.celulas[Math.floor(primeira.y)][Math.floor(primeira.x)] === "S" && perto(primeira.x % 1, 0.5) && perto(primeira.y % 1, 0.5));
+            conferir("a mais de 3 casas do zelador", Math.hypot(primeira.x - jogador.x, primeira.y - jogador.y) > 3);
+            conferirIgual("o tipo é sombra (a arte do catálogo)", primeira.tipo, "sombra");
+            conferirIgual("a escala nasce pequena (0,2 a 0,25)", primeira.escala >= 0.2 && primeira.escala < 0.25, true);
+
+            // O teto: com 2 vivas e o nascimento vencido, uma terceira NÃO nasce.
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            const a = novaSombra(13.5, 5.5, "ronda");
+            const b = novaSombra(13.5, 7.5, "ronda");
+            proximoNascimento = tempoDeJogo;
+            quadrosComSombraParada(a, 1);
+            for (let contador = 0; contador < 60; contador++) {
+                a.x = a.alvoX = 13.5; a.y = a.alvoY = 5.5; b.x = b.alvoX = 13.5; b.y = b.alvoY = 7.5;
+                avancarQuadro(16);
+            }
+            conferirIgual("2 vivas e nascimento vencido há 1 s: continuam 2", sombras.length, MAXIMO_DE_SOMBRAS);
+            sombras.splice(sombras.indexOf(b), 1);
+            avancarQuadro(16);
+            conferirIgual("abriu uma vaga: nasce a que estava esperando", sombras.length, MAXIMO_DE_SOMBRAS);
+            const nascidaAgora = tempoDeJogo;
+
+            // O intervalo: depois de nascer, a próxima só vem 12 s depois.
+            sombras.splice(sombras.length - 1, 1);
+            a.x = a.alvoX = 13.5; a.y = a.alvoY = 5.5;
+            const nascimentos = [];
+            const existentesAntes = new Set(sombras);
+            while (tempoDeJogo - nascidaAgora < INTERVALO_ENTRE_NASCIMENTOS + 1 && nascimentos.length === 0) {
+                a.x = a.alvoX = 13.5; a.y = a.alvoY = 5.5;
+                avancarQuadro(16);
+                sombras.forEach(function (sombra) { if (!existentesAntes.has(sombra)) { nascimentos.push(tempoDeJogo - nascidaAgora); existentesAntes.add(sombra); } });
+            }
+            conferir("o próximo nascimento veio " + (nascimentos[0] === undefined ? "nunca" : nascimentos[0].toFixed(2)) + " s depois do anterior (12 s)",
+                nascimentos.length === 1 && nascimentos[0] >= INTERVALO_ENTRE_NASCIMENTOS - 0.05 && nascimentos[0] <= INTERVALO_ENTRE_NASCIMENTOS + 0.1);
+        });
+
+        testar("a fenda escolhida respeita os 3 casas de distância do zelador", function () {
+            semearSorteio(909);
+            const resultados = { oeste: 0, leste: 0, erro: 0 };
+            [[4.5, 8.5, "leste"], [14.5, 2.5, "oeste"]].forEach(function (caso) {
+                for (let rodada = 0; rodada < 12; rodada++) {
+                    limpar();
+                    posar(caso[0], caso[1], 0.8);
+                    proximoNascimento = tempoDeJogo;
+                    avancarQuadro(16);
+                    const nascida = sombras[0];
+                    if (nascida === undefined) {
+                        resultados.erro++;
+                    } else if (Math.floor(nascida.x) === 14 && Math.floor(nascida.y) === 1) {
+                        resultados.leste++;
+                    } else if (Math.floor(nascida.x) === 4 && Math.floor(nascida.y) === 9) {
+                        resultados.oeste++;
+                    } else {
+                        resultados.erro++;
+                    }
+                }
+            });
+            conferirIgual("zelador junto da fenda do oeste (4,5; 8,5): as 12 nasceram na do leste", resultados.leste, 12);
+            conferirIgual("zelador junto da fenda do leste: as 12 nasceram na do oeste", resultados.oeste, 12);
+            conferirIgual("nenhuma fora de fenda", resultados.erro, 0);
+        });
+
+        testar("a planta H lista as sombras e o campo; o painel mostra vidas (ícones E número) e pontos; linhas curtas", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            novaSombra(4.5, 9.5, "ronda");
+            novaSombra(4.5, 3.5, "persegue");
+            teclar("h");
+            avancarQuadro(16);
+            const linhas = leitura.textContent.split("\n");
+            conferirIgual("a leitura do H tem 6 linhas", linhas.length, 6);
+            conferir("nenhuma linha passa de 40 letras: " + linhas.map(function (linha) { return linha.length; }), linhas.every(function (linha) { return linha.length <= 40; }));
+            conferir("sem NaN, Infinity nem undefined", !/NaN|Infinity|undefined/.test(leitura.textContent), leitura.textContent);
+            conferir("lista as sombras por estado", linhas[2].indexOf("sombras: ") === 0 && linhas[2].indexOf("ronda 1") !== -1 && linhas[2].indexOf("persegue 1") !== -1, linhas[2]);
+            conferir("e o campo (casas alcançadas e a sombra mais perto)", /^campo: \d+ casas · sombra a \d+$/.test(linhas[3]), linhas[3]);
+            conferirIgual("o botão Planta acompanha a tecla", botaoDe("planta").getAttribute("aria-pressed"), "true");
+            teclar("h");
+            avancarQuadro(16);
+            const painel = leitura.textContent.split("\n");
+            conferirIgual("o painel tem 3 linhas", painel.length, 3);
+            conferir("nenhuma passa de 40 letras: " + painel.map(function (linha) { return linha.length; }), painel.every(function (linha) { return linha.length <= 40; }));
+            conferirIgual("a primeira linha tem os ícones das vidas E o número", painel[0], "Vidas ♥♥♥ 3 · Pontos 0");
+            pontos = 99999;
+            vidas = 1;
+            avancarQuadro(16);
+            conferir("com muitos pontos a linha ainda cabe", leitura.textContent.split("\n")[0].length <= 40 && leitura.textContent.indexOf("Vidas ♥ 1 · Pontos 99999") === 0, leitura.textContent);
+        });
+
+        // ---- o desenho da sombra: a arte do catálogo, na névoa certa ----
+
+        function corDoHex(hex) {
+            return [1, 3, 5].map(function (inicio) { return parseInt(hex.slice(inicio, inicio + 2), 16); });
+        }
+
+        function empacotarCor(cor) {
+            return ((255 << 24) | (cor[2] << 16) | (cor[1] << 8) | cor[0]) >>> 0;
+        }
+
+        testar("a sombra viva é desenhada com a arte do catálogo (tipo sombra), nas cores da paleta e da névoa", function () {
+            limpar();
+            posar(1.5, 7.5, 0);
+            const sombra = novaSombra(4.5, 7.5, "ronda");   // de frente, atrás do feixe vertical
+            sombra.escala = 1;
+            quadrosComSombraParada(sombra, 1);
+            const doSprite = spritesDaTela.filter(function (sprite) { return sprite.objeto === sombra; })[0];
+            conferir("a sombra está na lista de sprites do quadro, com o tipo 'sombra'", doSprite !== undefined && doSprite.tipo === "sombra");
+            const comSombra = Uint32Array.from(pixels);
+            const idDaSombra = sombras.indexOf(sombra);
+            sombras.splice(idDaSombra, 1);
+            avancarQuadro(16);
+            const semSombra = Uint32Array.from(pixels);
+
+            const nivel = Math.min(31, Math.floor(doSprite.profundidade / 10 * 31));
+            const arte = CATALOGO_DE_SPRITES.sombra.arte;
+            const permitidas = new Set();
+            [...arte.join("")].filter(function (letra) { return letra !== "."; }).forEach(function (letra) {
+                const base = corDoHex(PALETA_DAS_TEXTURAS[letra]);
+                permitidas.add(empacotarCor(base.map(function (canal, posicao) { return Math.round(canal + (COR_DA_NEVOA[posicao] - canal) * (nivel / 31)); })));
+            });
+            let diferentes = 0;
+            let foraDaPaleta = 0;
+            comSombra.forEach(function (pixel, posicao) {
+                const ehFeixe = CORES_DO_FEIXE.includes(pixel) || CORES_DO_FEIXE.includes(semSombra[posicao]);   // o pulso do feixe anda entre os dois quadros
+                if (pixel !== semSombra[posicao] && !ehFeixe) {
+                    diferentes++;
+                    foraDaPaleta += permitidas.has(pixel) ? 0 : 1;
+                }
+            });
+            conferir("a sombra desenhou pixels (" + diferentes + ")", diferentes > 100);
+            conferirIgual("todo pixel que ela escreveu é uma cor da arte do catálogo no nível de névoa " + nivel, foraDaPaleta, 0);
+            conferir("a arte tem a ponta fina e as fagulhas: a silhueta não é um retângulo (alguns pixels do retângulo ficam de fora)",
+                diferentes < Math.round((doSprite.direita - doSprite.esquerda) * (doSprite.base - doSprite.topo) * 0.7));
+            avancarQuadro(16);
+        });
+
+        testar("robô aleatório (semente fixa): sem NaN, vidas e sombras nos limites, campo = referência, os 5 estados vistos", function () {
+            const QUADROS = 5000;
+            semearSorteio(2026);
+            limpar();
+            proximoNascimento = tempoDeJogo + 1;
+            const teclas = ["w", "s", "a", "d", "ArrowLeft", "ArrowRight"];
+            let primeiraViolacao = null;
+            let maximoDeSombras = 0;
+            let vidasPerdidas = 0;
+            let ultimasVidas = vidas;
+            let quadrosComReferencia = 0;
+            let reinicios = 0;
+            const estados = new Set();
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                const sorteio = Math.random();
+                if (sorteio < 0.45) {
+                    apertarTecla(teclas[Math.floor(Math.random() * teclas.length)]);
+                } else if (sorteio < 0.6) {
+                    soltarTudo();
+                } else if (sorteio < 0.7) {
+                    teclar("e");
+                } else if (sorteio < 0.703) {
+                    teclar("r");
+                    reinicios++;
+                    ultimasVidas = vidas;
+                } else if (sorteio < 0.72) {
+                    teclar("h");
+                } else if (sorteio < 0.73 && sombras.length < MAXIMO_DE_SOMBRAS && !fimDeJogo) {
+                    novaSombra(jogador.x + 0.9 * Math.cos(jogador.angulo + 1), jogador.y + 0.9 * Math.sin(jogador.angulo + 1), "persegue");   // isca: garante contatos
+                }
+                avancarQuadro(10 + Math.floor(Math.random() * 40));
+                maximoDeSombras = Math.max(maximoDeSombras, sombras.length);
+                sombras.forEach(function (sombra) { estados.add(sombra.estado); });
+                if (vidas < ultimasVidas) {
+                    vidasPerdidas += ultimasVidas - vidas;
+                } else if (vidas > ultimasVidas) {
+                    ultimasVidas = vidas;   // jogo novo depois do fim
+                }
+                ultimasVidas = vidas;
+
+                if (![jogador.x, jogador.y, jogador.angulo, pontos, tempoDeJogo].every(Number.isFinite)) {
+                    primeiraViolacao = "quadro " + quadro + ": número não finito no zelador ou no placar";
+                } else if (vidas < 0 || vidas > VIDAS_ESPERADAS || fimDeJogo !== (vidas === 0)) {
+                    primeiraViolacao = "quadro " + quadro + ": vidas " + vidas + ", fim de jogo " + fimDeJogo;
+                } else if (sombras.length > MAXIMO_DE_SOMBRAS) {
+                    primeiraViolacao = "quadro " + quadro + ": " + sombras.length + " sombras";
+                } else if (sombras.some(function (sombra) { return ![sombra.x, sombra.y, sombra.escala, sombra.exposicao, sombra.alvoX, sombra.alvoY].every(Number.isFinite); })) {
+                    primeiraViolacao = "quadro " + quadro + ": sombra com valor não finito";
+                } else if (sombras.some(function (sombra) { return sombra.x < 0 || sombra.y < 0 || sombra.x > COLUNAS || sombra.y > LINHAS; })) {
+                    primeiraViolacao = "quadro " + quadro + ": sombra fora do mapa";
+                } else if (sombras.some(function (sombra) { return !["nasce", "ronda", "persegue", "recua", "dissolve"].includes(sombra.estado) || sombra.escala < 0 || sombra.escala > 1 + 1e-9; })) {
+                    primeiraViolacao = "quadro " + quadro + ": estado ou escala inválidos";
+                } else if (!Array.from(zBuffer).every(Number.isFinite)) {
+                    primeiraViolacao = "quadro " + quadro + ": z-buffer não finito";
+                } else if (ehSolida(Math.floor(jogador.x), Math.floor(jogador.y))) {
+                    primeiraViolacao = "quadro " + quadro + ": zelador em casa sólida";
+                } else if (/NaN|undefined|Infinity/.test(leitura.textContent)) {
+                    primeiraViolacao = "quadro " + quadro + ": texto " + leitura.textContent;
+                } else if (!depuracaoLigada && pixels.some(function (pixel) { return pixel === 0; })) {
+                    primeiraViolacao = "quadro " + quadro + ": pixel vazio no buffer";
+                } else if (quadro % 40 === 0 && !fimDeJogo) {
+                    quadrosComReferencia++;
+                    const motivo = motivoDoCampoErrado();
+                    if (motivo !== null) {
+                        primeiraViolacao = "quadro " + quadro + ": " + motivo;
+                    }
+                }
+            }
+            if (depuracaoLigada) {
+                teclar("h");
+            }
+            soltarTudo();
+            conferir("em " + QUADROS + " quadros: nada de NaN, vidas e sombras nos limites, campo = referência em " + quadrosComReferencia + " quadros", primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô viu sombras (no máximo " + maximoDeSombras + "), perdeu " + vidasPerdidas + " vidas e passou por " + Array.from(estados).sort() + " (" + reinicios + " reinícios)",
+                maximoDeSombras === MAXIMO_DE_SOMBRAS && vidasPerdidas >= 3 && estados.has("nasce") && estados.has("ronda") && estados.has("persegue") && estados.has("recua"));
+            conferirIgual("e viu dissolver", estados.has("dissolve"), true);
+        });
+
+        // ---- iframes: o passo inteiro com o style.css de verdade, num tamanho de tela conhecido ----
+
+        function montarDocumentoDoIframe(movimentoReduzido) {
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../reflexo/08-sombras/style.css"></head><body>'
+                + document.getElementById("esqueleto").innerHTML
+                + '<script>'
+                + 'window.matchMedia = function (consulta) { return { matches: ' + movimentoReduzido + ' && /prefers-reduced-motion/.test(consulta), media: consulta, addEventListener: function () { }, removeEventListener: function () { } }; };'
+                + 'window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };'
+                + '<\/script>'
+                + '<script src="../../reflexo/08-sombras/script.js"><\/script></body></html>';
+        }
+
+        function abrirNumIframe(largura, altura, movimentoReduzido) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe(movimentoReduzido);
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirSemRolagem(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura, false);
+            try {
+                const janela = quadro.contentWindow;
+                const documento = janela.document;
+                const nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                darQuadro(janela, 16);
+                [false, true].forEach(function (comPlanta) {
+                    if (comPlanta) {
+                        documento.querySelector('[data-comando="planta"]').click();
+                        darQuadro(janela, 32);
+                    }
+                    const estado = nome + (comPlanta ? " com a planta (H)" : "");
+                    conferir(estado + ": não rola na vertical (altura do conteúdo " + documento.documentElement.scrollHeight + " ≤ " + janela.innerHeight + ")", documento.documentElement.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + documento.documentElement.scrollWidth + " ≤ " + janela.innerWidth + ")", documento.documentElement.scrollWidth <= janela.innerWidth);
+                });
+                const pequenos = Array.from(documento.querySelectorAll("#controles button")).filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 || caixa.height < 48;
+                }).map(function (botao) { return (botao.dataset.acao || botao.dataset.comando) + " " + botao.getBoundingClientRect().width.toFixed(0) + "×" + botao.getBoundingClientRect().height.toFixed(0); });
+                conferir(nome + ": todo botão de toque tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        function imagemNoInstante(janela, instante) {
+            darQuadro(janela, instante);
+            return Uint32Array.from(janela.eval("pixels"));
+        }
+
+        async function conferirFeixeEMovimento(movimentoReduzido) {
+            const quadro = await abrirNumIframe(390, 750, movimentoReduzido);
+            try {
+                const janela = quadro.contentWindow;
+                const nome = movimentoReduzido ? "com prefers-reduced-motion" : "sem prefers-reduced-motion";
+                janela.eval("jogador.x = 2.5; jogador.y = 4.5; jogador.angulo = Math.PI / 2; atualizarDirecao(); proximoNascimento = Infinity;");
+                darQuadro(janela, 1000);
+                conferirIgual(nome + ": o jogo lê a preferência", janela.eval("SEM_ANIMACAO"), movimentoReduzido);
+                const coresDoFeixe = janela.eval("CORES_DO_FEIXE");
+                const primeira = imagemNoInstante(janela, 1000);
+                const meiaCasaDepois = imagemNoInstante(janela, 1250);
+                const muitoDepois = imagemNoInstante(janela, 9000);
+                const diferentes = [];
+                primeira.forEach(function (pixel, posicao) {
+                    if (pixel !== meiaCasaDepois[posicao]) {
+                        diferentes.push(posicao);
+                    }
+                });
+                const sohFeixe = diferentes.every(function (posicao) { return coresDoFeixe.includes(primeira[posicao]) || coresDoFeixe.includes(meiaCasaDepois[posicao]); });
+                const pixelsDoFeixe = Array.from(primeira).filter(function (pixel) { return coresDoFeixe.includes(pixel); }).length;
+                conferir(nome + ": o feixe está na imagem (" + pixelsDoFeixe + " pixels)", pixelsDoFeixe > 50);
+                if (movimentoReduzido) {
+                    conferirIgual(nome + ": o feixe fica PARADO — 0,25 s depois a imagem é idêntica", diferentes.length, 0);
+                    conferirIgual(nome + ": e 8 s depois também", muitoDepois.every(function (pixel, posicao) { return pixel === primeira[posicao]; }), true);
+                } else {
+                    conferir(nome + ": os pulsos andam — 0,25 s depois a imagem mudou (" + diferentes.length + " pixels)", diferentes.length > 0);
+                    conferirIgual(nome + ": só o feixe mudou (nada mais pisca)", sohFeixe, true);
+                }
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        // O contorno da invulnerabilidade, com o CSS de verdade: um traço parado, sem animação nem transição.
+        async function conferirContornoParado(movimentoReduzido) {
+            const quadro = await abrirNumIframe(390, 750, movimentoReduzido);
+            try {
+                const janela = quadro.contentWindow;
+                const nome = movimentoReduzido ? "com movimento reduzido" : "com movimento normal";
+                const palcoDoIframe = janela.document.getElementById("palco");
+                const antes = janela.getComputedStyle(palcoDoIframe);
+                conferirIgual(nome + ": sem a classe, sem contorno", antes.outlineStyle, "none");
+                palcoDoIframe.classList.add("invulneravel");
+                const estilo = janela.getComputedStyle(palcoDoIframe);
+                conferir(nome + ": com a classe, o contorno é um traço sólido de pelo menos 2 px (" + estilo.outlineStyle + " " + estilo.outlineWidth + ")", estilo.outlineStyle === "solid" && parseFloat(estilo.outlineWidth) >= 2);
+                conferir(nome + ": sem animação (" + estilo.animationName + ") e sem transição (" + estilo.transitionDuration + ")", estilo.animationName === "none" && /^(0s)(, 0s)*$/.test(estilo.transitionDuration));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("rolagem 390×750", function () { return conferirSemRolagem(390, 750); });
+            await testarNoIframe("rolagem 360×640", function () { return conferirSemRolagem(360, 640); });
+            await testarNoIframe("rolagem 1280×800", function () { return conferirSemRolagem(1280, 800); });
+            await testarNoIframe("movimento normal", function () { return conferirFeixeEMovimento(false); });
+            await testarNoIframe("movimento reduzido", function () { return conferirFeixeEMovimento(true); });
+            await testarNoIframe("contorno normal", function () { return conferirContornoParado(false); });
+            await testarNoIframe("contorno reduzido", function () { return conferirContornoParado(true); });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

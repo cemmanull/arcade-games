@@ -15,20 +15,28 @@
     <h1>Teste — Reflexo, passo 5: texturas</h1>
     <pre id="resultado"></pre>
 
-    <!-- O esqueleto do passo: o script dele procura estes ids e os botões [data-acao]. -->
-    <div id="palco">
-        <canvas id="visao" width="320" height="200"></canvas>
-        <canvas id="jogo" width="384" height="288" hidden></canvas>
-    </div>
-    <p id="leitura"></p>
-    <div id="controles">
-        <button type="button" data-acao="girarEsquerda">girarEsquerda</button>
-        <button type="button" data-acao="frente">frente</button>
-        <button type="button" data-acao="girarDireita">girarDireita</button>
-        <button type="button" data-acao="esquerda">esquerda</button>
-        <button type="button" data-acao="tras">tras</button>
-        <button type="button" data-acao="direita">direita</button>
-    </div>
+    <!-- O esqueleto do passo (o mesmo do index.html). Uma cópia viva vai para #aplicacao, escondida, para as
+         afirmações; outra, com o style.css de verdade, vai para os iframes (rolagem e alvos de toque). -->
+    <template id="esqueleto">
+        <h1>Reflexo</h1>
+        <div id="palco">
+            <canvas id="visao" width="320" height="200"></canvas>
+            <canvas id="jogo" width="384" height="288" hidden></canvas>
+        </div>
+        <p id="leitura"></p>
+        <div id="controles">
+            <button type="button" data-acao="girarEsquerda">⟲</button>
+            <button type="button" data-acao="frente">▲</button>
+            <button type="button" data-acao="girarDireita">⟳</button>
+            <button type="button" data-acao="esquerda">◀&#xFE0E;</button>
+            <button type="button" data-acao="tras">▼</button>
+            <button type="button" data-acao="direita">▶&#xFE0E;</button>
+            <button type="button" data-comando="planta" aria-pressed="false">Planta (H)</button>
+            <button type="button" data-comando="medir">Medir (M)</button>
+        </div>
+        <p id="ajuda">W S ou ↑ ↓: andar · A D: passo lateral · ← →: girar<br>H: planta e tempos (● linha vertical cruzada · ■ horizontal) · M: medir de novo</p>
+    </template>
+    <div id="aplicacao" hidden></div>
 
     <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
     <script src="../apoio.js"></script>
@@ -38,6 +46,7 @@
         const janelaFalsa = { largura: 1280, altura: 720 };
         Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
         Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+        document.getElementById("aplicacao").appendChild(document.getElementById("esqueleto").content.cloneNode(true));
     </script>
 
     <!-- Este passo é sobre PIXELS: a imagem (#visao) e as texturas usam o canvas de verdade, e o teste
@@ -64,8 +73,9 @@
         const NIVEIS = 32;
         const DISTANCIA_DA_NEVOA_ESPERADA = 10;
         const NIVEIS_EXTRAS_DA_FACE_Y = 5;
-        const NEVOA = [8, 8, 14];
-        const HORIZONTE = [10, 10, 18];
+        // A cor da névoa e a do horizonte vêm do PASSO (uma cópia só); o que o teste afirma é a regra: são a mesma.
+        const NEVOA = COR_DA_NEVOA;
+        const HORIZONTE = COR_DO_HORIZONTE;
         const TETO_ALTO = [4, 4, 9];
         const PISO_BAIXO = [38, 38, 56];
 
@@ -434,8 +444,10 @@
                 conferir("textura " + simbolo + ": canvas 16×16 para a técnica A", canvasesDasTexturas[simbolo].width === 16 && canvasesDasTexturas[simbolo].height === 16);
             });
             conferirIgual("32 estilos de névoa para a técnica A", estilosDaNevoa.length, NIVEIS);
-            conferirIgual("o último estilo é a névoa opaca", estilosDaNevoa[31], "rgba(8, 8, 14, 1)");
-            conferirIgual("o primeiro é transparente", estilosDaNevoa[0], "rgba(8, 8, 14, 0)");
+            conferirIgual("a névoa é exatamente a cor do horizonte (a parede enevoada some nele)", JSON.stringify(COR_DA_NEVOA), JSON.stringify(COR_DO_HORIZONTE));
+            conferir("e são três canais inteiros de 0 a 255", COR_DA_NEVOA.length === 3 && COR_DA_NEVOA.every(function (canal) { return Number.isInteger(canal) && canal >= 0 && canal <= 255; }));
+            conferirIgual("o último estilo é a névoa opaca", estilosDaNevoa[31], "rgba(" + NEVOA.join(", ") + ", 1)");
+            conferirIgual("o primeiro é transparente", estilosDaNevoa[0], "rgba(" + NEVOA.join(", ") + ", 0)");
         });
 
         testar("constantes do campo de visão", function () {
@@ -461,7 +473,7 @@
                     }
                 }
             });
-            conferir("em todos os 5 × 256 texels: o nível 0 é a cor da paleta e o 31 é exatamente a cor da névoa (8, 8, 14)", primeiroProblema === null, primeiroProblema);
+            conferir("em todos os 5 × 256 texels: o nível 0 é a cor da paleta e o 31 é exatamente a cor da névoa (" + NEVOA.join(", ") + ")", primeiroProblema === null, primeiroProblema);
 
             let primeiraClareada = null;
             Object.keys(texturasSombreadas).forEach(function (simbolo) {
@@ -707,11 +719,14 @@
             const relogioDoApoio = performance.now;
             const desenharPorFatiasDoJogo = window.desenharVisaoPorFatias;
             const desenharDoJogo = window.desenharVisao;
+            const atualizarRaiosDoJogo = window.atualizarRaios;
             let agora = 0;
             const chamadas = [];
             performance.now = function () { return agora; };
             window.desenharVisaoPorFatias = function () { chamadas.push("A"); agora += 3; return desenharPorFatiasDoJogo.apply(this, arguments); };
             window.desenharVisao = function () { chamadas.push("B"); agora += 1; return desenharDoJogo.apply(this, arguments); };
+            // Cada cálculo de raios custa 100 ms de relógio falso: se ele estivesse DENTRO da região medida, A e B não dariam 3 e 1.
+            window.atualizarRaios = function () { chamadas.push("R"); agora += 100; return atualizarRaiosDoJogo.apply(this, arguments); };
             try {
                 reiniciarEVer(7.5, 9.5, Math.PI / 2);
                 chamadas.length = 0;
@@ -721,7 +736,8 @@
                 conferir("M mede de novo: um objeto novo", medicao !== anterior);
                 conferirIgual("a técnica A rodou 45 quadros (5 de aquecimento + 40 medidos)", chamadas.filter(function (letra) { return letra === "A"; }).length, 45);
                 conferirIgual("a técnica B também", chamadas.filter(function (letra) { return letra === "B"; }).length, 45);
-                conferirIgual("A inteira antes de B inteira", chamadas.join(""), "A".repeat(45) + "B".repeat(45));
+                conferirIgual("os raios são calculados UMA vez antes de cada técnica, fora do laço medido: R, 45 A, R, 45 B", chamadas.join(""), "R" + "A".repeat(45) + "R" + "B".repeat(45));
+                conferirIgual("atualizarRaios foi chamada 2 vezes (uma por técnica), nenhuma dentro da região cronometrada", chamadas.filter(function (letra) { return letra === "R"; }).length, 2);
                 conferir("A custou 3 ms por quadro medido (só os 40 quadros depois do aquecimento contam)", perto(medicao.a, 3, 1e-9), "a = " + medicao.a);
                 conferir("B custou 1 ms por quadro medido", perto(medicao.b, 1, 1e-9), "b = " + medicao.b);
                 conferirIgual("a medição guarda o tamanho da imagem", medicao.largura + "×" + medicao.altura, "320×200");
@@ -738,6 +754,7 @@
                 performance.now = relogioDoApoio;
                 window.desenharVisaoPorFatias = desenharPorFatiasDoJogo;
                 window.desenharVisao = desenharDoJogo;
+                window.atualizarRaios = atualizarRaiosDoJogo;
                 soltarTudo();
             }
         });
@@ -761,6 +778,49 @@
             apertarTecla("m");
             conferirIgual("de volta à paisagem: a medição vê 320", medicao.largura, 320);
             conferir("os tempos são números finitos e ≥ 0", [medicao.a, medicao.b].every(function (valor) { return Number.isFinite(valor) && valor >= 0; }), JSON.stringify(medicao));
+        });
+
+        testar("os botões Planta (H) e Medir (M): iguais às teclas H e M, e o Medir também liga a planta", function () {
+            const planta = document.querySelector('[data-comando="planta"]');
+            const medir = document.querySelector('[data-comando="medir"]');
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferirIgual("existem os dois botões, com a tecla no texto", [planta.textContent, medir.textContent].join("|"), "Planta (H)|Medir (M)");
+            conferirIgual("Planta começa com aria-pressed=false", planta.getAttribute("aria-pressed"), "false");
+            conferirIgual("Medir não é um botão de liga/desliga (sem aria-pressed)", medir.hasAttribute("aria-pressed"), false);
+
+            planta.click();
+            avancarQuadro(16);
+            conferirIgual("clicar em Planta liga a planta", depuracaoLigada, true);
+            conferirIgual("aria-pressed=true", planta.getAttribute("aria-pressed"), "true");
+            conferirIgual("a imagem some e a planta aparece", visao.hidden + "," + tela.hidden, "true,false");
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("a tecla H desliga e o botão acompanha", depuracaoLigada + "," + planta.getAttribute("aria-pressed"), "false,false");
+
+            const antesDaTecla = medicao;
+            apertarTecla("m");
+            soltarTecla("m");
+            conferirIgual("a tecla M mede de novo...", medicao !== antesDaTecla, true);
+            conferirIgual("...mas NÃO liga a planta", depuracaoLigada, false);
+
+            const antesDoBotao = medicao;
+            medir.click();
+            avancarQuadro(16);
+            conferirIgual("o botão Medir mede de novo (medição nova)", medicao !== antesDoBotao, true);
+            conferirIgual("e LIGA a planta, onde o resultado aparece", depuracaoLigada, true);
+            conferirIgual("o botão Planta mostra aria-pressed=true", planta.getAttribute("aria-pressed"), "true");
+            conferir("a leitura mostra os dois tempos", /A drawImage por coluna: [\d.]+ ms/.test(document.getElementById("leitura").textContent) && /B ImageData por pixel: [\d.]+ ms/.test(document.getElementById("leitura").textContent), document.getElementById("leitura").textContent);
+
+            const depoisDoPrimeiro = medicao;
+            medir.click();
+            conferirIgual("Medir de novo, com a planta já ligada: mede outra vez", medicao !== depoisDoPrimeiro, true);
+            conferirIgual("e a planta continua LIGADA (Medir liga, não alterna)", depuracaoLigada, true);
+            planta.click();
+            avancarQuadro(16);
+            conferirIgual("Planta desliga", depuracaoLigada + "," + planta.getAttribute("aria-pressed"), "false,false");
+            conferirIgual("a imagem volta", visao.hidden, false);
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna", depuracaoLigada, false);
         });
 
         testar("a leitura do H: linhas curtas e sem NaN", function () {
@@ -912,7 +972,75 @@
             }
         });
 
-        finalizar();
+        // ---- iframes: o passo inteiro com o style.css de verdade, num tamanho de tela conhecido ----
+
+        function montarDocumentoDoIframe() {
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../reflexo/05-texturas/style.css"></head><body>'
+                + document.getElementById("esqueleto").innerHTML
+                + '<script>window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };<\/script>'
+                + '<script src="../../reflexo/05-texturas/script.js"><\/script></body></html>';
+        }
+
+        function abrirNumIframe(largura, altura) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe();
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirSemRolagem(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura);
+            try {
+                const janela = quadro.contentWindow;
+                const documento = janela.document;
+                const nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                darQuadro(janela, 16);
+                [false, true].forEach(function (comPlanta) {
+                    if (comPlanta) {
+                        documento.querySelector('[data-comando="planta"]').click();
+                        darQuadro(janela, 32);
+                    }
+                    const estado = nome + (comPlanta ? " com a planta (H)" : "");
+                    conferir(estado + ": não rola na vertical (altura do conteúdo " + documento.documentElement.scrollHeight + " ≤ " + janela.innerHeight + ")", documento.documentElement.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + documento.documentElement.scrollWidth + " ≤ " + janela.innerWidth + ")", documento.documentElement.scrollWidth <= janela.innerWidth);
+                });
+                const pequenos = Array.from(documento.querySelectorAll("#controles button")).filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 || caixa.height < 48;
+                }).map(function (botao) { return (botao.dataset.acao || botao.dataset.comando) + " " + botao.getBoundingClientRect().width.toFixed(0) + "×" + botao.getBoundingClientRect().height.toFixed(0); });
+                conferir(nome + ": todo botão de toque tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("rolagem 390×750", function () { return conferirSemRolagem(390, 750); });
+            await testarNoIframe("rolagem 360×640", function () { return conferirSemRolagem(360, 640); });
+            await testarNoIframe("rolagem 1280×800", function () { return conferirSemRolagem(1280, 800); });
+        }
+
+        principal().finally(finalizar);
     </script>
 </body>
 
