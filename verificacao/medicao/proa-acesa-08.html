@@ -1,0 +1,135 @@
+<!--
+  MEDIÇÃO DO PASSO 8 do Proa Acesa, para abrir NO CELULAR (veja LEIAME.md). Não é página de teste: o executor não a roda no modo normal.
+
+  Esqueleto, import map e ponte copiados do index.html do passo (a ORDEM importa: import map, módulo inline, regras.js, script.js),
+  depois o medir.js. A página só dirige o jogo pelos nomes que o passo já expõe; não muda nada nele.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proa Acesa — medição do passo 8</title>
+    <link rel="stylesheet" href="../../proa-acesa/08-depuracao/style.css">
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">
+        import * as THREE from "three";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+        window.THREE = THREE;
+        window.OrbitControls = OrbitControls;
+    </script>
+    <script src="../../proa-acesa/08-depuracao/regras.js" defer></script>
+    <script src="../../proa-acesa/08-depuracao/script.js" defer></script>
+    <script src="medir.js" defer></script>
+</head>
+
+<body>
+    <header>
+        <h1>Proa Acesa</h1>
+        <button id="botao-clarao" type="button" aria-label="Reduzir clarões" aria-pressed="false">Clarões</button>
+    </header>
+    <div id="hud">
+        <p id="relogio"></p>
+        <p id="calor"></p>
+        <meter id="medidor" min="0" max="1" low="0.6" high="0.85" optimum="0" aria-label="Calor da lanterna"></meter>
+    </div>
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <p id="mensagem" aria-live="polite"></p>
+    <pre id="depuracao" hidden></pre>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <div id="acoes">
+            <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+            <button id="botao-foco" type="button" aria-label="Foco estreito ou largo" aria-pressed="false">Foco</button>
+        </div>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        /* `load` vem depois dos scripts `defer`: aqui o jogo e o medir.js já existem. */
+        const SEGUNDOS_POR_LADO_DO_ZIGUEZAGUE = 1.5;
+        const CHAVE_DO_ROBO = "robo-de-medicao";
+
+        let noitesRecomecadas = 0;
+
+        window.addEventListener("load", function () {
+            montarPainelDeMedicao({
+                titulo: "Proa Acesa passo 8",
+                cenarios: [
+                    criarCenario("Noite 1 Calmaria, chuva instanciada", 0),
+                    criarCenario("Noite 5 Tormenta, chuva instanciada", 4)
+                ],
+                verificarRequisitos: descreverImpedimento,
+                lerAparelho: lerAparelhoDoJogo
+            });
+        });
+
+        function descreverImpedimento() {
+            if (typeof THREE === "undefined") {
+                return "Precisa de internet para baixar o three.js. Ligue o Wi-Fi com internet e recarregue a página.";
+            }
+            if (typeof renderizador === "undefined" || renderizador === null) {
+                return "O celular não conseguiu ligar o WebGL, que o jogo precisa. Tente outro navegador.";
+            }
+            return "";
+        }
+
+        /* O robô: a barca vai em zigue-zague e, se a noite acabar (naufrágios, vitória), a noite é montada de novo,
+           para o mundo nunca congelar durante a medição. */
+        function criarCenario(nome, indiceDaNoite) {
+            return {
+                nome: nome,
+                preparar: function () {
+                    noitesRecomecadas = 0;
+                    chuva.modo = "instanciada";
+                    aplicarModoDaChuva();
+                    comecarNoite(indiceDaNoite);
+                },
+                aoQuadro: function (instante) {
+                    if (noite.resultado !== "" || noite.indice !== indiceDaNoite) {
+                        comecarNoite(indiceDaNoite);
+                        noitesRecomecadas++;
+                    }
+                    const paraEsquerda = Math.floor(instante / 1000 / SEGUNDOS_POR_LADO_DO_ZIGUEZAGUE) % 2 === 0;
+                    soltar("esquerda", CHAVE_DO_ROBO);
+                    soltar("direita", CHAVE_DO_ROBO);
+                    segurar(paraEsquerda ? "esquerda" : "direita", CHAVE_DO_ROBO);
+                },
+                lerAmostra: function () {
+                    return {
+                        atualizacao: ultimoTempoDeAtualizacao,
+                        desenho: ultimoTempoDeDesenho,
+                        quadro: ultimoTempoDeQuadro,
+                        chamadas: renderizador.info.render.calls,
+                        triangulos: renderizador.info.render.triangles
+                    };
+                },
+                aoTerminar: function () {
+                    soltar("esquerda", CHAVE_DO_ROBO);
+                    soltar("direita", CHAVE_DO_ROBO);
+                    return "geometrias na GPU " + renderizador.info.memory.geometries + " · noites recomeçadas " + noitesRecomecadas;
+                }
+            };
+        }
+
+        function lerAparelhoDoJogo() {
+            const contexto = renderizador.getContext();
+            const extensao = contexto.getExtension("WEBGL_debug_renderer_info");
+            return {
+                pixelRatioDoJogo: renderizador.getPixelRatio(),
+                tamanhoDoCanvas: renderizador.domElement.width + "x" + renderizador.domElement.height,
+                placaDeVideo: extensao ? contexto.getParameter(extensao.UNMASKED_RENDERER_WEBGL) : "?",
+                versaoDoThree: THREE.REVISION
+            };
+        }
+    </script>
+</body>
+</html>
