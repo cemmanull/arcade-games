@@ -1,20 +1,15 @@
 /*
   REFLEXO — PASSO 1: A PLANTA
-  Antes do 3D, o jogo precisa saber ONDE as coisas estão. O mundo é a planta
-  de um prédio: um mapa em texto (o truque do Pac-Man) visto de cima, mais o
-  jogador com posição e ângulo. Nada anda ainda. A direção usa cosseno e
-  seno, como o tiro do Shoot'em up.
+  Antes do 3D, o jogo precisa saber ONDE as coisas estão: um mapa em texto (o truque
+  do Pac-Man) visto de cima, mais o jogador com posição e ângulo. Nada anda ainda.
+  A direção usa cosseno e seno, como o tiro do Shoot'em up.
 */
 
 // ---- 1. CONSTANTES E O MAPA --------------------------------
 const TAMANHO_DA_CASA = 24;   // pixels de desenho por casa
 
-/*
-  Legenda (a do jogo completo):
-      #  tijolo    %  pedra    .  chão    E  emissor    R  receptor
-      /  \  espelhos    D  porta    S  fenda    X  saída    J  início
-  As bordas são sempre parede. Na string, a barra invertida vale duas ("\\").
-*/
+// Legenda: # tijolo · % pedra · . chão · E emissor · R receptor · / \ espelhos · D porta · S fenda · X saída · J início
+// As bordas são sempre parede. Na string, a barra invertida vale duas ("\\").
 const MAPA_EM_TEXTO = [
     "################",
     "#J...#....%%..R#",
@@ -53,21 +48,22 @@ const jogador = { x: 0, y: 0, angulo: Math.PI / 4, dx: 0, dy: 0 };
 let depuracaoLigada = false;
 
 // ---- 3. CONFERIR O MAPA, ACHAR O JOGADOR -------------------
-// Dado errado não dá erro: dá um desenho torto longe da causa.
+// Dado errado não dá erro: dá um desenho torto longe da causa. Devolve se o mapa serve.
 function verificarMapa() {
     const inicios = MAPA_EM_TEXTO.join("").split("J").length - 1;
     const bordasFechadas = MAPA_EM_TEXTO.every((linha, i) => linha.length === COLUNAS
         && (i === 0 || i === LINHAS - 1 ? /^#+$/.test(linha) : /^#.*#$/.test(linha)));
+    const valido = inicios === 1 && bordasFechadas;
 
-    if (inicios !== 1 || !bordasFechadas) {
-        console.error(`Mapa inválido: ${inicios} jogadores (esperado 1), bordas fechadas: ${bordasFechadas}.`);
+    if (!valido) {
+        console.error(`Mapa inválido: ${inicios} jogadores (esperado 1), bordas fechadas: ${bordasFechadas}. O jogo não começa.`);
     }
+    return valido;
 }
 
 function colocarJogadorNoInicio() {
     const y = mapa.findIndex(linha => linha.includes("J"));
     const x = mapa[y].indexOf("J");
-
     jogador.x = x + 0.5;
     jogador.y = y + 0.5;
     mapa[y][x] = ".";   // o J é só um aviso: embaixo dele é chão
@@ -78,10 +74,6 @@ function atualizarDirecao() {
     jogador.dx = Math.cos(jogador.angulo);
     jogador.dy = Math.sin(jogador.angulo);
 }
-
-verificarMapa();
-colocarJogadorNoInicio();
-atualizarDirecao();
 
 // ---- 4. DESENHAR A PLANTA ----------------------------------
 // Escala do pincel: 1 unidade de desenho = 1 casa (24 pixels), como no mundo.
@@ -107,7 +99,7 @@ function desenharCasas() {
         if (depuracaoLigada) {
             pincel.strokeRect(x, y, 1, 1);
         }
-        if ("ER/\DSX".includes(simbolo)) {
+        if ("ER/\\DSX".includes(simbolo)) {
             pincel.fillStyle = COR_SIMBOLO;
             pincel.fillText(simbolo, x + 0.5, y + 0.5);
         }
@@ -135,7 +127,7 @@ function montarLeitura() {
 
 // ---- 5. TECLADO E LOOP -------------------------------------
 document.addEventListener("keydown", evento => {
-    if (evento.key.toLowerCase() === "h") {
+    if (evento.key.toLowerCase() === "h" && !evento.repeat) {
         depuracaoLigada = !depuracaoLigada;
     }
 });
@@ -146,4 +138,9 @@ function quadroAQuadro() {
     requestAnimationFrame(quadroAQuadro);
 }
 
-requestAnimationFrame(quadroAQuadro);
+// O jogo só começa se o mapa serve (o erro já foi dito no console).
+if (verificarMapa()) {
+    colocarJogadorNoInicio();
+    atualizarDirecao();
+    requestAnimationFrame(quadroAQuadro);
+}

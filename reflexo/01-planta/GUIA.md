@@ -8,9 +8,9 @@
 ## O que você vê
 
 A planta de uma sala de observatório, vista de cima: paredes de tijolo (vermelho apagado) e de
-pedra (cinza-azulado), o chão escuro, e letras amarelas e ciano marcando o que ainda não faz
+pedra (cinza-azulado), o chão escuro, e letras amarelas marcando o que ainda não faz
 nada: `E` (emissor de luz), `R` (receptor), `D` (porta), `/` e `\` (espelhos), `S` (fenda das
-sombras) e `X` (a saída). No canto de cima, à esquerda, o zelador: um círculo ciano com uma
+sombras) e `X` (a saída). No canto de cima, à esquerda, o zelador: um círculo **ciano** (a única coisa dessa cor) com uma
 **seta** apontando para onde ele olha. Nada se mexe.
 
 Com **H** aparece a grade das casas e, abaixo do desenho, os números do zelador: a casa onde
@@ -45,6 +45,8 @@ Duas diferenças:
   existe?": a pergunta some, porque o mundo é fechado. Mas dado escrito à mão erra, e erro de
   mapa não explode, só desenha torto. Por isso `verificarMapa()` confere, uma vez, se há
   **exatamente um `J`**, se todas as linhas têm o mesmo tamanho e se as bordas estão fechadas.
+Se algo está errado, o console diz o quê e **o jogo não começa**: melhor parar com uma frase clara
+do que quebrar mais adiante com um erro que não aponta para o mapa.
 
 > A barra invertida é o caractere de escape das strings. Para pôr o espelho `\` no mapa,
 > escreve-se `"\\"`. A string tem 16 caracteres; o código-fonte, 17. Por isso a conferência usa
@@ -134,9 +136,10 @@ mostra a diferença) e o passo 2 só precisa acrescentar uma linha: `atualizar(t
    que isso diz sobre o que `1.5` significa?
 4. Aperte **H** e compare a linha `casa (1, 1)  pos (1.50, 1.50)` com a letra `J` do mapa.
 5. Desenhe uma sala sua: troque o mapa por outro de 16 colunas. Depois apague uma `#` da borda e
-   veja o que o console diz.
-6. **Quebre de propósito:** acrescente um segundo `J` ao mapa. O que o console avisa? E o que
-   acontece com a posição do jogador? (Dica: leia `colocarJogadorNoInicio`.)
+   veja o que o console diz (e o que a tela mostra).
+6. **Quebre de propósito:** acrescente um segundo `J` ao mapa. O que o console avisa? Agora
+   tire o `if (verificarMapa())` do fim do arquivo (deixe só o corpo) e responda: qual `J` o
+   jogador usa? (Dica: leia `colocarJogadorNoInicio`.) E com **zero** `J`?
 7. **Quebre de propósito:** apague a linha `pincel.scale(...)`. Por que tudo vira um pontinho
    no canto de cima? O que 1 unidade vale agora?
 

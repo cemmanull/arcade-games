@@ -1,9 +1,7 @@
 /*
   REFLEXO — PASSO 2: ANDAR
-  Agora o zelador se mexe. Andar é RELATIVO à direção: "frente" é para
-  onde ele olha, "lado" é o perpendicular. Teclado e toque viram a mesma
-  INTENÇÃO (dealer-out/02), e a colisão confere o corpo contra a grade um
-  eixo por vez, como no Pong (pong/05), para deslizar na parede.
+  Andar é RELATIVO à direção. Teclado e toque viram a mesma INTENÇÃO (dealer-out/02);
+  a colisão confere o corpo contra a grade um eixo por vez (pong/05), para deslizar.
 */
 
 // ---- 1. CONSTANTES E O MAPA --------------------------------
@@ -14,12 +12,8 @@ const VELOCIDADE_DE_GIRO = 2.5;    // radianos por segundo
 const RAIO_DO_CORPO = 0.25;        // em casas: o zelador é um círculo
 const CASAS_SOLIDAS = "#%DER";     // parede, pedra, porta fechada, emissor, receptor
 
-/*
-  Legenda (a do jogo completo):
-      #  tijolo    %  pedra    .  chão    E  emissor    R  receptor
-      /  \  espelhos    D  porta    S  fenda    X  saída    J  início
-  As bordas são sempre parede. Na string, a barra invertida vale duas ("\\").
-*/
+// Legenda: # tijolo · % pedra · . chão · E emissor · R receptor · / \ espelhos · D porta · S fenda · X saída · J início
+// As bordas são sempre parede. Na string, a barra invertida vale duas ("\\").
 const MAPA_EM_TEXTO = [
     "################",
     "#J...#....%%..R#",
@@ -37,7 +31,6 @@ const MAPA_EM_TEXTO = [
 
 const COLUNAS = MAPA_EM_TEXTO[0].length;   // 16, deduzido, não digitado
 const LINHAS = MAPA_EM_TEXTO.length;       // 12
-
 const COR_CHAO = "#14141f";
 const COR_FEIXE = "#bbffff";
 const COR_SIMBOLO = "#ffd84d";
@@ -59,21 +52,22 @@ let depuracaoLigada = false;
 let instanteDoQuadroAnterior = 0;
 
 // ---- 3. CONFERIR O MAPA, ACHAR O JOGADOR -------------------
-// Dado errado não dá erro: dá um desenho torto longe da causa.
+// Dado errado não dá erro: dá um desenho torto longe da causa. Devolve se o mapa serve.
 function verificarMapa() {
     const inicios = MAPA_EM_TEXTO.join("").split("J").length - 1;
     const bordasFechadas = MAPA_EM_TEXTO.every((linha, i) => linha.length === COLUNAS
         && (i === 0 || i === LINHAS - 1 ? /^#+$/.test(linha) : /^#.*#$/.test(linha)));
+    const valido = inicios === 1 && bordasFechadas;
 
-    if (inicios !== 1 || !bordasFechadas) {
-        console.error(`Mapa inválido: ${inicios} jogadores (esperado 1), bordas fechadas: ${bordasFechadas}.`);
+    if (!valido) {
+        console.error(`Mapa inválido: ${inicios} jogadores (esperado 1), bordas fechadas: ${bordasFechadas}. O jogo não começa.`);
     }
+    return valido;
 }
 
 function colocarJogadorNoInicio() {
     const y = mapa.findIndex(linha => linha.includes("J"));
     const x = mapa[y].indexOf("J");
-
     jogador.x = x + 0.5;
     jogador.y = y + 0.5;
     mapa[y][x] = ".";   // o J é só um aviso: embaixo dele é chão
@@ -84,10 +78,6 @@ function atualizarDirecao() {
     jogador.dx = Math.cos(jogador.angulo);
     jogador.dy = Math.sin(jogador.angulo);
 }
-
-verificarMapa();
-colocarJogadorNoInicio();
-atualizarDirecao();
 
 // ---- 4. DESENHAR A PLANTA ----------------------------------
 // Escala do pincel: 1 unidade de desenho = 1 casa (24 pixels), como no mundo.
@@ -109,11 +99,10 @@ function desenharCasas() {
     mapa.forEach((linha, y) => linha.forEach((simbolo, x) => {
         pincel.fillStyle = COR_DAS_PAREDES[simbolo] || COR_CHAO;
         pincel.fillRect(x, y, 1, 1);
-
         if (depuracaoLigada) {
             pincel.strokeRect(x, y, 1, 1);
         }
-        if ("ER/\DSX".includes(simbolo)) {
+        if ("ER/\\DSX".includes(simbolo)) {
             pincel.fillStyle = COR_SIMBOLO;
             pincel.fillText(simbolo, x + 0.5, y + 0.5);
         }
@@ -140,35 +129,43 @@ function montarLeitura() {
 }
 
 // ---- 5. ENTRADA: TECLADO E TOQUE, A MESMA INTENÇÃO ---------
-// Teclas e botões não movem ninguém: só ligam e desligam AÇÕES neste conjunto.
-const acoesAtivas = new Set();
-
+// Teclas e dedos não movem ninguém. Cada ENTRADA (uma tecla, um dedo) segura uma AÇÃO, e a
+// ação vale enquanto QUALQUER entrada a segurar: soltar ↑ com W ainda apertada não para.
+const entradasAtivas = new Map();   // "tecla:w", "ponteiro:3:frente" → "frente"
+const acoesAtivas = new Set();      // a visão derivada: os nomes das ações seguradas
+const botoesDeAcao = document.querySelectorAll("[data-acao]");
 const ACAO_DA_TECLA = {
     w: "frente", arrowup: "frente", s: "tras", arrowdown: "tras",
     a: "esquerda", d: "direita", arrowleft: "girarEsquerda", arrowright: "girarDireita"
 };
 
+function mudarEntrada(entrada, acao) {   // acao indefinida = soltou
+    acao === undefined ? entradasAtivas.delete(entrada) : entradasAtivas.set(entrada, acao);
+    acoesAtivas.clear();
+    entradasAtivas.forEach(acaoSegurada => acoesAtivas.add(acaoSegurada));
+    botoesDeAcao.forEach(botao => botao.classList.toggle("segurado", acoesAtivas.has(botao.dataset.acao)));
+}
+
 document.addEventListener("keydown", evento => {
     const tecla = evento.key.toLowerCase();
-
     if (tecla === "h" && !evento.repeat) {
         depuracaoLigada = !depuracaoLigada;
     }
     if (ACAO_DA_TECLA[tecla] !== undefined) {
         evento.preventDefault();
-        acoesAtivas.add(ACAO_DA_TECLA[tecla]);
+        mudarEntrada("tecla:" + tecla, ACAO_DA_TECLA[tecla]);
     }
 });
+document.addEventListener("keyup", evento => mudarEntrada("tecla:" + evento.key.toLowerCase()));
+// Soltou a tecla fora da janela: o keyup nunca chega, então o blur solta tudo.
+window.addEventListener("blur", () => entradasAtivas.forEach((_, entrada) => mudarEntrada(entrada)));
 
-document.addEventListener("keyup", evento => acoesAtivas.delete(ACAO_DA_TECLA[evento.key.toLowerCase()]));
-window.addEventListener("blur", () => acoesAtivas.clear());   // soltou a tecla fora da janela
-
-// Os botões da tela fazem o mesmo. Sair do botão com o mouse apertado também solta.
-document.querySelectorAll("[data-acao]").forEach(botao => {
-    botao.addEventListener("pointerdown", () => acoesAtivas.add(botao.dataset.acao));
-    ["pointerup", "pointercancel", "pointerleave"].forEach(tipo => {
-        botao.addEventListener(tipo, () => acoesAtivas.delete(botao.dataset.acao));
-    });
+// Cada dedo é uma entrada (pointerId). Sair do botão com o mouse apertado também solta.
+botoesDeAcao.forEach(botao => {
+    const entradaDo = evento => `ponteiro:${evento.pointerId}:${botao.dataset.acao}`;
+    botao.addEventListener("pointerdown", evento => mudarEntrada(entradaDo(evento), botao.dataset.acao));
+    ["pointerup", "pointercancel", "pointerleave"].forEach(tipo => botao.addEventListener(tipo, evento => mudarEntrada(entradaDo(evento))));
+    botao.addEventListener("contextmenu", evento => evento.preventDefault());   // pressão longa no celular
 });
 
 function lerIntencao() {
@@ -183,7 +180,9 @@ function lerIntencao() {
 // ---- 6. ANDAR E COLIDIR ------------------------------------
 function atualizar(tempo) {
     const { frente, lado, giro } = lerIntencao();
-    girar(giro * VELOCIDADE_DE_GIRO * tempo);
+    if (giro !== 0) {   // sem giro, nem refaz o módulo: o ângulo parado não "treme"
+        girar(giro * VELOCIDADE_DE_GIRO * tempo);
+    }
     andar(frente, lado, tempo);
 }
 
@@ -226,16 +225,15 @@ function ehSolida(coluna, linha) {
 }
 
 /*
-  Bate se o ponto de uma casa sólida MAIS PERTO do centro está a menos de
-  um raio. Só se conferem as casas que o quadrado do círculo toca. Cada
-  passo (3 × 0,05 s = 0,15) é menor que o raio: o corpo não "pula" paredes.
+  Bate se o ponto de uma casa sólida MAIS PERTO do centro está a menos de um raio.
+  O passo é conferido só no destino, então ele nunca pode passar de 1 + 2 raios
+  (1,5 casa): o teto de 0,05 s por quadro dá no máximo 0,15.
 */
 function corpoBateNaParede(x, y) {
     for (let linha = Math.floor(y - RAIO_DO_CORPO); linha <= Math.floor(y + RAIO_DO_CORPO); linha++) {
         for (let coluna = Math.floor(x - RAIO_DO_CORPO); coluna <= Math.floor(x + RAIO_DO_CORPO); coluna++) {
             const pertoX = Math.min(Math.max(x, coluna), coluna + 1);
             const pertoY = Math.min(Math.max(y, linha), linha + 1);
-
             if (ehSolida(coluna, linha) && Math.hypot(x - pertoX, y - pertoY) < RAIO_DO_CORPO) {
                 return true;
             }
@@ -248,10 +246,14 @@ function corpoBateNaParede(x, y) {
 function quadroAQuadro(instanteAtual) {
     const tempo = Math.min((instanteAtual - instanteDoQuadroAnterior) / 1000, 0.05);
     instanteDoQuadroAnterior = instanteAtual;
-
     atualizar(tempo);
     desenhar();
     requestAnimationFrame(quadroAQuadro);
 }
 
-requestAnimationFrame(quadroAQuadro);
+// O jogo só começa se o mapa serve (o erro já foi dito no console).
+if (verificarMapa()) {
+    colocarJogadorNoInicio();
+    atualizarDirecao();
+    requestAnimationFrame(quadroAQuadro);
+}

@@ -1,6 +1,8 @@
 # Reflexo — Passo 2: Andar
 
-**Mudou:** `script.js` (seções 5, 6 e 7 são novas), `index.html` (os botões) e `style.css`
+**Mudou:** `script.js` (a seção 3 ganhou a ordem de largada; as seções 1, 2 e 4 ganharam as constantes de
+velocidade e colisão, o relógio e o raio do corpo; as seções 5, 6 e 7 são novas), `index.html` (os
+botões) e `style.css` (o estado "apertado" dos botões).
 **Rode:** abra o `index.html`. Use **W A S D** e as setas ← →, ou os botões da tela. Depois
 aperte **H**.
 
@@ -17,8 +19,10 @@ Embaixo do desenho há seis botões (⟲ ▲ ⟳ / ◀ ▼ ▶) que fazem exatam
 Com **H**: a grade e os números do zelador, agora mudando a cada quadro.
 
 > **Toque neste passo:** só os botões. O esquema final do jogo (arrastar o dedo sobre a imagem
-> para girar) precisa da imagem em primeira pessoa e chega depois. Os botões ⟲ ⟳ são o plano B
-> previsto no GDD, e valem como teste da ideia "teclado e toque viram a mesma intenção".
+> para girar) precisa da imagem em primeira pessoa e chega depois. Os botões ⟲ ⟳ lembram o plano B
+> do GDD, que gira em passos de 15°; aqui eles giram **continuamente** enquanto apertados, igual às
+> setas ← →, e valem como teste da ideia "teclado e toque viram a mesma intenção" (o exercício 9
+> faz a versão em passos de 15°).
 
 ---
 
@@ -27,7 +31,8 @@ Com **H**: a grade e os números do zelador, agora mudando a cada quadro.
 *Reusa `dealer-out/02-movimento` (entrada → intenção).*
 
 ```js
-const acoesAtivas = new Set();     // "frente", "tras", "esquerda", ...
+const entradasAtivas = new Map();   // "tecla:w", "ponteiro:3:frente" → "frente"
+const acoesAtivas = new Set();      // a visão derivada: os nomes das ações seguradas
 
 function lerIntencao() {
     const eixo = (positiva, negativa) => Number(acoesAtivas.has(positiva)) - Number(acoesAtivas.has(negativa));
@@ -35,22 +40,34 @@ function lerIntencao() {
 }
 ```
 
-Teclas e botões **não movem ninguém**. Eles só ligam e desligam **ações** num conjunto: `keydown`
-de `W` liga `"frente"`, `keyup` desliga; o botão ▲ faz o mesmo em `pointerdown` e `pointerup`.
-Quem transforma isso em movimento é `atualizar`, que só enxerga a **intenção**: três números,
-cada um `-1`, `0` ou `1`.
+Teclas e botões **não movem ninguém**. Cada **entrada** (uma tecla, um dedo) liga uma **ação**
+no mapa `entradasAtivas`, e `mudarEntrada` refaz o conjunto `acoesAtivas` a partir dele: uma ação
+vale **enquanto alguma entrada a segurar**. Quem transforma isso em movimento é `atualizar`, que só
+enxerga a **intenção**: três números, cada um `-1`, `0` ou `1`.
+
+Por que o mapa de entradas, e não só um conjunto de ações? Porque a mesma ação pode vir de duas
+entradas. Segure **W**, aperte ↑ e solte ↑: com um conjunto simples, o `keyup` de ↑ apagaria
+`"frente"` e o zelador pararia com a W ainda apertada. O mesmo vale para tecla + botão e para dois
+dedos no mesmo botão (cada dedo tem o seu `pointerId`, e o GDD pede esse cuidado). A chave do
+botão junta o `pointerId` e a ação, então um dedo que escorrega de ▲ para ▶ solta só o ▲.
 
 A vantagem é a do Dealer? Out!: se um dia houver um terceiro jeito de jogar (um controle, um
-mouse), basta ele escrever em `acoesAtivas`. Nada em `andar` ou na colisão muda.
+mouse), basta ele chamar `mudarEntrada`. Nada em `andar` ou na colisão muda.
 
-Três cuidados que existem por causa de bugs reais:
+Cuidados que existem por causa de bugs reais:
 
 - **Apertar frente e trás ao mesmo tempo** vale `1 - 1 = 0`: ele fica parado. Não é um erro, é a
   conta.
-- **`blur`** limpa tudo: se você soltar a tecla com outra janela em foco, o `keyup` nunca
+- **`blur`** solta tudo: se você soltar a tecla com outra janela em foco, o `keyup` nunca
   chega, e o zelador andaria para sempre.
 - **O botão também solta quando o dedo ou o mouse sai dele** (`pointerleave`). No celular o
   dedo fica preso ao botão em que começou, mas o mouse não.
+- **Pressão longa no celular** seleciona texto e abre menu de contexto, e o iOS pode até cancelar o
+  toque (`pointercancel`) no meio. Por isso os botões têm `user-select: none`,
+  `-webkit-touch-callout: none` e um `contextmenu` com `preventDefault`.
+- **O botão mostra que está apertado** (classe `segurado`, mais a pseudoclasse `:active`):
+  mais claro, com a borda do feixe e afundado 2 px. Não depende só da cor. Quem anda pelo
+  teclado vê o botão correspondente afundar também: a mesma intenção.
 
 ---
 
@@ -127,7 +144,7 @@ máximo 4.
 O que é sólido? `CASAS_SOLIDAS = "#%DER"`: tijolo, pedra, **porta** (ainda fechada, nenhum
 receptor existe), emissor e receptor. **Espelhos não bloqueiam**, como pede o GDD: o jogador
 passa pela casa do espelho. Fora do mapa também é sólido (`ehSolida` devolve `true`), uma rede
-de segurança caso uma borda seja esquecida.
+de segurança a mais, além da conferência do `verificarMapa`.
 
 ### Um eixo de cada vez
 
@@ -141,12 +158,17 @@ corpo **deslizar**: empurrando em diagonal contra uma parede vertical, o passo e
 mas o passo em y passa. Se os dois eixos fossem testados juntos, qualquer batida cancelaria o
 movimento inteiro e o zelador "grudaria" na parede.
 
-### O passo precisa ser menor que o raio
+### O passo precisa ser menor que 1 + 2 raios
 
-Cada quadro anda no máximo `3 casas/s × 0,05 s = 0,15` casa, que é menor que o raio (`0.25`).
-Por isso nenhum passo consegue **atravessar** uma parede de uma casa inteira de espessura
-sem ser percebido (o *tunelamento* do Xenomorph). O teto de 0,05 s em `quadroAQuadro` é o que
-garante isso, mesmo se a aba ficar em segundo plano.
+A colisão só confere o **destino** de cada passo, não o caminho até lá. Então um passo pode
+**atravessar** uma parede (o *tunelamento* do Xenomorph) se o corpo começa inteiro de um lado e
+termina inteiro do outro: o centro sai de `parede - raio` e chega a `parede + 1 + raio`. Numa
+parede de uma casa, isso é um passo de **1 + 2 × 0,25 = 1,5 casa**. Cada quadro anda no máximo
+`3 casas/s × 0,05 s = 0,15` casa, dez vezes menos. Com o teto de 0,05 s em `quadroAQuadro`
+(que vale mesmo se a aba ficar em segundo plano) o limite só seria alcançado a
+`1,5 / 0,05 = 30` casas por segundo, no eixo (na diagonal o passo por eixo é menor). A 60
+quadros por segundo reais (cerca de 0,017 s) seriam 90 casas por segundo. Raio maior protege mais:
+com `0.45`, o passo perigoso é de 1,9.
 
 ### O que não está aqui
 
@@ -178,8 +200,12 @@ quadros por segundo o zelador anda a mesma distância por segundo. `atualizar` m
 
 ## Experimente
 
-1. Dobre `VELOCIDADE_DE_ANDAR` para `6` e depois suba para `30`. Em qual valor o zelador
-   começa a atravessar paredes? Confira com a conta do passo máximo (seção 4).
+1. Mude `VELOCIDADE_DE_ANDAR` para `6` e depois para `30`: nada muda, a seção 4 explica por quê.
+   O corpo só atravessa uma parede de uma casa com um passo de **1,5** casa. A 60 quadros por
+   segundo o passo é `velocidade / 60`: qual velocidade o alcança? Confira com `60` (não deve
+   atravessar), `120` e `300`, andando em linha reta contra a porta `D` (casa 5, linha 3;
+   alinhe o olhar com ← →). Acima do limite ele atravessa **às vezes**: depende de onde o
+   passo anterior parou. Depois suba `RAIO_DO_CORPO` para `0.45` e refaça a conta.
 2. Troque `RAIO_DO_CORPO` por `0.45` e tente passar pelo corredor de uma casa. E por `0.05`?
    Aperte **H** e veja o círculo do corpo.
 3. Em `lerIntencao`, troque `"frente"` e `"tras"` de lugar. O que muda no teclado? O que mudou no
@@ -195,7 +221,10 @@ quadros por segundo o zelador anda a mesma distância por segundo. `atualizar` m
    tem a ideia.
 8. Tire `"E"` de `CASAS_SOLIDAS`. Dá para entrar no emissor? Por que o mapa final vai querer
    que ele seja sólido?
+9. Troque o giro contínuo dos botões ⟲ ⟳ pelo plano B do GDD: cada toque gira 15° de uma vez
+   (`girar(15 * Math.PI / 180)` num `pointerdown`). O que é pior no celular? E o que fica
+   mais fácil de mirar?
 
 ---
 
-**Anterior:** [`01-planta`](../01-planta/) · **Próximo:** `03-um-raio` — a luz sai do emissor e a planta desenha o caminho do raio, casa a casa.
+**Anterior:** [`01-planta`](../01-planta/) · **Próximo:** [`03-um-raio`](../03-um-raio/) — a luz sai do emissor e a planta desenha o caminho do raio, casa a casa.

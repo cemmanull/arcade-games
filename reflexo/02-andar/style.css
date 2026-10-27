@@ -7,9 +7,7 @@
     --cor-apagada: #7f8aa8;
 }
 
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
     display: flex;
@@ -32,19 +30,9 @@ h1 {
     color: var(--cor-feixe);
 }
 
-canvas {
-    display: block;
-    width: min(384px, 100%);
-    height: auto;
-    border: 2px solid var(--cor-apagada);
-}
+canvas { display: block; width: min(384px, 100%); height: auto; border: 2px solid var(--cor-apagada); }
 
-p {
-    margin: 0;
-    font-size: 13px;
-    text-align: center;
-    color: var(--cor-apagada);
-}
+p { margin: 0; font-size: 13px; text-align: center; color: var(--cor-apagada); }
 
 #leitura {
     min-height: 2.6em;   /* reserva o lugar: ligar o H não empurra a página */
@@ -52,11 +40,7 @@ p {
     color: var(--cor-texto);
 }
 
-#controles {
-    display: grid;
-    grid-template-columns: repeat(3, 72px);
-    gap: 8px;
-}
+#controles { display: grid; grid-template-columns: repeat(3, 72px); gap: 8px; }
 
 #controles button {
     height: 56px;
@@ -66,4 +50,13 @@ p {
     border: 2px solid var(--cor-apagada);
     touch-action: none;   /* o dedo não rola nem dá zoom: só aperta */
     user-select: none;
+    -webkit-user-select: none;       /* iOS: pressão longa não seleciona... */
+    -webkit-touch-callout: none;     /* ...nem abre o menu de contexto */
+}
+
+/* Apertado (dedo, mouse ou a tecla equivalente): mais claro, borda do feixe e afundado. */
+#controles button:active, #controles button.segurado {
+    background: #3a3a5c;
+    border-color: var(--cor-feixe);
+    transform: translateY(2px);
 }
