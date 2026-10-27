@@ -1,0 +1,7 @@
+# Texto sempre com LF no repositório e na cópia de trabalho, em qualquer sistema
+* text=auto eol=lf
+
+# Binários
+*.png binary
+*.jpg binary
+*.ico binary

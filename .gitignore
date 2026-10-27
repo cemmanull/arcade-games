@@ -1,0 +1,12 @@
+# Chaves e certificados locais nunca entram no repositório
+*.key
+*.pem
+**/https-local/
+
+# Worktrees criados por agentes
+.claude/worktrees/
+
+# Arquivos do sistema operacional
+Thumbs.db
+desktop.ini
+.DS_Store
