@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Tutorial, lição 5: lista de tarefas</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        .esqueleto { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Tutorial, lição 5: lista de tarefas</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto da lição: o script dela procura estes ids. -->
+    <div class="esqueleto">
+        <form id="formulario-nova-tarefa">
+            <input type="text" id="campo-tarefa" required>
+            <button type="submit">Adicionar</button>
+        </form>
+        <button type="button" class="filtro ativo" data-filtro="todas">Todas</button>
+        <button type="button" class="filtro" data-filtro="pendentes">Pendentes</button>
+        <button type="button" class="filtro" data-filtro="concluidas">Concluídas</button>
+        <ul id="lista-tarefas"></ul>
+        <p id="mensagem-vazia">Nenhuma tarefa ainda.</p>
+        <span id="contagem"></span>
+        <button type="button" id="limpar-concluidas">Limpar concluídas</button>
+    </div>
+
+    <script src="../apoio.js"></script>
+
+    <!--
+      Preparação ANTES do script da lição carregar. Em file://, o Chrome pode
+      compartilhar o localStorage entre todas as páginas locais; por isso a
+      chave "tarefas" do aluno é guardada aqui e devolvida no fim do teste.
+    -->
+    <script>
+        const CHAVE_DO_ALUNO = "tarefas";
+        const valorOriginalDoAluno = localStorage.getItem(CHAVE_DO_ALUNO);
+        const errosDuranteACarga = [];
+        const avisosDuranteACarga = [];
+
+        function devolverArmazenamentoDoAluno() {
+            if (valorOriginalDoAluno === null) {
+                localStorage.removeItem(CHAVE_DO_ALUNO);
+                return;
+            }
+            localStorage.setItem(CHAVE_DO_ALUNO, valorOriginalDoAluno);
+        }
+
+        // Se a aba fechar no meio do teste, o dado do aluno ainda volta.
+        window.addEventListener("pagehide", devolverArmazenamentoDoAluno);
+
+        window.addEventListener("error", function (evento) {
+            errosDuranteACarga.push(evento.message);
+        });
+
+        const avisoOriginal = console.warn;
+        console.warn = function () {
+            avisosDuranteACarga.push(Array.from(arguments).join(" "));
+        };
+
+        // Dado corrompido no armazenamento, ANTES de o script carregar.
+        localStorage.setItem(CHAVE_DO_ALUNO, "lixo{{{");
+
+        // Se o script da lição quebrar, ninguém ouve o "submit" e a página recarregaria,
+        // levando o resultado embora. Este ouvinte só impede a navegação.
+        document.getElementById("formulario-nova-tarefa").addEventListener("submit", function (evento) {
+            evento.preventDefault();
+        });
+
+        // Date.now() igual em duas chamadas seguidas geraria ids repetidos.
+        let relogioFalso = 1000;
+        Date.now = function () { return relogioFalso++; };
+    </script>
+
+    <script src="../../tutorial/05-projeto/script.js"></script>
+
+    <script>
+        console.warn = avisoOriginal;
+
+        function adicionarPeloFormulario(texto) {
+            campoTarefa.value = texto;
+            formulario.requestSubmit();
+        }
+
+        function textosNaTela() {
+            return Array.from(listaTarefas.querySelectorAll("label")).map(function (rotulo) {
+                return rotulo.textContent;
+            });
+        }
+
+        function tarefasSalvas() {
+            return JSON.parse(localStorage.getItem(CHAVE_DO_ALUNO));
+        }
+
+        try {
+            testar("carregamento", function () {
+                conferirIgual("o script carrega sem erro não tratado", errosDuranteACarga.length, 0);
+                conferirIgual("com dado corrompido, o aviso do catch foi emitido", avisosDuranteACarga.length, 1);
+                conferirIgual("com dado corrompido, começa com a lista vazia", tarefas.length, 0);
+                conferirIgual("nenhum item na tela", listaTarefas.children.length, 0);
+                conferirIgual("a mensagem de lista vazia aparece", mensagemVazia.hidden, false);
+                conferirIgual("a contagem mostra zero", contagem.textContent, "0 tarefas pendentes");
+            });
+
+            testar("adicionar", function () {
+                adicionarPeloFormulario("Comprar pão");
+                adicionarPeloFormulario("Estudar");
+
+                conferirIgual("as duas tarefas aparecem na tela", textosNaTela().join("|"), "Comprar pão|Estudar");
+                conferirIgual("a mensagem de lista vazia some", mensagemVazia.hidden, true);
+                conferirIgual("o campo é esvaziado", campoTarefa.value, "");
+                conferirIgual("a contagem mostra duas", contagem.textContent, "2 tarefas pendentes");
+                conferirIgual("o localStorage guarda JSON válido com as duas", tarefasSalvas().length, 2);
+                conferirIgual("a primeira salva tem o texto certo", tarefasSalvas()[0].texto, "Comprar pão");
+                conferirIgual("a primeira salva nasce pendente", tarefasSalvas()[0].concluida, false);
+            });
+
+            testar("tarefa vazia é ignorada", function () {
+                adicionarPeloFormulario("   ");
+                conferirIgual("só espaços não adiciona", textosNaTela().length, 2);
+                conferirIgual("e não altera o que foi salvo", tarefasSalvas().length, 2);
+            });
+
+            testar("alternar conclusão", function () {
+                listaTarefas.querySelector("input[type=checkbox]").click();
+
+                conferirIgual("a primeira ganha a classe concluida", listaTarefas.children[0].className, "tarefa concluida");
+                conferirIgual("a contagem cai para uma pendente", contagem.textContent, "1 tarefa pendente");
+                conferirIgual("o armazenamento marca como concluída", tarefasSalvas()[0].concluida, true);
+                conferirIgual("o botão de limpar concluídas aparece", botaoLimparConcluidas.hidden, false);
+
+                listaTarefas.querySelector("input[type=checkbox]").click();
+                conferirIgual("clicar de novo desmarca na tela", listaTarefas.children[0].className, "tarefa");
+                conferirIgual("e no armazenamento", tarefasSalvas()[0].concluida, false);
+            });
+
+            testar("remover", function () {
+                listaTarefas.querySelector(".botao-remover").click();
+
+                conferirIgual("a primeira some da tela", textosNaTela().join("|"), "Estudar");
+                conferirIgual("e do armazenamento", tarefasSalvas().map(function (t) { return t.texto; }).join("|"), "Estudar");
+
+                listaTarefas.querySelector(".botao-remover").click();
+                conferirIgual("remover a última esvazia a tela", listaTarefas.children.length, 0);
+                conferirIgual("o armazenamento guarda lista vazia", localStorage.getItem(CHAVE_DO_ALUNO), "[]");
+                conferirIgual("a mensagem de lista vazia volta", mensagemVazia.hidden, false);
+            });
+
+            testar("limpar concluídas", function () {
+                adicionarPeloFormulario("A");
+                adicionarPeloFormulario("B");
+                listaTarefas.querySelector("input[type=checkbox]").click();
+                botaoLimparConcluidas.click();
+
+                conferirIgual("só a pendente fica na tela", textosNaTela().join("|"), "B");
+                conferirIgual("e no armazenamento", tarefasSalvas().length, 1);
+            });
+        } finally {
+            devolverArmazenamentoDoAluno();
+        }
+
+        finalizar();
+    </script>
+</body>
+
+</html>

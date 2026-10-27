@@ -43,6 +43,16 @@ const botoesDeFiltro = document.querySelectorAll(".filtro");
   lista — posições mudam quando algo é removido. Date.now() devolve os
   milissegundos desde 1970, o que dá um número diferente a cada chamada.
 */
+
+/*
+  Esta constante fica ANTES da linha de baixo de propósito: `let tarefas`
+  chama carregarDoNavegador() assim que o arquivo carrega, e essa função
+  usa a chave. Funções (`function`) podem ser chamadas antes de aparecerem
+  no arquivo, mas `const` e `let` só existem a partir da linha em que são
+  escritas — usar antes dá ReferenceError.
+*/
+const CHAVE_DE_ARMAZENAMENTO = "tarefas";
+
 let tarefas = carregarDoNavegador();
 let filtroAtual = "todas";   // "todas" | "pendentes" | "concluidas"
 
@@ -60,8 +70,6 @@ let filtroAtual = "todas";   // "todas" | "pendentes" | "concluidas"
     2. o espaço é pequeno (alguns megabytes) e o dado é do navegador —
        some se o usuário limpar os dados do site. Não é banco de dados.
 */
-const CHAVE_DE_ARMAZENAMENTO = "tarefas";
-
 function carregarDoNavegador() {
     const textoSalvo = localStorage.getItem(CHAVE_DE_ARMAZENAMENTO);
 
