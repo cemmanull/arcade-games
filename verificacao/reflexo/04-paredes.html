@@ -45,13 +45,6 @@
     <script>
         const retangulosDaVisao = [];
 
-        function criarContextoQueIgnora() {
-            return new Proxy({}, {
-                get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
-                set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
-            });
-        }
-
         function criarContextoQueGrava() {
             return new Proxy({}, {
                 get: function (propriedades, nome) {
@@ -66,7 +59,30 @@
             });
         }
 
-        const contextoDaPlanta = criarContextoQueIgnora();
+        // A planta ignora o desenho, mas anota cada fillRect e fillText com a cor vigente: é como
+        // se confere a cor de fundo sob cada letra (contraste do GDD, seção 7).
+        const operacoesDaPlanta = [];
+
+        function criarContextoQueAnotaAPlanta() {
+            return new Proxy({}, {
+                get: function (propriedades, nome) {
+                    if (nome === "fillRect") {
+                        return function (x, y, largura, altura) {
+                            operacoesDaPlanta.push({ tipo: "retangulo", estilo: propriedades.fillStyle, x: x, y: y, largura: largura, altura: altura });
+                        };
+                    }
+                    if (nome === "fillText") {
+                        return function (texto, x, y) {
+                            operacoesDaPlanta.push({ tipo: "texto", estilo: propriedades.fillStyle, texto: texto, x: x, y: y });
+                        };
+                    }
+                    return nome in propriedades ? propriedades[nome] : function () { };
+                },
+                set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+            });
+        }
+
+        const contextoDaPlanta = criarContextoQueAnotaAPlanta();
         const contextoDaImagem = criarContextoQueGrava();
         HTMLCanvasElement.prototype.getContext = function () {
             return this.id === "visao" ? contextoDaImagem : contextoDaPlanta;
@@ -133,6 +149,61 @@
 
         function constanteK(largura) {
             return largura / (2 * PLANO_ESPERADO);
+        }
+
+        // Altura que a planta (H) ocupa na tela, lida da largura que o jogo deu ao canvas dela
+        // (+ 4 px das duas bordas) e da proporção do canvas: não repete a conta do jogo.
+        function alturaDaPlantaNaTela() {
+            const larguraNaTela = parseFloat(tela.style.width);
+            return (larguraNaTela - 4) * tela.height / tela.width + 4;
+        }
+
+        // Contraste WCAG 2.1 entre duas cores "#rrggbb".
+        function luminanciaRelativa(cor) {
+            const canais = [1, 3, 5].map(function (inicio) {
+                const canal = parseInt(cor.slice(inicio, inicio + 2), 16) / 255;
+                return canal <= 0.03928 ? canal / 12.92 : Math.pow((canal + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
+        }
+
+        function razaoDeContraste(corA, corB) {
+            const claro = Math.max(luminanciaRelativa(corA), luminanciaRelativa(corB));
+            const escuro = Math.min(luminanciaRelativa(corA), luminanciaRelativa(corB));
+            return (claro + 0.05) / (escuro + 0.05);
+        }
+
+        // Liga a planta, roda um quadro e devolve, para cada letra desenhada, a cor do fundo da casa dela.
+        function letrasDaPlantaComFundo() {
+            const estavaLigada = depuracaoLigada;
+            if (!estavaLigada) {
+                apertarTecla("h");
+            }
+            operacoesDaPlanta.length = 0;
+            avancarQuadro(16);
+            const operacoes = operacoesDaPlanta.slice();
+            if (!estavaLigada) {
+                apertarTecla("h");
+                avancarQuadro(16);
+            }
+
+            const letras = [];
+            operacoes.forEach(function (operacao, indice) {
+                if (operacao.tipo !== "texto") {
+                    return;
+                }
+                const casaX = operacao.x - 0.5;
+                const casaY = operacao.y - 0.5;
+                let fundo = null;
+                for (let anterior = indice - 1; anterior >= 0 && fundo === null; anterior--) {
+                    const candidata = operacoes[anterior];
+                    if (candidata.tipo === "retangulo" && candidata.x === casaX && candidata.y === casaY && candidata.largura === 1 && candidata.altura === 1) {
+                        fundo = candidata.estilo;
+                    }
+                }
+                letras.push({ letra: operacao.texto, cor: operacao.estilo, fundo: fundo, casaX: casaX, casaY: casaY });
+            });
+            return letras;
         }
 
         function comJanela(largura, altura, funcao) {
@@ -299,10 +370,26 @@
             conferirIgual("o J virou chão", mapa[1][1], ".");
             conferirIgual("com a janela falsa de 1280×720 a imagem é 320 de largura", larguraDaVisao, 320);
             conferirIgual("e 200 de altura", alturaDaVisao, 200);
-            conferirIgual("um raio por coluna antes do primeiro quadro", raiosDaTela.length, 320);
-            conferir("o raio do meio existe antes do primeiro quadro", raio !== null && raio === raiosDaTela[160]);
+            conferir("o raio do olhar existe antes do primeiro quadro", raio !== null && typeof raio === "object");
+            conferir("a distância perpendicular do raio do olhar é a própria distância (sem desvio)", raio.perpendicular === raio.distancia && raio.distancia > 0,
+                "perpendicular " + raio.perpendicular + ", distância " + raio.distancia);
+            conferir("altura × perpendicular = k também no raio do olhar", pertoRelativo(raio.altura * raio.perpendicular, constanteK(320)));
+            conferir("o raio do olhar carrega o caminho (cruzamentos) para o H", Array.isArray(raio.cruzamentos) && raio.cruzamentos.length > 0, JSON.stringify(raio.cruzamentos));
+            const olhar = raioDeReferencia(jogador.x, jogador.y, jogador.dx, jogador.dy);
+            conferir("o raio do olhar bate onde a referência independente manda (casa, face, distância)",
+                olhar !== null && raio.coluna === olhar.coluna && raio.linha === olhar.linha && raio.lado === olhar.lado && pertoRelativo(raio.distancia, olhar.distancia, 1e-9),
+                JSON.stringify({ raio: [raio.coluna, raio.linha, raio.lado, raio.distancia], referencia: olhar }));
             conferirIgual("a imagem começa visível", visao.hidden, false);
             conferirIgual("e a planta escondida", tela.hidden, true);
+
+            // Um "resize" do próprio Chrome pode chegar entre o script do jogo e este e esvaziar as colunas
+            // (o jogo as refaz no quadro seguinte): por isso as colunas só são conferidas depois do 1º quadro.
+            avancarQuadro(16);
+            conferirIgual("um raio por coluna depois do primeiro quadro", raiosDaTela.length, 320);
+            conferir("o raio do olhar é um objeto à parte: nenhuma das 320 colunas é ele", raiosDaTela.indexOf(raio) === -1);
+            conferir("as colunas NÃO carregam o caminho: todas com um array vazio e congelado",
+                raiosDaTela.every(function (resultado) { return Array.isArray(resultado.cruzamentos) && resultado.cruzamentos.length === 0 && Object.isFrozen(resultado.cruzamentos); }));
+            conferir("o raio do olhar segue com o caminho depois do quadro", raio.cruzamentos.length === 3, JSON.stringify(raio.cruzamentos));
         });
 
         testar("constantes do campo de visão", function () {
@@ -505,7 +592,13 @@
                 conferirIgual("o desenho cabe na imagem de 150", motivoDeDesenhoErrado(quadro), null);
                 conferirIgual("a perpendicular continua certa", motivoDeColunasErradas(), null);
                 conferir("altura × perpendicular = 195 / (2·PLANO)", pertoRelativo(raio.altura * raio.perpendicular, 195 / (2 * PLANO_ESPERADO)));
-                conferirIgual("o raio do meio é o da coluna 97", raio, raiosDaTela[97]);
+                const colunaDoMeio = raiosDaTela[97];   // largura ímpar: a coluna 97 é o centro exato
+                conferir("o raio do olhar é um objeto à parte da coluna 97", raio !== colunaDoMeio && raiosDaTela.indexOf(raio) === -1);
+                conferir("mas tem a mesma casa, face, distância e altura da coluna 97",
+                    raio.coluna === colunaDoMeio.coluna && raio.linha === colunaDoMeio.linha && raio.lado === colunaDoMeio.lado
+                    && pertoRelativo(raio.distancia, colunaDoMeio.distancia, 1e-12) && pertoRelativo(raio.altura, colunaDoMeio.altura, 1e-12)
+                    && pertoRelativo(raio.perpendicular, colunaDoMeio.perpendicular, 1e-12),
+                    JSON.stringify({ raio: raio, coluna97: colunaDoMeio }));
                 const colado = reiniciarEVer(7.5, 10.75, Math.PI / 2);
                 conferir("colado à parede, limitado a 150", colado.paredes.every(function (faixa) { return faixa.altura === 150; }));
             });
@@ -516,7 +609,7 @@
             const casos = [
                 { largura: 585, altura: 1000, esperado: [195, 150], estilo: "585px" },
                 { largura: 150, altura: 300, esperado: [195, 150], estilo: "195px" },
-                { largura: 600, altura: 600, esperado: [320, 200], estilo: null },
+                { largura: 600, altura: 600, esperado: [320, 200], estilo: null, palcoEmPx: 289 },   // a planta (289) é mais alta que a imagem (200)
                 { largura: 1000, altura: 500, esperado: [320, 200], estilo: null },
                 { largura: 1600, altura: 1200, esperado: [320, 200], estilo: null }
             ];
@@ -527,9 +620,16 @@
                     const escala = parseFloat(visao.style.width) / larguraDaVisao;
                     conferir(nome + ": a escala é um inteiro ≥ 1 (" + visao.style.width + ")", Number.isInteger(escala) && escala >= 1);
                     conferir(nome + ": cabe na largura, ou é a menor escala", escala === 1 || parseFloat(visao.style.width) <= caso.largura);
-                    conferirIgual(nome + ": o palco acompanha a altura escalada", palco.style.minHeight, alturaDaVisao * escala + "px");
+                    const alturaDaImagem = alturaDaVisao * escala;
+                    const alturaDaPlanta = alturaDaPlantaNaTela();
+                    const alturaDoPalco = parseFloat(palco.style.minHeight);
+                    conferir(nome + ": o palco reserva a MAIOR entre a imagem (" + alturaDaImagem + ") e a planta (" + alturaDaPlanta.toFixed(1) + "): " + palco.style.minHeight,
+                        perto(alturaDoPalco, Math.max(alturaDaImagem, alturaDaPlanta), 0.01));
                     if (caso.estilo !== null) {
                         conferirIgual(nome + ": largura em px", visao.style.width, caso.estilo);
+                    }
+                    if (caso.palcoEmPx !== undefined) {
+                        conferir(nome + ": o palco tem ≈ " + caso.palcoEmPx + " px (a planta é mais alta que a imagem)", perto(alturaDoPalco, caso.palcoEmPx, 1), palco.style.minHeight);
                     }
                 });
             });
@@ -561,6 +661,123 @@
             conferirIgual("a imagem é desenhada outra vez", deVolta.paredes.length, 320);
             conferirIgual("a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
             conferirIgual("H não liga ação nenhuma", acoesAtivas.size, 0);
+        });
+
+        testar("a leitura do H traz de novo os números do passo 3", function () {
+            reiniciarEVer(1.5, 1.5, 0.25);
+            apertarTecla("h");
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            conferir("o raio do olhar: casa (3, 2), face y, distância 2.021", texto.indexOf("raio: casa (3, 2) lado y dist 2.021") !== -1, texto);
+            conferir("o DDA contra o passo fixo do GUIA: 3 passos contra 21", texto.indexOf("DDA 3 passos | fixo 0.1: 21 (2.10)") !== -1, texto);
+            conferir("e a linha do meio vem com a perpendicular igual à distância", texto.indexOf("meio: perp 2.021 altura") !== -1, texto);
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("H de novo: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+        });
+
+        testar("alternar o H não mexe na altura do palco (min-height cobre a imagem e a planta)", function () {
+            const tamanhos = [[1280, 720], [600, 600], [1000, 500], [390, 844], [585, 1000]];
+            tamanhos.forEach(function (tamanho) {
+                comJanela(tamanho[0], tamanho[1], function () {
+                    const nome = tamanho[0] + "×" + tamanho[1];
+                    reiniciarEVer(7.5, 9.5, Math.PI / 2);
+                    const alturaComImagem = palco.style.minHeight;
+                    const alturaDaImagem = parseFloat(visao.style.width) / larguraDaVisao * alturaDaVisao;
+                    const alturaDaPlanta = alturaDaPlantaNaTela();
+                    conferir(nome + ": o palco cobre a imagem (" + alturaDaImagem + ") e a planta (" + alturaDaPlanta.toFixed(1) + "): " + alturaComImagem,
+                        parseFloat(alturaComImagem) >= alturaDaImagem - 0.01 && parseFloat(alturaComImagem) >= alturaDaPlanta - 0.01);
+
+                    apertarTecla("h");
+                    verUmQuadro();
+                    conferirIgual(nome + ": com o H ligado a altura do palco é a mesma", palco.style.minHeight, alturaComImagem);
+                    apertarTecla("h");
+                    verUmQuadro();
+                    conferirIgual(nome + ": com o H desligado também", palco.style.minHeight, alturaComImagem);
+                    conferirIgual(nome + ": a imagem de volta, sem planta", visao.hidden + "/" + tela.hidden, "false/true");
+                });
+            });
+        });
+
+        testar("as letras da planta ficam sobre fundos escuros com contraste de 4,5:1", function () {
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            const letras = letrasDaPlantaComFundo();
+            const COR_AMARELA = "#ffd84d";
+            const fundosEsperados = { D: "#54410f", E: "#15434d", R: "#55296a" };
+            const fundosDaImagem = { D: "#a8842e", E: "#2e7d8a", R: "#8a4aa8" };
+            const letrasEsperadas = ["D", "E", "R", "/", "\\", "S", "X"];
+
+            letrasEsperadas.forEach(function (letra) {
+                conferir("a letra " + letra + " é desenhada na planta", letras.some(function (item) { return item.letra === letra; }));
+            });
+
+            Object.keys(fundosEsperados).forEach(function (letra) {
+                const daLetra = letras.filter(function (item) { return item.letra === letra; });
+                conferir(letra + ": o fundo da planta é " + fundosEsperados[letra] + " em todas as casas dela (" + daLetra.length + ")",
+                    daLetra.length > 0 && daLetra.every(function (item) { return item.fundo === fundosEsperados[letra]; }),
+                    JSON.stringify(daLetra.map(function (item) { return item.fundo; })));
+                conferir(letra + ": e NÃO é a cor da parede da imagem (" + fundosDaImagem[letra] + ")", daLetra.every(function (item) { return item.fundo !== fundosDaImagem[letra]; }));
+            });
+
+            let menorContraste = Infinity;
+            let pior = null;
+            letras.forEach(function (item) {
+                const contraste = item.fundo === null ? 0 : razaoDeContraste(item.cor, item.fundo);
+                if (contraste < menorContraste) {
+                    menorContraste = contraste;
+                    pior = item;
+                }
+            });
+            conferir("toda letra é amarela " + COR_AMARELA, letras.every(function (item) { return item.cor === COR_AMARELA; }));
+            conferir("toda letra tem um fundo conhecido desenhado antes dela", letras.every(function (item) { return typeof item.fundo === "string"; }));
+            conferir("o menor contraste entre a letra amarela e o fundo é ≥ 4,5:1 (" + menorContraste.toFixed(2) + ")", menorContraste >= 4.5, JSON.stringify(pior));
+
+            Object.keys(fundosEsperados).forEach(function (letra) {
+                const razao = razaoDeContraste(COR_AMARELA, fundosEsperados[letra]);
+                conferir(letra + ": " + COR_AMARELA + " sobre " + fundosEsperados[letra] + " = " + razao.toFixed(2) + ":1 (≥ 4,5)", razao >= 4.5);
+                conferir(letra + ": com o fundo da parede da imagem NÃO passaria (" + razaoDeContraste(COR_AMARELA, fundosDaImagem[letra]).toFixed(2) + ":1)",
+                    razaoDeContraste(COR_AMARELA, fundosDaImagem[letra]) < 4.5);
+            });
+            conferir("o medidor de contraste está certo: preto × branco = 21:1", perto(razaoDeContraste("#000000", "#ffffff"), 21, 1e-9));
+        });
+
+        testar("a conta do passo fixo só é refeita quando o zelador se mexe", function () {
+            const original = window.lancarRaioPorPassos;
+            let chamadas = 0;
+            window.lancarRaioPorPassos = function () {
+                chamadas++;
+                return original.apply(this, arguments);
+            };
+            try {
+                reiniciarEVer(1.5, 1.5, 0.25);
+                apertarTecla("h");
+                avancarQuadro(16);
+                const primeira = chamadas;
+                conferir("a primeira vez com o H calcula (≥ 1 chamada)", primeira >= 1, "chamadas = " + primeira);
+                avancarQuadros(10, 16);
+                conferirIgual("10 quadros parado: nenhuma conta nova", chamadas, primeira);
+                conferir("e a leitura continua trazendo o resultado", document.getElementById("leitura").textContent.indexOf("fixo 0.1: 21 (2.10)") !== -1);
+
+                apertarTecla("ArrowRight");
+                avancarQuadro(50);
+                soltarTecla("ArrowRight");
+                const depoisDoGiro = chamadas;
+                conferir("girar refaz a conta", depoisDoGiro > primeira, "chamadas = " + depoisDoGiro);
+                avancarQuadros(5, 16);
+                conferirIgual("parou de novo: nenhuma conta nova", chamadas, depoisDoGiro);
+
+                apertarTecla("h");
+                avancarQuadros(3, 16);
+                apertarTecla("h");
+                avancarQuadros(3, 16);
+                conferirIgual("desligar e ligar o H com a pose igual não refaz a conta", chamadas, depoisDoGiro);
+            } finally {
+                window.lancarRaioPorPassos = original;
+                if (depuracaoLigada) {
+                    apertarTecla("h");
+                }
+                soltarTudo();
+            }
         });
 
         testar("entrada: tecla e botão seguram a mesma ação, e só a última entrada solta", function () {
