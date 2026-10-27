@@ -1,11 +1,12 @@
 # Reflexo — Passo 4: Paredes
 
 **Mudou:** `script.js` (a seção 8 é nova: o tamanho da imagem; `atualizarRaio` virou
-`atualizarRaios`, um raio por coluna; `desenhar` escolhe entre a imagem e a planta, e a imagem é a
+`atualizarRaios`, um raio por coluna, mais um raio à parte para o olhar; `desenhar` escolhe entre a imagem e a planta, e a imagem é a
 função nova `desenharVisao`; a planta ganhou o leque de raios e a leitura, uma linha; a paleta
-ganhou teto, piso e as casas `D`, `E`, `R`; o ângulo inicial é 0,25 rad), `index.html` (dois canvas
+ganhou teto, piso e as casas `D`, `E`, `R`, com cores mais escuras na planta; `lancarRaio` ganhou o
+parâmetro `registrar`; o ângulo inicial é 0,25 rad), `index.html` (dois canvas
 num `#palco`) e `style.css` (`#palco`, `#visao`, `[hidden]` e a leitura de 5 linhas).
-`lancarRaio`, a colisão e a entrada são **as mesmas** do passo 3.
+A busca do `lancarRaio`, a colisão e a entrada são **as mesmas** do passo 3.
 **Rode:** abra o `index.html`. Ande e gire como antes. **H** troca a imagem pela planta.
 
 ---
@@ -18,8 +19,8 @@ viradas para um lado da sala são **mais escuras** que as do outro, o que separa
 vizinha sem nenhuma luz de verdade. Ande até uma parede: ela cresce até encher a imagem.
 
 Com **H** a imagem **dá lugar à planta** (o GDD diz "troca", não "sobrepõe"): a grade, um **leque
-de raios** saindo do zelador, e o raio do meio em destaque, o mesmo do passo 3. Embaixo, os números,
-agora com uma linha nova sobre a coluna do meio. Aperte **H** de novo e a imagem volta.
+de raios** saindo do zelador, e o raio do olhar em destaque, o mesmo do passo 3. Embaixo, os números,
+agora com uma linha nova sobre a altura do raio do olhar. Aperte **H** de novo e a imagem volta.
 
 > Ainda não há texturas, névoa, objetos nem espelhos: cada um é um passo. O que este passo
 > prova é que **um raio por coluna e uma divisão** bastam para fazer profundidade.
@@ -31,20 +32,29 @@ agora com uma linha nova sobre a coluna do meio. Aperte **H** de novo e a imagem
 *Reusa o DDA do passo 3 e `shoot-em-up` (a trigonometria do seno e do cosseno).*
 
 A imagem tem 320 colunas de pixels (195 na vertical, veja a seção 6). Para cada uma, o jogo lança um
-raio com o `lancarRaio` do passo 3, **sem mudar uma linha dele**. O que muda é só a direção:
+raio com o `lancarRaio` do passo 3, **sem mexer na busca**. O que muda é só a direção:
 cada coluna olha um pouco para um lado.
 
 ```js
 for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
     const camera = 2 * (coluna + 0.5) / larguraDaVisao - 1;   // -1 na esquerda, 0 no meio, +1 na direita
     ...
-    raiosDaTela[coluna] = { ...resultado, perpendicular, altura: k / perpendicular };
+    resultado.perpendicular = resultado.distancia * cosseno;
+    resultado.altura = k / resultado.perpendicular;
+    raiosDaTela[coluna] = resultado;
 }
 ```
 
 O `+ 0.5` mira o **meio** do pixel, não a quina dele. O resultado de cada coluna fica em
-`raiosDaTela[coluna]` (e `raio` é o da coluna do meio, o do passo 3): lista de dados que o desenho
-só lê: a mesma separação entre `atualizar` e `desenhar` do passo 3.
+`raiosDaTela[coluna]`: lista de dados que o desenho só lê, a mesma separação entre `atualizar` e
+`desenhar` do passo 3.
+
+**O raio do olhar é outro raio.** Com 320 colunas (um número par) nenhuma aponta exatamente para onde
+o zelador olha: a do meio está 0,003 do centro do plano. Por isso `raio`, o do passo 3, é lançado à
+parte, na direção `(dx, dy)`, e é ele que o H destaca e que a leitura mostra (no início, a distância
+2,021 do passo 3). Duas economias: os 320 raios da imagem chamam `lancarRaio(..., false)`, o novo
+parâmetro `registrar`, e **não guardam** os cruzamentos (só o H os lê), e o
+passo fixo da comparação só é recalculado quando o H está ligado e o zelador mudou de pose.
 
 ---
 
@@ -97,7 +107,7 @@ altura: k / perpendicular
 ocupa `larguraDaVisao` pixels. Então 1 casa a 1 casa de distância ocupa
 `larguraDaVisao / (2 × PLANO)` pixels. Para 320 colunas e 66°, `k ≈ 246`: uma parede de 1 casa
 a 4 casas mede 62 pixels, a 8 casas, 31. **Dobrou a distância, metade da altura**: é o que o
-teste deste passo confere em todas as colunas. Na imagem vertical (195 colunas), `k ≈ 150`, a
+teste deste passo (`verificacao/reflexo/04-paredes.html`) confere em todas as colunas. Na imagem vertical (195 colunas), `k ≈ 150`, a
 altura da imagem: uma parede a 1 casa a enche.
 
 A coluna é desenhada **centrada** na imagem: o olho está na metade da altura da parede. Se a
@@ -119,7 +129,7 @@ const perpendicular = resultado.distancia * cosseno;
 
 O produto escalar do olhar com o raio (ambos de comprimento 1) é o **cosseno** do ângulo entre
 eles, e `distância × cosseno` é a projeção da distância no eixo do olhar: justamente a perpendicular.
-Conferência numérica do teste: de frente para uma parede a 7 casas, a distância ao longo do raio da
+Conferência numérica da mesma página: de frente para uma parede a 7 casas, a distância ao longo do raio da
 coluna da ponta é cerca de 8,3 (`7 / cos 33°`), e a perpendicular é **7 em todas as colunas**, logo
 todas têm a mesma altura. Experimente tirar a multiplicação (exercício 2).
 
@@ -164,6 +174,12 @@ visao.style.width = larguraDaVisao * escala + "px";
 1× (320 pixels, sobrando margem dos dois lados). Numa janela de 360 de largura a escala cai para 1 (195 pixels de largura).
 Uma mudança de orientação chama `ajustarVisao` de novo (`resize`).
 
+**Caber sem rolar.** A escala é a maior que cabe na largura **e** na altura que sobra depois do resto da
+página. Esse resto não é um número chutado: `medirOResto` soma a altura real do título, da leitura,
+dos botões e da ajuda, mais os espaços e as margens do `body` (a ajuda, por exemplo, ocupa duas linhas
+numa tela estreita). A planta do H também é limitada a essa altura, e o `#palco` reserva a **maior**
+das duas, a imagem ou a planta: ligar o H não empurra o resto da página.
+
 **Como a imagem é desenhada.** Aqui, a coluna é um `fillRect` de 1 pixel de largura, o mais
 simples. O GDD escolheu, depois de medir (seção 8.2), escrever os pixels num buffer `ImageData`,
 bem mais rápido que dezenas de desenhos por quadro; isso entra no passo 5, com texturas, onde
@@ -180,11 +196,31 @@ visao.hidden = depuracaoLigada;
 tela.hidden = !depuracaoLigada;
 ```
 
-A planta do passo 3 continua inteira (casas, raio do meio, cruzamentos), mais o **leque**:
+A planta do passo 3 continua inteira (casas, raio do olhar, cruzamentos), mais o **leque**:
 um raio a cada poucas colunas, de linhas finas. Dá para ver o campo de visão como um triângulo
-e as paredes que cada raio achou.
+e as paredes que cada raio achou. As letras amarelas (D, E, R) têm contraste de pelo menos 4,5:1 com
+o fundo da casa, por isso a planta usa `COR_NA_PLANTA`, cores mais escuras que as da imagem.
 O atributo `hidden` esconde um elemento, mas o CSS `canvas { display: block }` o vence; por isso o
 `style.css` tem `[hidden] { display: none; }`. Sem ele os dois canvas apareceriam.
+
+---
+
+## 8. O que a página de verificação confere
+
+`verificacao/reflexo/04-paredes.html` (`node verificacao/rodar.mjs reflexo`) carrega este `script.js` e
+confere:
+
+- o DDA de sempre (os casos fixos do passo 3) e as direções das colunas: o desvio de cada uma é
+  `atan(PLANO × câmera)`, crescendo da esquerda para a direita;
+- de frente para uma parede reta, as 320 faixas têm a mesma altura (`k / 1,5`), e a distância
+  **crua** cresce para as bordas: é a prova do olho de peixe;
+- `altura × perpendicular = k`, dobrar a distância divide a altura por dois, e 60 poses sorteadas ×
+  320 colunas batem com uma referência independente (casa, face, distância e altura);
+- as duas faces: a sombra do lado `y` aparece em exatamente as colunas `y`;
+- colado à parede, a altura é cortada na da imagem; retrato ou paisagem escolhem 195×150 ou 320×200,
+  com escala inteira, e o palco reserva a altura certa;
+- H troca imagem e planta, a entrada (tecla + botão) e um robô de 1.500 quadros sem nada fora da
+  imagem.
 
 ---
 
@@ -211,4 +247,4 @@ O atributo `hidden` esconde um elemento, mas o CSS `canvas { display: block }` o
 
 ---
 
-**Anterior:** [`03-um-raio`](../03-um-raio/) · **Próximo:** `05-texturas` — a parede ganha tijolos de verdade, e as duas técnicas de desenho são medidas.
+**Anterior:** [`03-um-raio`](../03-um-raio/) · **Próximo:** [`05-texturas`](../05-texturas/) — a parede ganha tijolos de verdade, e as duas técnicas de desenho são medidas.

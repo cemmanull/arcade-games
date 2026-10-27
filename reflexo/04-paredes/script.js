@@ -37,6 +37,8 @@ const COR_CHAO = "#14141f";
 const COR_FEIXE = "#bbffff";
 const COR_SIMBOLO = "#ffd84d";
 const COR_DAS_PAREDES = { "#": "#964632", "%": "#5a6478", D: "#a8842e", E: "#2e7d8a", R: "#8a4aa8" };
+// Na planta as letras amarelas precisam de 4,5:1 de contraste (GDD, seção 7): D, E e R ficam mais escuros que na imagem.
+const COR_NA_PLANTA = { ...COR_DAS_PAREDES, D: "#54410f", E: "#15434d", R: "#55296a" };
 const COR_TETO = "#0b0b14";
 const COR_PISO = "#1b1b2b";
 const SOMBRA_DO_LADO_Y = "rgba(0, 0, 0, 0.4)";   // as paredes viradas para y ficam mais escuras
@@ -60,7 +62,8 @@ const mapa = MAPA_EM_TEXTO.map(linha => linha.split(""));
 const jogador = { x: 0, y: 0, angulo: 0.25, dx: 0, dy: 0 };
 
 // Um resultado de raio por coluna da imagem, refeito a cada quadro (seção 7): casa batida, lado,
-// distância, distância perpendicular, altura. `raio` é o da coluna do meio (o do passo 3).
+// distância, distância perpendicular, altura. `raio` é o do OLHAR (o do passo 3): um raio à parte,
+// porque com 320 colunas nenhuma delas aponta exatamente para onde o zelador olha.
 let raiosDaTela = [];
 let raio = null;
 
@@ -70,6 +73,8 @@ let alturaDaVisao = 200;
 
 let depuracaoLigada = false;
 let instanteDoQuadroAnterior = 0;
+let poseDoPassoFixo = "";     // a pose da última conta do passo fixo: o H só refaz se ela mudou
+let resultadoDoPassoFixo = null;
 
 // ---- 3. CONFERIR O MAPA, ACHAR O JOGADOR -------------------
 // Dado errado não dá erro: dá um desenho torto longe da causa. Devolve se o mapa serve.
@@ -150,7 +155,7 @@ function desenharCasas() {
     pincel.lineWidth = 0.04;
 
     mapa.forEach((linha, y) => linha.forEach((simbolo, x) => {
-        pincel.fillStyle = COR_DAS_PAREDES[simbolo] || COR_CHAO;
+        pincel.fillStyle = COR_NA_PLANTA[simbolo] || COR_CHAO;
         pincel.fillRect(x, y, 1, 1);
         pincel.strokeRect(x, y, 1, 1);
         if ("ER/\\DSX".includes(simbolo)) {
@@ -218,12 +223,22 @@ function desenharJogador() {
 function montarLeitura() {
     const { x, y, angulo, dx, dy } = jogador;
     const { coluna, linha, lado, distancia, cruzamentos } = raio;
-    const ingenuo = lancarRaioPorPassos(x, y, dx, dy, PASSO_FIXO);
+    const ingenuo = contarPassoFixo();
     return `casa (${Math.floor(x)}, ${Math.floor(y)})  pos (${x.toFixed(2)}, ${y.toFixed(2)})\n`
         + `${(angulo * 180 / Math.PI).toFixed(0)}° = ${angulo.toFixed(3)} rad  dir (${dx.toFixed(2)}, ${dy.toFixed(2)})\n`
         + `raio: casa (${coluna}, ${linha}) lado ${lado} dist ${distancia.toFixed(3)}\n`
         + `DDA ${cruzamentos.length} passos | fixo ${PASSO_FIXO}: ${ingenuo.passos} (${ingenuo.distancia.toFixed(2)})\n`
         + `meio: perp ${raio.perpendicular.toFixed(3)} altura ${raio.altura.toFixed(1)} px de ${alturaDaVisao}`;
+}
+
+// A conta ingênua só interessa a quem olha o H, e só muda se o zelador se mexeu.
+function contarPassoFixo() {
+    const pose = `${jogador.x},${jogador.y},${jogador.angulo}`;
+    if (pose !== poseDoPassoFixo) {
+        poseDoPassoFixo = pose;
+        resultadoDoPassoFixo = lancarRaioPorPassos(jogador.x, jogador.y, jogador.dx, jogador.dy, PASSO_FIXO);
+    }
+    return resultadoDoPassoFixo;
 }
 
 // ---- 5. ENTRADA: TECLADO E TOQUE, A MESMA INTENÇÃO ---------
@@ -359,13 +374,17 @@ function atualizarRaios() {
         const tamanho = Math.hypot(inclinadoX, inclinadoY);
         const direcaoX = inclinadoX / tamanho;
         const direcaoY = inclinadoY / tamanho;
-        const resultado = lancarRaio(jogador.x, jogador.y, direcaoX, direcaoY);
+        const resultado = lancarRaio(jogador.x, jogador.y, direcaoX, direcaoY, false);   // sem o caminho: ninguém o lê
         const cosseno = jogador.dx * direcaoX + jogador.dy * direcaoY;
-        const perpendicular = resultado.distancia * cosseno;
 
-        raiosDaTela[coluna] = { ...resultado, perpendicular, altura: k / perpendicular };
+        resultado.perpendicular = resultado.distancia * cosseno;
+        resultado.altura = k / resultado.perpendicular;
+        raiosDaTela[coluna] = resultado;
     }
-    raio = raiosDaTela[Math.floor(larguraDaVisao / 2)];
+
+    raio = lancarRaio(jogador.x, jogador.y, jogador.dx, jogador.dy);   // com o caminho, para o H
+    raio.perpendicular = raio.distancia;   // olhando reto não há desvio: o cosseno vale 1
+    raio.altura = k / raio.perpendicular;
 }
 
 /*
@@ -383,10 +402,13 @@ function prepararEixo(origem, direcao) {
     return { passo: direcao < 0 ? -1 : 1, delta, proximo: ateALinha * delta };
 }
 
+const SEM_CRUZAMENTOS = Object.freeze([]);
+
 // Para na primeira casa sólida; o mapa é fechado (e fora dele é parede), então sempre para.
-function lancarRaio(origemX, origemY, direcaoX, direcaoY) {
+// `registrar` guarda cada cruzamento (só o H os lê); os 320 raios da imagem passam false.
+function lancarRaio(origemX, origemY, direcaoX, direcaoY, registrar = true) {
     const eixos = { x: prepararEixo(origemX, direcaoX), y: prepararEixo(origemY, direcaoY) };
-    const cruzamentos = [];
+    const cruzamentos = registrar ? [] : SEM_CRUZAMENTOS;
     let coluna = Math.floor(origemX);
     let linha = Math.floor(origemY);
     let lado = "x";
@@ -401,7 +423,9 @@ function lancarRaio(origemX, origemY, direcaoX, direcaoY) {
         } else {
             linha += eixos.y.passo;
         }
-        cruzamentos.push({ x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, lado, coluna, linha });
+        if (registrar) {
+            cruzamentos.push({ x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, lado, coluna, linha });
+        }
     }
     return { coluna, linha, lado, distancia, x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia, cruzamentos };
 }
@@ -416,6 +440,17 @@ function lancarRaioPorPassos(origemX, origemY, direcaoX, direcaoY, tamanhoDoPass
 }
 
 // ---- 8. TAMANHO DA IMAGEM ----------------------------------
+// Mede o que a página gasta fora do palco (título, leitura, botões, ajuda, espaços e margens).
+function medirOResto() {
+    const estilo = getComputedStyle(document.body);
+    const espaco = parseFloat(estilo.rowGap) || 0;
+    let total = parseFloat(estilo.paddingTop) + parseFloat(estilo.paddingBottom);
+    document.querySelectorAll("h1, #leitura, #controles, #ajuda").forEach(parte => {
+        total += parte.offsetHeight + espaco;
+    });
+    return total;
+}
+
 // 320×200 na horizontal, 195×150 na vertical (dobrado dá 390×300). A escala é sempre inteira,
 // para os pixels ficarem quadrados e nítidos (CSS: image-rendering: pixelated).
 function ajustarVisao() {
@@ -425,10 +460,15 @@ function ajustarVisao() {
     visao.width = larguraDaVisao;   // mudar o tamanho de um canvas também o apaga
     visao.height = alturaDaVisao;
 
-    const folgaParaOResto = 320;   // título, leitura, botões
-    const escala = Math.floor(Math.min(window.innerWidth / larguraDaVisao, (window.innerHeight - folgaParaOResto) / alturaDaVisao));
-    visao.style.width = larguraDaVisao * Math.max(1, escala) + "px";
-    palco.style.minHeight = alturaDaVisao * Math.max(1, escala) + "px";   // trocar para a planta não pula a tela
+    // Cabe sem rolar: a imagem usa o que sobra depois das outras partes da página. A planta (H) tem o
+    // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.
+    const alturaLivre = window.innerHeight - medirOResto();
+    const escala = Math.max(1, Math.floor(Math.min(window.innerWidth / larguraDaVisao, alturaLivre / alturaDaVisao)));
+    const larguraDaPlanta = Math.max(120, Math.min(tela.width, window.innerWidth - 32, alturaLivre * tela.width / tela.height));
+    const alturaDaPlanta = (larguraDaPlanta - 4) * tela.height / tela.width + 4;   // 4 = as duas bordas
+    visao.style.width = larguraDaVisao * escala + "px";
+    tela.style.width = larguraDaPlanta + "px";
+    palco.style.minHeight = Math.max(alturaDaVisao * escala, alturaDaPlanta) + "px";
     raiosDaTela = [];
 }
 

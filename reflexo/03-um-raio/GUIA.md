@@ -128,18 +128,41 @@ detalhe vira sombreamento.
 Um raio de verdade aponta para qualquer lugar, inclusive os lugares chatos:
 
 - **Direção `0` num eixo** (por exemplo `(1, 0)`): `1 / 0` é `Infinity` em JavaScript, e a régua
-  vira "nunca cruza". `prepararEixo` trata esse caso à parte porque `0 × Infinity` é `NaN`, e um
-  `NaN` na conta faria o raio girar sem parar.
+  vira "nunca cruza". `prepararEixo` trata esse caso à parte e devolve `proximo: Infinity`, que diz a
+  intenção em voz alta. O resultado seria o mesmo sem o ramo (o `Infinity × (distância até a linha)`
+  continua `Infinity`, porque essa distância nunca é `0` para direção não negativa), então o ramo é
+  clareza e proteção contra uma mudança futura, não um conserto. O perigo de verdade é o `NaN`
+  (direção `NaN`, vinda de uma conta quebrada em outro lugar): toda comparação com `NaN` dá falso, o
+  laço escolhe `"y"` a cada volta, anda uma casa por vez até sair do mapa (fora é parede) e devolve
+  `distancia: NaN`. Termina, mas com um resultado inútil.
 - **Quase paralelo** (`dy = 1e-12`): `delta` é gigantesco mas finito, e o laço apenas nunca escolhe
   esse eixo. Funciona sem tratamento.
-- **Origem exatamente numa linha da grade**: o primeiro `proximo` é `0`, e o raio entra na
-  vizinha de imediato. A conta continua certa.
+- **Origem exatamente numa linha da grade**: para direção **negativa**, o primeiro `proximo` é `0`,
+  e o raio entra na casa vizinha de imediato. Para direção **positiva**, a conta dá uma casa
+  inteira (`proximo = delta`), porque a casa da origem é a que fica à direita (ou abaixo) da linha.
+  Nos dois casos a conta continua certa.
 - **Empate** (o raio passa exatamente pela quina de quatro casas, como a 45° saindo do centro de
   uma casa): o `<` manda o empate para o eixo **y** primeiro. É uma regra arbitrária, mas fixa:
   todo empate é decidido do mesmo jeito.
-- **Termina sempre**: cada volta anda uma casa, e o mundo é finito (fora do mapa é parede). Os
-  testes deste passo lançaram 20.000 raios aleatórios e conferiram distância, casa e face contra
-  uma conta independente (interseção do raio com cada casa sólida).
+- **Termina sempre**: cada volta anda uma casa, e o mundo é finito (fora do mapa é parede).
+
+### O que a página de verificação confere
+
+`verificacao/reflexo/03-um-raio.html` (rode `node verificacao/rodar.mjs reflexo`) carrega o
+`script.js` deste passo e confere, entre outras coisas:
+
+- o raio do início contra a conta à mão da seção 3 (casa (3, 2), lado `y`, distância 2,021, três
+  cruzamentos);
+- casos fixos (direção nula, quase paralelo, origem sobre uma linha, origem dentro de pedra);
+- direções degeneradas (`0`, `NaN`, `Infinity`, `1e-300`...) a partir de 4 origens: todas terminam numa
+  casa sólida inteira, e origens `NaN` ou infinitas voltam sem andar;
+- **24.000 raios sorteados** contra uma referência independente (interseção do raio com cada casa
+  sólida), e a coerência do caminho de cruzamentos; os empates exatos de quina só passam pelos
+  invariantes;
+- o passo fixo: a parede fina que um passo de 2 atravessa, e 20.000 raios em que o passo de 0,1 erra a
+  casa em alguns, enquanto o DDA nunca;
+- o raio que acompanha o jogador (andar, recuar, girar) e um robô de 6.000 quadros com entrada
+  aleatória; a leitura do H (`DDA 3 passos | fixo 0.1: 21`) e a regra de entrada tecla + botão.
 
 ---
 

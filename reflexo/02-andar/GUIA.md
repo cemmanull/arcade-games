@@ -1,8 +1,10 @@
 # Reflexo — Passo 2: Andar
 
-**Mudou:** `script.js` (a seção 3 ganhou a ordem de largada; as seções 1, 2 e 4 ganharam as constantes de
-velocidade e colisão, o relógio e o raio do corpo; as seções 5, 6 e 7 são novas), `index.html` (os
-botões) e `style.css` (o estado "apertado" dos botões).
+**Mudou:** `script.js` (a seção 1 ganhou as constantes `VELOCIDADE_DE_ANDAR`, `VELOCIDADE_DE_GIRO`,
+`RAIO_DO_CORPO` e `CASAS_SOLIDAS`; a 2, o relógio `instanteDoQuadroAnterior`; a 4, o corpo desenhado com
+`RAIO_DO_CORPO`; a "teclado e loop" virou a seção 5, de entrada, e as seções 6, andar e colidir, e 7, o
+laço com tempo, são novas; a seção 3 não mudou), `index.html` (os botões e a ajuda) e `style.css` (o
+estado "apertado" dos botões).
 **Rode:** abra o `index.html`. Use **W A S D** e as setas ← →, ou os botões da tela. Depois
 aperte **H**.
 
@@ -49,10 +51,11 @@ Por que o mapa de entradas, e não só um conjunto de ações? Porque a mesma a�
 entradas. Segure **W**, aperte ↑ e solte ↑: com um conjunto simples, o `keyup` de ↑ apagaria
 `"frente"` e o zelador pararia com a W ainda apertada. O mesmo vale para tecla + botão e para dois
 dedos no mesmo botão (cada dedo tem o seu `pointerId`, e o GDD pede esse cuidado). A chave do
-botão junta o `pointerId` e a ação, então um dedo que escorrega de ▲ para ▶ solta só o ▲.
-
-A vantagem é a do Dealer? Out!: se um dia houver um terceiro jeito de jogar (um controle, um
-mouse), basta ele chamar `mudarEntrada`. Nada em `andar` ou na colisão muda.
+botão junta o `pointerId` e a ação (`ponteiro:3:frente`). O `:acao` não é necessário para o jogo
+funcionar (um dedo só aperta um botão por vez); ele só deixa a chave legível ao depurar. Um dedo que
+escorrega de ▲ para ▶ não liga o ▶, porque o `pointerdown` dele nunca aconteceu: no toque o dedo
+continua **preso ao ▲** (captura implícita do ponteiro) até levantar, e com o mouse o `pointerleave`
+do ▲ o solta (veja "O botão também solta", abaixo).
 
 Cuidados que existem por causa de bugs reais:
 
