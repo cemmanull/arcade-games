@@ -280,6 +280,14 @@ atacar pode trancar uma porta. Nenhum título encontrado combina os três. **Nen
 próxima demais de um jogo específico**; nada mudou no design.
 **Guarda de projeto:** não acrescentar "ficar na luz protege" (o centro do Lightmatter). A luz só
 ataca. Se isso mudar, rever esta seção.
+**A regra, escrita com precisão** (decisão do tech-lead; é o que o passo 8 implementa): *a luz não é abrigo: o seu corpo
+faz sombra no feixe. Atrás de você e perto de você ele não queima; à sua frente, o feixe é uma arma que você aponta com os
+espelhos.* Em números: o zelador está "na luz" quando a menos de 0,75 casa (meia casa de luz mais o raio da sombra, a mesma
+faixa em que uma sombra queima) de um trecho do feixe. Estando na luz, (1) o feixe que queima termina na frente do corpo e
+tudo o que vem depois dele na cadeia de espelhos está no escuro, e (2) a menos de 1 casa do zelador nada queima. O trecho aceso
+**antes** do corpo (do lado do emissor) e a mais de 1 casa dele continua queimando: uma sombra que desce um trecho aceso
+comprido na direção do zelador é desfeita se passar meio segundo nele, e isso é o feixe usado como **arma apontada**, não a
+luz como zona segura. O feixe continua inteiro para acender receptores e abrir portas; só a arma respeita o corpo.
 Limite: busca por palavras em 2 lojas (o itch.io limitou requisições); não é exaustiva.
 
 ## 12. Riscos em aberto

@@ -234,7 +234,7 @@ let raiosDaTela = [];
 let zBuffer = new Float64Array(0);
 let espelhoNaColuna = [];                 // coluna → o espelho que aparece nela (ou null)
 let uDoEspelho = new Float64Array(0);     // coluna → onde, ao longo do espelho, o raio bateu
-let profundidadeDoSprite = new Float64Array(0);   // coluna → profundidade do sprite que cobre a altura dos olhos (Infinity = nenhum)
+let profundidadeDoSprite = new Float32Array(0);   // pixel → profundidade do sprite mais perto que o cobre (Infinity = nenhum): o feixe passa por trás dele
 let uDoPlano = 0;                         // segundo resultado de distanciaAoPlano
 let spritesDaTela = [];                   // sprites na frente do olho, do mais longe ao mais perto
 
@@ -446,7 +446,6 @@ function desenharSprite(sprite) {
     const lado = sprite.base - sprite.topo;
     const primeiraLinha = Math.max(0, Math.ceil(sprite.topo - 0.5));
     const fimDasLinhas = Math.min(alturaDaVisao, Math.ceil(sprite.base - 0.5));
-    const olhos = linhaDosOlhos();
 
     sprite.colunas.forEach(coluna => {
         const colunaDaArte = Math.min(TAMANHO_DA_TEXTURA - 1, Math.floor((coluna + 0.5 - sprite.esquerda) / lado * TAMANHO_DA_TEXTURA));
@@ -455,9 +454,7 @@ function desenharSprite(sprite) {
             const pixel = arte[linhaDaArte * TAMANHO_DA_TEXTURA + colunaDaArte];
             if (pixel !== TRANSPARENTE) {
                 pixels[linha * larguraDaVisao + coluna] = pixel;
-                if (linha === olhos) {
-                    profundidadeDoSprite[coluna] = sprite.profundidade;   // do mais longe ao mais perto: o último é o da frente
-                }
+                profundidadeDoSprite[linha * larguraDaVisao + coluna] = sprite.profundidade;   // do mais longe ao mais perto: o último é o da frente
             }
         }
     });
@@ -532,21 +529,24 @@ function desenharEspelhoNaColuna(espelho, coluna) {
 }
 
 // Uma faixa fina na altura dos olhos, em pulsos claros e escuros ao longo do comprimento. Só aparece onde está
-// mais perto que a parede, o espelho e o sprite dessa coluna (z-buffer); não entra no z-buffer, é luz.
+// mais perto que a parede e o espelho dessa coluna (z-buffer) e que o sprite de cada pixel; não entra no z-buffer, é luz.
 function desenharFeixe(segmento) {
     const fase = SEM_ANIMACAO ? 0 : instanteDoQuadro / 1000 * VELOCIDADE_DOS_PULSOS;
     const olhos = linhaDosOlhos();
 
     for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
         const distancia = distanciaAoPlano(segmento, raiosDaTela[coluna]);
-        if (distancia >= zBuffer[coluna] || distancia >= profundidadeDoSprite[coluna]) {
+        if (distancia >= zBuffer[coluna]) {
             continue;
         }
         const metade = Math.max(1, Math.round(ESPESSURA_DO_FEIXE * pixelsPorCasa(distancia) / 2));
         const pulso = Math.floor((uDoPlano * segmento.comprimento - fase) * PULSOS_POR_CASA) & 1;
         const cor = CORES_DO_FEIXE[pulso];
         for (let linha = Math.max(0, olhos - metade); linha < Math.min(alturaDaVisao, olhos + metade); linha++) {
-            pixels[linha * larguraDaVisao + coluna] = cor;
+            const indiceDoPixel = linha * larguraDaVisao + coluna;
+            if (distancia < profundidadeDoSprite[indiceDoPixel]) {
+                pixels[indiceDoPixel] = cor;
+            }
         }
     }
 }
@@ -1153,7 +1153,7 @@ function ajustarVisao() {
     zBuffer = new Float64Array(larguraDaVisao);
     espelhoNaColuna = new Array(larguraDaVisao).fill(null);
     uDoEspelho = new Float64Array(larguraDaVisao);
-    profundidadeDoSprite = new Float64Array(larguraDaVisao);
+    profundidadeDoSprite = new Float32Array(larguraDaVisao * alturaDaVisao);
 
     // Cabe sem rolar: a imagem usa o que sobra depois das outras partes da página. A planta (H) tem o
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.

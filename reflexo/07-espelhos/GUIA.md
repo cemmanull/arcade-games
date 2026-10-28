@@ -99,7 +99,8 @@ usam o mesmo cálculo:
   embaixo. `registrarEspelhosNaTela` compara com o z-buffer e, onde o espelho está mais perto, **escreve a distância nele**:
   um sprite atrás de um espelho fica escondido, como atrás de uma parede.
 - **O feixe** é uma faixa fina na altura dos olhos (`ESPESSURA_DO_FEIXE`, 0,1 de parede) que só aparece onde está mais perto
-  que a parede e o espelho. **Não** escreve no z-buffer: é luz, e brilha, então não leva névoa.
+  que a parede e o espelho (por coluna) e que o sprite (por **pixel**: `profundidadeDoSprite` guarda, em cada pixel que um sprite
+  escreveu, a profundidade dele, e o feixe não pinta por cima de um sprite mais perto). **Não** escreve no z-buffer: é luz, e brilha, então não leva névoa.
 
 O feixe tem **forma**, não só cor (GDD, seção 7): pulsos claros e escuros ao longo do comprimento
 (`PULSOS_POR_CASA`), que andam com o tempo. Com `prefers-reduced-motion` a fase fica parada em `0`: os pulsos continuam lá,

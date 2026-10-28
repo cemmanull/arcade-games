@@ -24,7 +24,7 @@ O painel mostra `Vidas ♥♥♥ 3` (os ícones e o número, GDD seção 7), os 
 Com **H**, a planta mostra, em cada casa, **quantos passos faltam até você**, e cada sombra como um círculo roxo com o
 símbolo do estado: `+` nasce, `~` ronda, `!` persegue, `<` recua, `*` dissolve.
 
-> A luz **só ataca**. Ficar em cima do feixe não é abrigo (GDD, seção 11): **seu corpo faz sombra nele** (seção 5), e a regra
+> A luz **só ataca**. Ela não é abrigo (GDD, seção 11): **seu corpo faz sombra no feixe** (seção 5), e a regra
 > está conferida em [`verificacao/reflexo/08-sombras.html`](../../verificacao/reflexo/08-sombras.html). A tensão do
 > jogo é a de sempre, um feixe que é chave e arma: virar um espelho para pegar uma sombra pode tirar a luz do receptor
 > e fechar a porta de que você precisa.
@@ -41,7 +41,7 @@ ordem por distância, sem mudar nada. A novidade é a `escala` (de 0,2 a 1): a s
 dissolver, com a base sempre no chão.
 
 ```js
-{ tipo: "sombra", x, y, estado: "nasce", desde, exposicao: 0, escala: 0.2, alvoX, alvoY, anterior }
+{ tipo: "sombra", x, y, estado: "nasce", desde, exposicao: 0, escala: 0.2, alvoX, alvoY, anterior, casa, vindaDe }
 ```
 
 `desde` é o instante (em segundos **de jogo**) em que entrou no estado. O tempo de jogo, `tempoDeJogo`, é a soma dos `tempo` de
@@ -113,7 +113,10 @@ onde veio se houver outra saída (`anterior`).
 
 **Porta fechada é parede para a sombra também.** O alvo foi escolhido quando a porta estava aberta, e ela pode fechar antes de a
 sombra chegar. Por isso `andarComASombra` confere o alvo **a cada quadro** e escolhe outro se ele virou sólido. Se a porta fecha
-**com a sombra dentro dela**, `tirarDaCasaSolida` a põe de volta no centro da casa de onde ela vinha (`vindaDe`).
+**com a sombra dentro dela**, `tirarDaCasaSolida` a põe de volta no centro da casa de onde ela **veio** (`vindaDe`: a última casa diferente em que
+`registrarACasa` a viu, não a que ela escolheu antes) ou, se esta não serve, na vizinha livre mais perto dela. Isso roda **no começo** de
+`atualizarSombra`, para todo estado (`nasce` e `dissolve` também), antes de `decidirEstado`: uma sombra presa numa porta que fecha não
+lê distância −1 e não perde o rastro por causa disso.
 
 ---
 
@@ -130,30 +133,37 @@ Uma sombra que **cruza** o feixe de lado fica uns 0,7 s dentro da faixa (1,5 cas
 **encosta** e sai esfria sem dissolver. Por isso o jogador quer **segurar** o feixe onde as sombras vão passar, e isso tira a
 luz do receptor (seção 4 do passo 7).
 
-**A luz nunca protege: seu corpo faz sombra nela.** A regra do GDD (seção 11) é que ficar na luz não pode ser abrigo. A
-faixa tem 0,75 casa de cada lado (luz 0,5 + sombra 0,25), e o contato só acontece a 0,5: uma sombra que viesse **ao longo** do
+**A luz não é abrigo: seu corpo faz sombra no feixe.** A regra do GDD (seção 11), em uma frase: *atrás de você e perto de
+você o feixe não queima; à sua frente, ele é uma arma que você aponta com os espelhos.* O problema que ela resolve: a faixa
+tem 0,75 casa de cada lado (luz 0,5 + sombra 0,25) e o contato só acontece a 0,5, então uma sombra que viesse **ao longo** do
 feixe até você passaria mais de meio segundo dentro da faixa antes de tocar, e dissolveria. Era a luz protegendo, e nada no
-código "perguntava" por você. Agora o jogo pergunta, em `estaIluminada`, e a resposta é o corpo:
+código "perguntava" por você. Agora o jogo pergunta, em `estaIluminada`. Você está **na luz** quando está a menos de
+`LARGURA_DA_FAIXA` (0,75, a mesma faixa em que a sombra queima) de um trecho do feixe (`zeladorEstaNaLuz`); só então valem
+as duas regras, e as duas usam essa mesma faixa, sem uma banda em que você queima sem fazer sombra:
 
-1. **O corpo corta o feixe.** `cortarOFeixeNoCorpo` percorre os trechos; no que tem você dentro da luz (a até `RAIO_DA_LUZ`
-   do eixo, mesmo fora do centro), o feixe que **queima** termina na frente do seu corpo (`ondeOCorpoCorta`), e o resto da
-   cadeia de espelhos (tudo depois de você) está no escuro. É a sombra de verdade: quem vem pelo lado escuro encontra você
-   sem luz nenhuma. Ficar um passo ao lado do eixo não escapa disso: a luz tem a largura de uma casa.
-2. **Perto de você nada queima, se você está na luz.** Com o zelador a menos de `RAIO_DA_LUZ` (meia casa) de um trecho do
-   feixe (`zeladorEstaNaLuz`), a menos de `PENUMBRA_DO_ZELADOR` (1 casa) dele a exposição não sobe, ela esfria. Quem vem pelo
-   lado aceso, ao longo do feixe, também chega: falta-lhe meio segundo de luz antes de entrar na penumbra. Longe do feixe
-   o corpo não faz sombra nenhuma: a sombra que atravessa o feixe a uma casa de você dissolve, como sempre.
+1. **O corpo corta o feixe.** `cortarOFeixeNoCorpo` percorre os trechos; no que tem você na faixa (mesmo fora do eixo), o feixe
+   que **queima** termina na frente do seu corpo (`ondeOCorpoCorta`), e o resto da cadeia de espelhos (tudo depois de você)
+   está no escuro. É a sombra de verdade: quem vem pelo lado escuro encontra você sem luz nenhuma. Ficar um passo ao lado do
+   eixo não escapa disso.
+2. **Perto de você nada queima.** A menos de `PENUMBRA_DO_ZELADOR` (1 casa) de você a exposição não sobe, ela esfria.
+
+O que **continua queimando**: o trecho aceso **antes** do seu corpo (do lado do emissor) e a mais de 1 casa de você. Uma sombra
+que desce esse trecho na sua direção dissolve se passar meio segundo nele, e isso é o desenho do jogo: o feixe é uma **arma
+apontada**, não uma zona segura. Quem vem pelo lado escuro (depois de você) ou chega rente a você toca; quem atravessa o trecho
+aceso, longe de você, dissolve. Uma sombra que atravessa o feixe longe de você **dissolve como sempre, a menos que esse trecho
+esteja escuro por causa do seu corpo** (depois de você na cadeia, ou a menos de 1 casa).
 
 Duas coisas ficam como estavam, de propósito: **(a)** o feixe continua desenhado inteiro e **acendendo receptores** (se o corpo
-o apagasse, ficar parado no feixe fecharia a porta de que você precisa); só a **arma** respeita o corpo. **(b)** Uma sombra
-que atravessa o feixe **longe de você** dissolve como sempre: isso é a arma, e é ela que você aponta com os espelhos. Mesmo
-uma que vem de longe pelo trecho aceso, antes de você, ainda pode dissolver: é a arma funcionando, não um escudo, porque do
-outro lado do seu corpo o feixe está escuro e a porta de trás está aberta. Ficar no feixe nunca é um abrigo confiável: por
-trás ou rente a você, a sombra toca. Na
-planta (**H**), com você na luz, o círculo tracejado é a penumbra e o trecho escurecido do feixe é o que o seu corpo deixa
-sem luz.
+o apagasse, ficar parado no feixe fecharia a porta de que você precisa); só a **arma** respeita o corpo. **(b)** O contato (seção 6)
+não consulta `luz`.
 
-O contato (seção 6) continua sem consultar `luz`. A página [`verificacao/reflexo/08-sombras.html`](../../verificacao/reflexo/08-sombras.html)
+**Onde a arma funciona, na imagem e na planta.** Na imagem em primeira pessoa, o trecho que o seu corpo deixa sem queimar é outro
+desenho: um **tracejado parado**, mais fino (só a metade de cima da faixa) e mais apagado (`COR_DO_FEIXE_APAGADO`), sem o pulso
+claro e escuro do feixe que queima. A forma muda, não só a cor. Na primeira vez que você entra na luz o leitor de tela ouve
+"Seu corpo faz sombra no feixe" (`avisarSeOCorpoFazSombra`). Na planta (**H**), com você na luz, o círculo tracejado é a
+penumbra e o trecho escurecido do feixe é o que o seu corpo deixa sem luz.
+
+A página [`verificacao/reflexo/08-sombras.html`](../../verificacao/reflexo/08-sombras.html)
 confere o zelador em cima do feixe com uma sombra encostando (uma vida a menos), a exposição, o dissolver, as vidas e a
 invulnerabilidade, o contorno parado e a ausência de rolagem em 390×750, 360×640 e 1280×800.
 
@@ -167,8 +177,12 @@ invulnerabilidade, o contorno parado e a ausência de rolagem em 390×750, 360×
 está invulnerável (`tempoDeJogo < invulneravelAte`), tira **uma** vida, liga a invulnerabilidade de 1,5 s e põe **aquela** sombra
 em `recua`. Uma sombra que acabou de tocar não toca de novo, e as outras também não, durante a invulnerabilidade: **um contato
 = uma vida**. Sem vidas, `fimDeJogo` é verdadeiro: `atualizar` não anda mais ninguém (só desenha), o contorno e o texto de "invulnerável" se
-apagam (`invulneravelAte` volta a 0), as outras sombras não tiram vida nenhuma no mesmo quadro, **E** e **Espaço** não giram
+apagam (`invulneravelAte` volta a 0), as outras sombras nem são atualizadas depois da que acabou o jogo (nenhum ponto, nenhum "Sombra desfeita"), **E** e **Espaço** não giram
 espelho nem refazem a luz (nenhum receptor rende pontos depois do fim) e o painel diz "Fim de jogo: R recomeça".
+
+**Os avisos para o leitor de tela** (`avisar`) entram numa fila, um por segundo. "Vida perdida" e "Fim de jogo" são **urgentes**:
+passam à frente dos recados comuns, nunca são descartados e, se o mesmo já espera, não se repetem; os comuns guardam só os 4 últimos.
+O **R** esquece a fila inteira (e os temporizadores da partida anterior): depois dele só se ouve "Sala reiniciada".
 
 **R** (ou o botão **Reiniciar**) faz o que fazia no passo 7: volta à sala congelada (`sala = salaInicial`), o zelador ao começo, as
 portas fechadas, a luz refeita, **e** tira todas as sombras. As **vidas e os pontos ficam**: reiniciar não é um jeito de se curar. Se o
@@ -195,11 +209,13 @@ próximo trabalho (GDD, seção 12); este passo só deixa o número à mão.
    porta e veja o outro lado ganhar e perder números.
 4. Em `melhorVizinha`, troque `descendo` por `!descendo`. Quem foge de quem? O que isso diz sobre o campo ser a única informação
    de que a sombra precisa?
-5. **Teste a regra do GDD:** fique em cima do feixe (o trecho que desce do espelho `(3, 5)`, em `(3,5; 6,5)`) e deixe uma sombra vir
-   pelo feixe, de baixo e depois de cima. Perde a vida nos dois casos? Agora ponha `PENUMBRA_DO_ZELADOR` em 0 e veja só o
-   corte do corpo: de que lado a sombra ainda chega a você? E se você recuar para `(3,5; 8,0)`: o que muda para a sombra que
-   vem do norte, e por quê? Por que um feixe que protegesse o zelador tiraria a tensão do jogo?
-   (Dica: leia `estaIluminada`.)
+5. **Teste a regra do GDD** (a luz não é abrigo: o corpo faz sombra, e à frente dele o feixe é uma arma). Fique em cima do trecho
+   do feixe que desce do espelho `(3, 5)`, em `(3,5; 6,5)`, e deixe uma sombra vir pelo feixe, **de baixo** (depois de você, no escuro)
+   e **de cima** (pelo trecho horizontal, antes de você). Perde a vida nos dois casos? Agora ponha `PENUMBRA_DO_ZELADOR` em 0 e
+   veja só o corte do corpo: de que lado a sombra ainda chega a você? E se você recuar para `(3,5; 8,0)`: a sombra que vem do
+   norte passa a dissolver, porque agora há mais de 1 casa de trecho aceso, antes de você, para ela atravessar. Por quê? É o
+   feixe como arma apontada, não como abrigo. Por que um feixe que protegesse o zelador tiraria a tensão do jogo?
+   (Dica: leia `estaIluminada` e `cortarOFeixeNoCorpo`.)
 6. Troque `SEGUNDOS_PARA_DISSOLVER` por 0,1 e depois por 2. Em qual deles o feixe ainda é uma arma *e* uma chave?
 7. Mude `SOMBRAS.max` para 4. Com a porta fechada, o campo alcança as sombras que nascem na fenda do leste?
    O que elas fazem? (Dica: leia `passosDaCasa`.)

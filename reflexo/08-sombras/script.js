@@ -28,6 +28,7 @@ const PROPORCAO_DA_VELOCIDADE = 0.7;     // a sombra persegue a 70% do zelador
 const VELOCIDADE_DA_RONDA = 1.2;         // casas por segundo
 const RAIO_DA_SOMBRA = 0.25;             // o contato é corpo com corpo: RAIO_DO_CORPO + RAIO_DA_SOMBRA
 const RAIO_DA_LUZ = 0.5;                 // a luz ocupa a casa inteira: meia casa de cada lado do feixe
+const LARGURA_DA_FAIXA = RAIO_DA_LUZ + RAIO_DA_SOMBRA;   // a faixa que queima: 0,75 do eixo. É também a faixa em que o corpo do zelador conta como "na luz"
 const PENUMBRA_DO_ZELADOR = 1;           // casas ao redor do zelador onde a luz não queima: o corpo faz sombra (seção 5)
 const PONTOS_POR_RECEPTOR = 100;
 const PONTOS_POR_SOMBRA = 50;
@@ -241,6 +242,9 @@ const ESPESSURA_DO_FEIXE = 0.1;      // em paredes, na altura dos olhos
 const PULSOS_POR_CASA = 2;           // faixas claras e escuras ao longo do feixe: a forma, não só a cor
 const VELOCIDADE_DOS_PULSOS = 2;     // casas por segundo; parada com prefers-reduced-motion
 const CORES_DO_FEIXE = [empacotar([187, 255, 255]), empacotar([60, 170, 190])];   // pulso claro e escuro
+// O trecho que o corpo do zelador deixa sem queimar: tracejado parado, mais fino e apagado (a forma, não só a cor).
+const COR_DO_FEIXE_APAGADO = empacotar([48, 92, 104]);
+const TRACOS_DO_FEIXE_APAGADO_POR_CASA = 4;
 const COR_DO_ALVO = empacotar(corEmNumeros(COR_SIMBOLO));   // moldura amarela do espelho ao alcance
 const OBSTACULOS_DO_FEIXE = CASAS_SOLIDAS + "/\\";   // o feixe para em tudo isso; a porta sempre conta
 
@@ -293,7 +297,7 @@ let raiosDaTela = [];
 let zBuffer = new Float64Array(0);
 let espelhoNaColuna = [];                 // coluna → o espelho que aparece nela (ou null)
 let uDoEspelho = new Float64Array(0);     // coluna → onde, ao longo do espelho, o raio bateu
-let profundidadeDoSprite = new Float64Array(0);   // coluna → profundidade do sprite que cobre a altura dos olhos (Infinity = nenhum)
+let profundidadeDoSprite = new Float32Array(0);   // pixel → profundidade do sprite mais perto que o cobre (Infinity = nenhum): o feixe passa por trás dele
 let uDoPlano = 0;                         // segundo resultado de distanciaAoPlano
 let spritesDaTela = [];                   // sprites na frente do olho, do mais longe ao mais perto
 
@@ -450,7 +454,8 @@ function desenharVisao() {
     espelhoNaColuna.forEach((espelho, coluna) => espelho !== null && desenharEspelhoNaColuna(espelho, coluna));
     profundidadeDoSprite.fill(Infinity);
     spritesDaTela.forEach(desenharSprite);
-    luz.segmentos.forEach(desenharFeixe);
+    const sombraDoCorpo = medirASombraDoCorpo();
+    luz.segmentos.forEach((segmento, indice) => desenharFeixe(segmento, sombraDoCorpo.apagados[indice], sombraDoCorpo.naLuz));
     pincelVisao.putImageData(imagem, 0, 0);
 }
 
@@ -506,7 +511,6 @@ function desenharSprite(sprite) {
     const lado = sprite.base - sprite.topo;
     const primeiraLinha = Math.max(0, Math.ceil(sprite.topo - 0.5));
     const fimDasLinhas = Math.min(alturaDaVisao, Math.ceil(sprite.base - 0.5));
-    const olhos = linhaDosOlhos();
 
     sprite.colunas.forEach(coluna => {
         const colunaDaArte = Math.min(TAMANHO_DA_TEXTURA - 1, Math.floor((coluna + 0.5 - sprite.esquerda) / lado * TAMANHO_DA_TEXTURA));
@@ -515,9 +519,7 @@ function desenharSprite(sprite) {
             const pixel = arte[linhaDaArte * TAMANHO_DA_TEXTURA + colunaDaArte];
             if (pixel !== TRANSPARENTE) {
                 pixels[linha * larguraDaVisao + coluna] = pixel;
-                if (linha === olhos) {
-                    profundidadeDoSprite[coluna] = sprite.profundidade;   // do mais longe ao mais perto: o último é o da frente
-                }
+                profundidadeDoSprite[linha * larguraDaVisao + coluna] = sprite.profundidade;   // do mais longe ao mais perto: o último é o da frente
             }
         }
     });
@@ -592,21 +594,31 @@ function desenharEspelhoNaColuna(espelho, coluna) {
 }
 
 // Uma faixa fina na altura dos olhos, em pulsos claros e escuros ao longo do comprimento. Só aparece onde está
-// mais perto que a parede, o espelho e o sprite dessa coluna (z-buffer); não entra no z-buffer, é luz.
-function desenharFeixe(segmento) {
+// mais perto que a parede, o espelho e o sprite dessa coluna (z-buffer) e de cada pixel (profundidadeDoSprite); não
+// entra no z-buffer, é luz. O trecho que o corpo do zelador deixa sem queimar (seção 10) é outro desenho: tracejado
+// parado, metade da espessura e sem pulso, para o jogador ver onde a arma funciona.
+function desenharFeixe(segmento, apagado, corpoNaLuz) {
     const fase = SEM_ANIMACAO ? 0 : instanteDoQuadro / 1000 * VELOCIDADE_DOS_PULSOS;
     const olhos = linhaDosOlhos();
 
     for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
         const distancia = distanciaAoPlano(segmento, raiosDaTela[coluna]);
-        if (distancia >= zBuffer[coluna] || distancia >= profundidadeDoSprite[coluna]) {
+        if (distancia >= zBuffer[coluna]) {
             continue;
         }
+        const noTrecho = uDoPlano * segmento.comprimento;
+        const apagadoAqui = feixeNaoQueimaEm(segmento, apagado, corpoNaLuz, uDoPlano);
+        if (apagadoAqui && Math.floor(noTrecho * TRACOS_DO_FEIXE_APAGADO_POR_CASA) % 2 === 1) {
+            continue;   // o vão entre dois traços
+        }
         const metade = Math.max(1, Math.round(ESPESSURA_DO_FEIXE * pixelsPorCasa(distancia) / 2));
-        const pulso = Math.floor((uDoPlano * segmento.comprimento - fase) * PULSOS_POR_CASA) & 1;
-        const cor = CORES_DO_FEIXE[pulso];
-        for (let linha = Math.max(0, olhos - metade); linha < Math.min(alturaDaVisao, olhos + metade); linha++) {
-            pixels[linha * larguraDaVisao + coluna] = cor;
+        const cor = apagadoAqui ? COR_DO_FEIXE_APAGADO : CORES_DO_FEIXE[Math.floor((noTrecho - fase) * PULSOS_POR_CASA) & 1];
+        const ultimaLinha = Math.min(alturaDaVisao, apagadoAqui ? olhos : olhos + metade);   // apagado: só a metade de cima
+        for (let linha = Math.max(0, olhos - metade); linha < ultimaLinha; linha++) {
+            const indiceDoPixel = linha * larguraDaVisao + coluna;
+            if (distancia < profundidadeDoSprite[indiceDoPixel]) {
+                pixels[indiceDoPixel] = cor;
+            }
         }
     }
 }
@@ -781,35 +793,69 @@ function montarLeitura() {
 // Avisos para o leitor de tela (aria-live): "Porta aberta", "Espelho girado". Dois avisos no mesmo instante fariam o
 // leitor ler só o último, e o mesmo texto de novo não muda nada para ele. Então os avisos entram numa FILA: um por
 // vez, com um intervalo entre eles, e o painel fica vazio no intervalo (assim um texto repetido é um aviso novo).
+// Os URGENTES ("Vida perdida", "Fim de jogo") furam a fila: passam à frente dos comuns, nunca são descartados e, se o mesmo
+// já espera, não se repete. Os comuns guardam só os últimos: E apertado sem parar não enche a fila de recados velhos.
 const MS_ENTRE_AVISOS = 1000;
-const MAXIMO_NA_FILA_DE_AVISOS = 4;   // E apertado sem parar não enche a fila de recados velhos
-const filaDeAvisos = [];
+const MAXIMO_NA_FILA_DE_AVISOS = 4;   // comuns à espera
+const URGENTE = true;
+const filaDeAvisos = [];              // { texto, urgente }: os urgentes primeiro
 let avisoEmLeitura = false;
+let geracaoDosAvisos = 0;             // sobe no R: os temporizadores do jogo anterior, ao vencer, não fazem mais nada
 
-function avisar(texto) {
+function avisar(texto, urgente = false) {
     if (aviso === null) {
         return;
     }
     if (avisoEmLeitura) {
-        filaDeAvisos.push(texto);
-        filaDeAvisos.splice(0, filaDeAvisos.length - MAXIMO_NA_FILA_DE_AVISOS);
+        enfileirarAviso(texto, urgente);
         return;
     }
     avisoEmLeitura = true;
     aviso.textContent = texto;
-    setTimeout(liberarOAviso, MS_ENTRE_AVISOS);
+    const geracao = geracaoDosAvisos;
+    setTimeout(() => liberarOAviso(geracao), MS_ENTRE_AVISOS);
 }
 
-function liberarOAviso() {
+function enfileirarAviso(texto, urgente) {
+    if (urgente) {
+        const jaEspera = filaDeAvisos.some(espera => espera.urgente && espera.texto === texto);
+        const primeiroComum = filaDeAvisos.findIndex(espera => !espera.urgente);
+        if (!jaEspera) {
+            filaDeAvisos.splice(primeiroComum === -1 ? filaDeAvisos.length : primeiroComum, 0, { texto, urgente });
+        }
+        return;
+    }
+    filaDeAvisos.push({ texto, urgente });
+    const comuns = filaDeAvisos.filter(espera => !espera.urgente);
+    comuns.slice(0, Math.max(0, comuns.length - MAXIMO_NA_FILA_DE_AVISOS)).forEach(velho => filaDeAvisos.splice(filaDeAvisos.indexOf(velho), 1));
+}
+
+function liberarOAviso(geracao) {
+    if (geracao !== geracaoDosAvisos) {
+        return;
+    }
     aviso.textContent = "";
     if (filaDeAvisos.length === 0) {
         avisoEmLeitura = false;
         return;
     }
     setTimeout(() => {   // o vazio precisa chegar ao leitor antes do próximo texto
+        if (geracao !== geracaoDosAvisos) {
+            return;
+        }
         avisoEmLeitura = false;
-        avisar(filaDeAvisos.shift());
+        avisar(filaDeAvisos.shift().texto);
     }, 50);
+}
+
+// Reiniciar a sala joga fora o que estava para ser lido: depois do R ninguém quer ouvir recados da partida anterior.
+function esquecerOsAvisos() {
+    geracaoDosAvisos++;
+    filaDeAvisos.length = 0;
+    avisoEmLeitura = false;
+    if (aviso !== null && aviso.textContent !== "") {
+        aviso.textContent = "";
+    }
 }
 
 // ---- 7. OBJETOS NO ESPAÇO DA CÂMERA ------------------------
@@ -962,6 +1008,7 @@ function reiniciarSala() {
     sala = salaInicial;
     portasAbertas.clear();
     versaoDasPortas++;
+    esquecerOsAvisos();
     sombras = [];
     proximoNascimento = tempoDeJogo + SOMBRAS.primeira;
     nascidasNaSala = 0;
@@ -1071,7 +1118,7 @@ function nascerSombra() {
     const { coluna, linha } = candidatas[Math.floor(Math.random() * candidatas.length)];
     nascidasNaSala++;
     sombras.push({ tipo: "sombra", x: coluna + 0.5, y: linha + 0.5, estado: "nasce", desde: tempoDeJogo, exposicao: 0, escala: 0.2,
-        alvoX: coluna + 0.5, alvoY: linha + 0.5, anterior: indiceDaCasa(coluna, linha), vindaDe: indiceDaCasa(coluna, linha) });
+        alvoX: coluna + 0.5, alvoY: linha + 0.5, anterior: indiceDaCasa(coluna, linha), casa: indiceDaCasa(coluna, linha), vindaDe: indiceDaCasa(coluna, linha) });
 }
 
 function atualizarSombras(tempo) {
@@ -1082,11 +1129,17 @@ function atualizarSombras(tempo) {
         nascerSombra();
         proximoNascimento = tempoDeJogo + SOMBRAS.intervalo;
     }
-    sombras.forEach(sombra => atualizarSombra(sombra, tempo));
+    for (const sombra of sombras) {
+        if (fimDeJogo) {
+            break;   // o jogo acabou neste quadro: as outras sombras não pontuam nem anunciam nada
+        }
+        atualizarSombra(sombra, tempo);
+    }
     sombras = sombras.filter(sombra => sombra.estado !== "dissolve" || tempoDeJogo - sombra.desde < SEGUNDOS_DE_DISSOLUCAO);
 }
 
 function atualizarSombra(sombra, tempo) {
+    tirarDaCasaSolida(sombra);   // antes de decidir: uma porta que fechou em cima dela não pode virar distância −1
     const noEstado = tempoDeJogo - sombra.desde;
     if (sombra.estado === "nasce") {
         sombra.escala = 0.2 + 0.8 * Math.min(1, noEstado / SEGUNDOS_DE_NASCIMENTO);
@@ -1106,6 +1159,7 @@ function atualizarSombra(sombra, tempo) {
     decidirEstado(sombra, noEstado);
     const velocidade = sombra.estado === "ronda" ? VELOCIDADE_DA_RONDA : PROPORCAO_DA_VELOCIDADE * VELOCIDADE_DE_ANDAR;
     andarComASombra(sombra, velocidade * tempo);
+    registrarACasa(sombra);
     verificarContato(sombra);
 }
 
@@ -1126,25 +1180,41 @@ function atualizarExposicao(sombra, tempo) {
 }
 
 /*
-  O CORPO FAZ SOMBRA (GDD, seção 11: ficar na luz nunca protege). A luz que queima não é o feixe todo: o feixe é
-  cortado onde bate no corpo do zelador, e o que vem depois dele, na mesma cadeia de espelhos, está no escuro. Mais:
-  a menos de PENUMBRA_DO_ZELADOR casas dele nada queima (enquanto ele está na luz). Assim uma sombra que chega pelo lado escuro do feixe, ou
-  que chega junto dele, toca. O feixe continua desenhado inteiro e acendendo receptores: só a ARMA respeita o corpo.
+  O CORPO FAZ SOMBRA (GDD, seção 11: a luz não é abrigo). A luz que queima não é o feixe todo: o feixe é cortado onde
+  bate no corpo do zelador, e o que vem depois dele, na mesma cadeia de espelhos, está no escuro. Mais: a menos de
+  PENUMBRA_DO_ZELADOR casas dele nada queima. Os dois valem enquanto o zelador está "na luz", a menos de LARGURA_DA_FAIXA
+  (0,75) de um trecho: a MESMA faixa em que uma sombra queima, então não há uma banda em que o corpo é queimado sem fazer
+  sombra. Antes do corpo e longe dele o feixe continua sendo a arma que o jogador aponta com os espelhos. O feixe
+  continua desenhado inteiro e acendendo receptores: só a ARMA respeita o corpo.
 */
 function estaIluminada(sombra) {
-    if (zeladorEstaNaLuz() && Math.hypot(sombra.x - jogador.x, sombra.y - jogador.y) < PENUMBRA_DO_ZELADOR) {
+    if (estaNaPenumbra(sombra.x, sombra.y, zeladorEstaNaLuz())) {
         return false;
     }
-    const raioDaLuz = RAIO_DA_LUZ + RAIO_DA_SOMBRA;
-    return cortarOFeixeNoCorpo().queimam.some(segmento => distanciaAoSegmento(sombra.x, sombra.y, segmento) < raioDaLuz);
+    return cortarOFeixeNoCorpo().queimam.some(segmento => distanciaAoSegmento(sombra.x, sombra.y, segmento) < LARGURA_DA_FAIXA);
 }
 
-// Na luz = a menos de RAIO_DA_LUZ de um trecho do feixe. Só aí a penumbra vale: longe do feixe o corpo não faz sombra nele.
+// A primeira vez que o zelador entra na luz: o trecho escuro que o corpo deixa na imagem precisa de uma explicação.
+let avisouQueOCorpoFazSombra = false;
+
+function avisarSeOCorpoFazSombra() {
+    if (!avisouQueOCorpoFazSombra && zeladorEstaNaLuz()) {
+        avisouQueOCorpoFazSombra = true;
+        avisar("Seu corpo faz sombra no feixe");
+    }
+}
+
+function estaNaPenumbra(x, y, zeladorNaLuz) {
+    return zeladorNaLuz && Math.hypot(x - jogador.x, y - jogador.y) < PENUMBRA_DO_ZELADOR;
+}
+
+// Na luz = a menos de LARGURA_DA_FAIXA de um trecho do feixe. Só aí o corpo faz sombra: longe do feixe ele não faz.
 function zeladorEstaNaLuz() {
-    return luz.segmentos.some(segmento => distanciaAoSegmento(jogador.x, jogador.y, segmento) < RAIO_DA_LUZ);
+    return luz.segmentos.some(segmento => distanciaAoSegmento(jogador.x, jogador.y, segmento) < LARGURA_DA_FAIXA);
 }
 
-// `queimam`: os trechos até o corpo; `apagados`: o que o corpo deixa no escuro (para a planta).
+// `queimam`: os trechos até o corpo; `apagados`: o que o corpo deixa no escuro (para a planta e para a imagem).
+// Cada apagado diz de que trecho é (`indice`) e a que distância do começo dele o escuro começa (`desde`).
 function cortarOFeixeNoCorpo() {
     const queimam = [];
     const apagados = [];
@@ -1156,8 +1226,8 @@ function cortarOFeixeNoCorpo() {
         }
         const corte = cortada ? null : ondeOCorpoCorta(segmento);
         if (cortada || corte !== null) {
-            const inicio = cortada ? { x: segmento.x0, y: segmento.y0 } : corte;
-            apagados.push({ x0: inicio.x, y0: inicio.y, x1: segmento.x1, y1: segmento.y1 });
+            const inicio = cortada ? { x: segmento.x0, y: segmento.y0, distancia: 0 } : corte;
+            apagados.push({ x0: inicio.x, y0: inicio.y, x1: segmento.x1, y1: segmento.y1, indice, desde: inicio.distancia });
         }
         if (!cortada) {
             queimam.push(corte === null ? segmento : { x0: segmento.x0, y0: segmento.y0, x1: corte.x, y1: corte.y });
@@ -1167,17 +1237,35 @@ function cortarOFeixeNoCorpo() {
     return { queimam, apagados };
 }
 
-// O ponto onde o corpo começa a fazer sombra no trecho: a frente do corpo, na direção do feixe. O feixe tem a largura da
-// luz (RAIO_DA_LUZ de cada lado); quem está dentro dela, mesmo fora do eixo, apaga o que vem atrás. Sem corpo na luz: null.
+// Por quadro, para a imagem: `apagados[indice do trecho]` e se o zelador está na luz (liga a penumbra).
+function medirASombraDoCorpo() {
+    const naLuz = zeladorEstaNaLuz();
+    const apagados = [];
+    if (naLuz) {
+        cortarOFeixeNoCorpo().apagados.forEach(apagado => { apagados[apagado.indice] = apagado; });
+    }
+    return { naLuz, apagados };
+}
+
+// O ponto do trecho, a `u` (0 a 1) do começo, queima? Não, se está depois do corte do corpo ou na penumbra dele.
+function feixeNaoQueimaEm(segmento, apagado, zeladorNaLuz, u) {
+    if (apagado !== undefined && u * segmento.comprimento >= apagado.desde) {
+        return true;
+    }
+    return estaNaPenumbra(segmento.x0 + (segmento.x1 - segmento.x0) * u, segmento.y0 + (segmento.y1 - segmento.y0) * u, zeladorNaLuz);
+}
+
+// O ponto onde o corpo começa a fazer sombra no trecho: a frente do corpo, na direção do feixe. O feixe tem a largura
+// da faixa (LARGURA_DA_FAIXA de cada lado); quem está dentro dela, mesmo fora do eixo, apaga o que vem atrás. Sem corpo na luz: null.
 function ondeOCorpoCorta(segmento) {
-    if (segmento.comprimento === 0 || distanciaAoSegmento(jogador.x, jogador.y, segmento) >= RAIO_DA_LUZ) {
+    if (segmento.comprimento === 0 || distanciaAoSegmento(jogador.x, jogador.y, segmento) >= LARGURA_DA_FAIXA) {
         return null;
     }
     const direcaoX = (segmento.x1 - segmento.x0) / segmento.comprimento;
     const direcaoY = (segmento.y1 - segmento.y0) / segmento.comprimento;
     const ateOCentro = (jogador.x - segmento.x0) * direcaoX + (jogador.y - segmento.y0) * direcaoY;
     const entrada = Math.min(segmento.comprimento, Math.max(0, ateOCentro - RAIO_DO_CORPO));
-    return { x: segmento.x0 + direcaoX * entrada, y: segmento.y0 + direcaoY * entrada };
+    return { x: segmento.x0 + direcaoX * entrada, y: segmento.y0 + direcaoY * entrada, distancia: entrada };
 }
 
 function distanciaAoSegmento(x, y, segmento) {
@@ -1203,7 +1291,6 @@ function decidirEstado(sombra, noEstado) {
 
 // A sombra anda de centro de casa em centro de casa; na casa do zelador, vai direto a ele.
 function andarComASombra(sombra, alcance) {
-    tirarDaCasaSolida(sombra);
     if (ehSolida(Math.floor(sombra.alvoX), Math.floor(sombra.alvoY))) {
         escolherAlvo(sombra);   // a porta fechou depois que o alvo foi escolhido
     }
@@ -1221,8 +1308,21 @@ function andarComASombra(sombra, alcance) {
     }
 }
 
-// Uma porta que fecha com a sombra dentro a empurra de volta para a casa de onde ela vinha (ou, se esta não serve, para
-// uma vizinha livre): nenhuma sombra fica dentro de uma casa sólida.
+// `casa` é onde a sombra está e `vindaDe` a casa de que ela SAIU para entrar nessa: a última casa diferente em que esteve.
+// É o lado a que ela volta se uma porta fechar com ela dentro.
+function registrarACasa(sombra) {
+    const casa = indiceDaCasa(Math.floor(sombra.x), Math.floor(sombra.y));
+    if (casa === sombra.casa) {
+        return;
+    }
+    if (sombra.casa !== undefined) {
+        sombra.vindaDe = sombra.casa;
+    }
+    sombra.casa = casa;
+}
+
+// Uma porta que fecha com a sombra dentro a empurra de volta para a casa de que ela veio (`vindaDe`) ou, se esta não é
+// vizinha livre, para a vizinha livre mais perto dela: nenhuma sombra fica dentro de uma casa sólida.
 function tirarDaCasaSolida(sombra) {
     const coluna = Math.floor(sombra.x);
     const linha = Math.floor(sombra.y);
@@ -1231,13 +1331,15 @@ function tirarDaCasaSolida(sombra) {
     }
     const livres = VIZINHAS.map(([passoX, passoY]) => ({ coluna: coluna + passoX, linha: linha + passoY }))
         .filter(vizinha => !ehSolida(vizinha.coluna, vizinha.linha));
-    const saida = livres.find(vizinha => indiceDaCasa(vizinha.coluna, vizinha.linha) === sombra.vindaDe) || livres[0];
+    const distanciaAteASombra = vizinha => Math.hypot(vizinha.coluna + 0.5 - sombra.x, vizinha.linha + 0.5 - sombra.y);
+    const maisPerto = livres.reduce((melhor, vizinha) => melhor === undefined || distanciaAteASombra(vizinha) < distanciaAteASombra(melhor) ? vizinha : melhor, undefined);
+    const saida = livres.find(vizinha => indiceDaCasa(vizinha.coluna, vizinha.linha) === sombra.vindaDe) || maisPerto;
     if (saida === undefined) {
         return;
     }
     sombra.x = sombra.alvoX = saida.coluna + 0.5;
     sombra.y = sombra.alvoY = saida.linha + 0.5;
-    sombra.anterior = indiceDaCasa(saida.coluna, saida.linha);
+    sombra.anterior = sombra.casa = indiceDaCasa(saida.coluna, saida.linha);
 }
 
 function escolherAlvo(sombra) {
@@ -1256,7 +1358,6 @@ function escolherAlvo(sombra) {
     }
     const seguindoOCampo = (sombra.estado === "persegue" || sombra.estado === "recua") && aqui >= 0;
     const escolhida = seguindoOCampo ? melhorVizinha(livres, sombra.estado === "persegue") : vizinhaAoAcaso(livres, sombra);
-    sombra.vindaDe = sombra.anterior;
     sombra.anterior = indiceDaCasa(coluna, linha);
     sombra.alvoX = escolhida.coluna + 0.5;
     sombra.alvoY = escolhida.linha + 0.5;
@@ -1288,7 +1389,7 @@ function verificarContato(sombra) {
     vidas--;
     invulneravelAte = tempoDeJogo + SEGUNDOS_DE_INVULNERABILIDADE;
     mudarDeEstado(sombra, "recua");
-    avisar(vidas > 0 ? "Vida perdida" : "Fim de jogo");
+    avisar(vidas > 0 ? "Vida perdida" : "Fim de jogo", URGENTE);
     fimDeJogo = vidas <= 0;
     if (fimDeJogo) {
         invulneravelAte = 0;   // fim de jogo não é invulnerável: sem contorno, sem "invulnerável"
@@ -1393,6 +1494,7 @@ function atualizar(tempo) {
         moverOZelador(tempo);
         atualizarPortas();
         atualizarCampo();
+        avisarSeOCorpoFazSombra();
         atualizarSombras(tempo);
     }
     atualizarRaios();
@@ -1605,7 +1707,7 @@ function ajustarVisao() {
     zBuffer = new Float64Array(larguraDaVisao);
     espelhoNaColuna = new Array(larguraDaVisao).fill(null);
     uDoEspelho = new Float64Array(larguraDaVisao);
-    profundidadeDoSprite = new Float64Array(larguraDaVisao);
+    profundidadeDoSprite = new Float32Array(larguraDaVisao * alturaDaVisao);
 
     // Cabe sem rolar: a imagem usa o que sobra depois das outras partes da página. A planta (H) tem o
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.
