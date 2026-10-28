@@ -23,14 +23,29 @@ Cada pasta roda sozinha: abra o `index.html` e leia o `GUIA.md` ao lado.
 
 ---
 
-## Por que este módulo vem depois do Dealer? Out!
+## Por que este módulo vem depois do Tetris
 
-O Dealer? Out! ensinou a viver com listas: objetos que nascem e morrem, catálogos de dados,
-partículas, temporizadores. Este módulo **usa** tudo isso sem explicar de novo — e gasta os
-passos no que um jogo de nave exige a mais:
+O Tetris deu o chão: tempo contínuo com acumuladores, dados em tabelas, a máquina de estados, o
+recorde no `localStorage`. Mas o mundo dele cabia numa **matriz**, e a peça que para deixa de
+ser objeto. Aqui o mundo é feito de objetos que **vivem e morrem em listas** (tiros, inimigos,
+balas, faíscas), cada um com posição própria. Os primeiros passos ensinam essa vida em lista, o
+catálogo de tipos e os temporizadores; o resto gasta os passos no que um jogo de nave exige a
+mais:
 
-| | Dealer? Out! | Shoot 'em up |
+| | Tetris | Shoot 'em up |
 |---|---|---|
+| O mundo | **uma matriz** e uma peça | **listas** de objetos que nascem e morrem |
+| Posição | `{coluna, linha}`, casa a casa | **centro** em pixels, contínua |
+| Colisão | "cabe?", perguntar antes de mover | **círculos**, muitos contra muitos |
+| Movimento | a peça cai um passo por intervalo | **trajetos como funções do tempo** |
+| Perigo | a pilha que sobe | **mira em você** (`atan2`, leques, anéis) |
+| De onde vêm os objetos | saco de sete | **roteiro** escrito à mão, com cursor |
+| Estados | do jogo | do jogo **e** de um personagem (o chefe) |
+
+E bastante trigonometria — sempre a mesma pouca: `Math.hypot`, `Math.atan2`, `Math.cos`,
+`Math.sin`. Quatro funções que, entendidas uma vez, servem para o resto da vida.
+
+---|---|---|
 | Posição | canto | **centro** |
 | Colisão | AABB, um contra muitos | **círculos, muitos contra muitos** |
 | Movimento | cair em linha reta | **trajetos como funções do tempo** |
@@ -83,4 +98,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../dealer-out`](../dealer-out/) · **Antes:** [`../dealer-out`](../dealer-out/) · **Depois:** [`../pacman`](../pacman/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../tetris`](../tetris/) · **Antes:** [`../tetris`](../tetris/) · **Depois:** [`../pacman`](../pacman/) · **Índice:** [`../README.md`](../README.md)

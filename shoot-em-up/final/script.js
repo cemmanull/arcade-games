@@ -445,7 +445,7 @@ function estaPressionada(...teclas) {
 /*
   TOQUE: ARRASTO RELATIVO.
 
-  O Dealer? Out! levava o personagem ATÉ o dedo. Numa nave isso não
+  Levar o personagem ATÉ o dedo é o jeito simples. Numa nave isso não
   serve: o dedo ficaria em cima dela, escondendo justamente a parte que
   pode ser atingida. Aqui o dedo pode estar em qualquer lugar da tela, e
   a nave anda o QUANTO o dedo andou — como um touchpad.
@@ -492,7 +492,7 @@ tela.addEventListener("pointermove", evento => {
 
 /*
   De pixels da janela para pixels do jogo: o canvas é exibido 3 vezes
-  maior (ou outra escala, em telas pequenas). A conversão do Dealer? Out!.
+  maior (ou outra escala, em telas pequenas). A conversão é a do GUIA (passo final, seção 12).
 */
 function pontoNoCanvas(evento) {
     const retangulo = tela.getBoundingClientRect();

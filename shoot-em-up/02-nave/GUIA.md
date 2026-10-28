@@ -24,9 +24,9 @@ if (estaPressionada("arrowup", "w"))    intencaoY -= 1;
 if (estaPressionada("arrowdown", "s"))  intencaoY += 1;
 ```
 
-A mesma ideia do Dealer? Out!: as teclas não movem a nave, elas dizem para onde ela **quer**
-ir. A diferença é que agora a intenção tem **dois** eixos. E ← com → se anulam em zero, que é
-o que os dedos esperam.
+As teclas não movem a nave, elas dizem para onde ela **quer** ir: uma *intenção*. Separar o
+querer do fazer deixa cada etapa cuidar de uma coisa: ler as teclas, normalizar, mover,
+limitar às bordas. Aqui a intenção tem **dois** eixos, e ← com → se anulam em zero, que é o que os dedos esperam.
 
 O teclado é o do Pong — o painel de interruptores. Aqui ele é ainda mais necessário: um jogo
 de nave com duas teclas presas ao mesmo tempo é a regra, não a exceção.
@@ -115,6 +115,10 @@ for (const tecla in teclasPressionadas) {
 
 `for...in` percorre as **chaves** de um objeto. Não importa quais teclas foram apertadas
 desde que a página abriu: todas ficam soltas.
+
+Isso roda no evento `blur` da janela, e é a cura da **tecla que nunca é solta**: com alt+tab
+no meio de um voo, o `keyup` acontece em outra janela, e a nave seguiria andando sozinha. É a
+mesma cura do Tetris (passo 8, `soltarTudo`).
 
 ---
 

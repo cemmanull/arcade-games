@@ -115,8 +115,8 @@ if (!balaQueAcertou && !inimigoQueBateu) return;
 perderVida();
 ```
 
-`find` para no primeiro. Uma bala e um inimigo acertando no mesmo quadro custam **uma** vida
-— a regra do Dealer? Out!.
+`find` para no primeiro. Uma bala e um inimigo acertando no mesmo quadro custam **uma** vida,
+e cinco coisas também: a regra é *uma colisão, uma vida*.
 
 ### Piscar é texto
 
@@ -125,7 +125,8 @@ if (invencivel > 0 && Math.floor(invencivel * 15) % 2 === 0) return;
 ```
 
 A nave some e volta 15 vezes por segundo. Ninguém precisa ler "invencível": piscar diz isso
-em qualquer idioma. É o truque da bola no saque do Pong.
+em qualquer idioma. É o truque da bola no saque do Pong. `invencivel` é o temporizador do
+passo 3 (um número que desce); o pisca não é guardado, é **calculado** dele.
 
 ---
 
