@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 4: a câmera</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 4: a câmera</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids. O canvas começa com 1×1: quem o dimensiona é o script. -->
+    <canvas id="jogo" width="1" height="1"></canvas>
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>
+        <button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>
+        <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+    <p id="aviso" role="status"></p>
+    <pre id="leitura" aria-live="off"></pre>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/04-camera/regras.js"></script>
+    <script src="../../dique/04-camera/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const errosNaCarga = errosDeConsole.slice();
+        const ALTURAS_ORIGINAIS = JSON.stringify(alturas);
+        const FACES = ["topo", "esquerda", "direita"];
+        const COR_DO_CURSOR = "#ffe14d";
+        const COR_DO_CONTORNO = "rgba(0, 0, 0, 0.5)";
+
+        // As medidas da câmera, escritas aqui à mão (sem ler as constantes do jogo): o mapa tem 10×10 casas de 36 px.
+        const MAPA_EM_PIXELS = { x: 10 * 36 + 24, y: 60 + 10 * 18 + 12 };       // 384 × 252
+        const VISTA_EM_PIXELS = { x: 384, y: 300 };
+        const NIVEIS_DE_ZOOM = [1, 1.5, 2];
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada e de estado
+        // ------------------------------------------------------------
+        function apertarTecla(tecla, modificadores, alvo) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, modificadores || {}));
+            (alvo || document).dispatchEvent(evento);
+            return evento;
+        }
+
+        function posicaoNaPagina(sx, sy) {
+            const caixa = tela.getBoundingClientRect();
+            return { clientX: caixa.left + sx * caixa.width / tela.width, clientY: caixa.top + sy * caixa.height / tela.height };
+        }
+
+        function criarEventoDePonteiro(tipo, id, sx, sy) {
+            return new PointerEvent(tipo, Object.assign({ pointerId: id, bubbles: true }, posicaoNaPagina(sx, sy)));
+        }
+
+        function descer(id, sx, sy) { tela.dispatchEvent(criarEventoDePonteiro("pointerdown", id, sx, sy)); }
+        function mover(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointermove", id, sx, sy)); }
+        function soltar(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointerup", id, sx, sy)); }
+        function cancelar(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointercancel", id, sx, sy)); }
+
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            const rotacaoOriginal = rotacao;
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(rotacaoOriginal);
+            }
+        }
+
+        function sortearTerreno() {
+            alturas.forEach(function (linha) {
+                for (let x = 0; x < linha.length; x++) linha[x] = Math.floor(Math.random() * 5);
+            });
+        }
+
+        function restaurarTerreno() {
+            const original = JSON.parse(ALTURAS_ORIGINAIS);
+            alturas.forEach(function (linha, y) {
+                for (let x = 0; x < linha.length; x++) linha[x] = original[y][x];
+            });
+            irParaOGiro(0);
+        }
+
+        function definirCamera(zoom, desvioX, desvioY) {
+            camera.zoom = zoom;
+            camera.desvioX = desvioX;
+            camera.desvioY = desvioY;
+            limitarCamera();
+        }
+
+        function reiniciar() {
+            restaurarTerreno();
+            definirCamera(1, 0, 0);
+            pinos.clear();
+            marcada = false;
+            dedo = null;
+            ponteiro = null;
+            cursor = { x: 4, y: 4 };
+            if (depuracaoLigada) apertarTecla("h");
+            avisar("");
+        }
+
+        function nomeDaCasa(casa) {
+            return casa.x + "," + casa.y;
+        }
+
+        function nomeDoAcerto(acerto) {
+            return acerto ? acerto.x + "," + acerto.y + " " + acerto.face : "nada";
+        }
+
+        // O que a câmera deve fazer num eixo, pela minha conta: mapa menor que a janela fica no centro; maior, rola de `vista − mapa·zoom` até 0.
+        function limitesDoEixo(mapa, vista, zoom) {
+            const sobra = vista - mapa * zoom;
+            return sobra >= 0 ? { centrado: true, fixo: sobra / 2, minimo: sobra / 2, maximo: sobra / 2 } : { centrado: false, fixo: null, minimo: sobra, maximo: 0 };
+        }
+
+        function desvioPermitido(desvio, limites) {
+            return limites.centrado ? limites.fixo : Math.min(limites.maximo, Math.max(limites.minimo, desvio));
+        }
+
+        function limitesAtuais(zoom) {
+            return { x: limitesDoEixo(MAPA_EM_PIXELS.x, VISTA_EM_PIXELS.x, zoom), y: limitesDoEixo(MAPA_EM_PIXELS.y, VISTA_EM_PIXELS.y, zoom) };
+        }
+
+        function desvioSorteado(limites) {
+            return limites.centrado ? limites.fixo : limites.minimo + Math.random() * (limites.maximo - limites.minimo);
+        }
+
+        function paraAJanela(p, zoom, desvioX, desvioY) {
+            return { x: p.x * zoom + desvioX, y: p.y * zoom + desvioY };
+        }
+
+        function dentroDaJanela(q, margem) {
+            return q.x >= margem && q.y >= margem && q.x < VISTA_EM_PIXELS.x - margem && q.y < VISTA_EM_PIXELS.y - margem;
+        }
+
+        // ------------------------------------------------------------
+        // Minha força bruta (sem as funções de projeção do jogo): sx = ox + 18 (u − v), sy = oy + 9 (u + v) − 12 z, no pixel do MAPA.
+        // ------------------------------------------------------------
+        function girarPeloMeuCaminho(x, y, giros) {
+            let ponto = [x, y];
+            for (let i = 0; i < giros; i++) ponto = [TAMANHO - ponto[1], ponto[0]];
+            return ponto;
+        }
+
+        function projetarMinha(u, v, z) {
+            return { x: 192 + 18 * (u - v), y: 60 + 9 * (u + v) - 12 * z };
+        }
+
+        function pontoNoPoligonoConvexo(poligono, ponto) {
+            let positivo = false, negativo = false;
+            for (let i = 0; i < poligono.length; i++) {
+                const canto = poligono[i], proximo = poligono[(i + 1) % poligono.length];
+                const lado = (proximo.x - canto.x) * (ponto.y - canto.y) - (proximo.y - canto.y) * (ponto.x - canto.x);
+                if (lado > 1e-9) positivo = true;
+                if (lado < -1e-9) negativo = true;
+            }
+            return !(positivo && negativo);
+        }
+
+        function construirCenario() {
+            const casas = [];
+            alturas.forEach(function (linha, y) {
+                linha.forEach(function (altura, x) {
+                    const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, rotacao);
+                    const nivel = Math.max(altura, 1);
+                    const canto = function (du, dv, z) { return projetarMinha(centro[0] + du, centro[1] + dv, z); };
+                    const topoCima = canto(-0.5, -0.5, nivel), topoDireita = canto(0.5, -0.5, nivel);
+                    const topoBaixo = canto(0.5, 0.5, nivel), topoEsquerda = canto(-0.5, 0.5, nivel);
+                    const baseDireita = canto(0.5, -0.5, 0), baseBaixo = canto(0.5, 0.5, 0), baseEsquerda = canto(-0.5, 0.5, 0);
+                    casas.push({
+                        x: x, y: y, proximidade: centro[0] + centro[1], topoDoCentro: projetarMinha(centro[0], centro[1], nivel),
+                        faces: {
+                            topo: [topoCima, topoDireita, topoBaixo, topoEsquerda],
+                            esquerda: [topoEsquerda, topoBaixo, baseBaixo, baseEsquerda],
+                            direita: [topoBaixo, topoDireita, baseDireita, baseBaixo],
+                        },
+                        minX: topoEsquerda.x, maxX: topoDireita.x, minY: topoCima.y, maxY: baseBaixo.y,
+                    });
+                });
+            });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            return casas;
+        }
+
+        function acharPelaMinhaForcaBruta(cenario, sx, sy) {
+            const ponto = { x: sx, y: sy };
+            for (let i = 0; i < cenario.length; i++) {
+                const casa = cenario[i];
+                if (sx < casa.minX || sx > casa.maxX || sy < casa.minY || sy > casa.maxY) continue;
+                for (let f = 0; f < 3; f++) {
+                    if (pontoNoPoligonoConvexo(casa.faces[FACES[f]], ponto)) return { x: casa.x, y: casa.y, face: FACES[f] };
+                }
+            }
+            return null;
+        }
+
+        function escondedoresPelaMinhaConta(cenario, x, y) {
+            const dela = cenario.find(function (casa) { return casa.x === x && casa.y === y; });
+            return cenario.filter(function (casa) {
+                return casa.proximidade > dela.proximidade + 1e-9 && FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], dela.topoDoCentro); });
+            }).map(nomeDaCasa);
+        }
+
+        function casasComObjeto(simbolo) {
+            const casas = [];
+            OBJETOS_EM_TEXTO.forEach(function (linha, y) { linha.split("").forEach(function (objeto, x) { if (objeto === simbolo) casas.push({ x: x, y: y }); }); });
+            return casas;
+        }
+
+        // O ponto do toque: o centro do topo deslocado 0,31 × 0,17 px. No centro exato passam arestas de casas vizinhas (empate legítimo entre duas faces).
+        function alvoDoToque(casa) {
+            return { x: casa.topoDoCentro.x + 0.31, y: casa.topoDoCentro.y + 0.17 };
+        }
+
+        // Um toque que acerta de verdade: o centro do topo de uma casa à vista (minha conta), dentro da janela atual; o mais perto do meio da janela.
+        function acharToqueNaJanela() {
+            const cenario = construirCenario();
+            let melhor = null, menorDistancia = Infinity;
+            cenario.forEach(function (casa) {
+                const alvo = alvoDoToque(casa), acerto = acharPelaMinhaForcaBruta(cenario, alvo.x, alvo.y);
+                if (!acerto || acerto.x !== casa.x || acerto.y !== casa.y || acerto.face !== "topo") return;
+                const q = paraAJanela(alvo, camera.zoom, camera.desvioX, camera.desvioY);
+                if (!dentroDaJanela(q, 16)) return;
+                const distancia = Math.hypot(q.x - 192, q.y - 150);
+                if (distancia < menorDistancia) { menorDistancia = distancia; melhor = { q: q, casa: { x: casa.x, y: casa.y } }; }
+            });
+            return melhor;
+        }
+
+        // ------------------------------------------------------------
+        // O gravador do quadro (traços com espessura, cor e tracejado; preenchimentos)
+        // ------------------------------------------------------------
+        function gravarQuadros(quantidade) {
+            const registro = [];
+            let caminho = [];
+            let dentroDe = null;
+            const prototipo = CanvasRenderingContext2D.prototype;
+            const caixaVerdadeira = desenharCaixa, aguaVerdadeira = desenharAgua;
+            pincel.beginPath = function () { caminho = []; prototipo.beginPath.call(pincel); };
+            pincel.moveTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.moveTo.call(pincel, x, y); };
+            pincel.lineTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.lineTo.call(pincel, x, y); };
+            pincel.stroke = function () {
+                registro.push({ tipo: "traco", pontos: caminho.slice(), largura: pincel.lineWidth, cor: pincel.strokeStyle, tracejado: pincel.getLineDash().length > 0, dentroDe: dentroDe });
+                prototipo.stroke.call(pincel);
+            };
+            desenharCaixa = function (x, y, de, ate, estilo) {
+                dentroDe = "caixa";
+                try { return caixaVerdadeira(x, y, de, ate, estilo); } finally { dentroDe = null; }
+            };
+            desenharAgua = function (casa) {
+                dentroDe = "agua";
+                try { return aguaVerdadeira(casa); } finally { dentroDe = null; }
+            };
+            try {
+                for (let i = 0; i < quantidade; i++) if (!avancarQuadro(16)) throw new Error("o laço do jogo parou de pedir quadros");
+            } finally {
+                desenharCaixa = caixaVerdadeira;
+                desenharAgua = aguaVerdadeira;
+                ["beginPath", "moveTo", "lineTo", "stroke"].forEach(function (nome) { delete pincel[nome]; });
+            }
+            return registro;
+        }
+
+        function lerPixel(x, y) {
+            const dados = pincel.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+            return { r: dados[0], g: dados[1], b: dados[2] };
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("a janela e o mapa: canvas dimensionado pelo script, câmera começa centrada", function () {
+            conferirIgual("a janela tem 384 px de largura", tela.width, 384);
+            conferirIgual("e 300 px de altura", tela.height, 300);
+            conferirIgual("o mapa mede 384 px de largura (ilha + margens)", LARGURA_DO_MAPA, MAPA_EM_PIXELS.x);
+            conferirIgual("e 252 px de altura (bloco mais alto + ilha + margem)", ALTURA_DO_MAPA, MAPA_EM_PIXELS.y);
+            conferirIgual("os zooms são Longe 1, meio 1,5 e Perto 2", JSON.stringify(ZOOMS), JSON.stringify(NIVEIS_DE_ZOOM));
+            conferirIgual("a câmera começa com zoom 1", camera.zoom, 1);
+            conferirIgual("e centrada: x = 0 (o mapa enche a largura)", camera.desvioX, 0);
+            conferirIgual("e y = 24 ((300 − 252) / 2)", camera.desvioY, 24);
+            conferirIgual("o mapa de verdade é válido", MAPA_VALIDO, true);
+            conferirIgual("o laço começou", avancarQuadro(16), true);
+        });
+
+        testar("câmera: ida e volta paraOMapa(paraATela(p)) = p e paraATela(paraOMapa(q)) = q, e a fórmula zoom · p + desvio", function () {
+            semearSorteio(101);
+            NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                const limites = limitesAtuais(zoom);
+                let piorIda = 0, piorVolta = 0, piorFormula = 0;
+                for (let i = 0; i < 1000; i++) {
+                    definirCamera(zoom, desvioSorteado(limites.x), desvioSorteado(limites.y));
+                    const p = { x: Math.random() * 400 - 8, y: Math.random() * 300 - 8 };
+                    const q = paraATela(p), esperado = paraAJanela(p, zoom, camera.desvioX, camera.desvioY);
+                    const devolta = paraOMapa(q), ida = paraATela(paraOMapa(p));
+                    piorIda = Math.max(piorIda, Math.abs(devolta.x - p.x), Math.abs(devolta.y - p.y));
+                    piorVolta = Math.max(piorVolta, Math.abs(ida.x - p.x), Math.abs(ida.y - p.y));
+                    piorFormula = Math.max(piorFormula, Math.abs(q.x - esperado.x), Math.abs(q.y - esperado.y));
+                }
+                conferir("zoom " + zoom + ": mapa → janela → mapa, erro " + piorIda.toExponential(2), piorIda < TOLERANCIA);
+                conferir("zoom " + zoom + ": janela → mapa → janela, erro " + piorVolta.toExponential(2), piorVolta < TOLERANCIA);
+                conferir("zoom " + zoom + ": paraATela = zoom · p + desvio, erro " + piorFormula.toExponential(2), piorFormula < TOLERANCIA);
+            });
+            definirCamera(1, 0, 0);
+        });
+
+        testar("limitarCamera: o mapa nunca sai da janela; se é menor, fica no centro; se é maior, rola até a borda e para", function () {
+            NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                const limites = limitesAtuais(zoom);
+                const nome = "zoom " + zoom + ": ";
+                [["x", "desvioX", limites.x], ["y", "desvioY", limites.y]].forEach(function (eixo) {
+                    const limite = eixo[2];
+                    definirCamera(zoom, 0, 0);
+                    rolar(-1e6, -1e6);
+                    conferirIgual(nome + "rolar muito para o fim, eixo " + eixo[0] + (limite.centrado ? " (centrado)" : " (rola)"), camera[eixo[1]], limite.centrado ? limite.fixo : limite.minimo);
+                    rolar(1e6, 1e6);
+                    conferirIgual(nome + "rolar muito para o começo, eixo " + eixo[0], camera[eixo[1]], limite.centrado ? limite.fixo : 0);
+                    camera.desvioX = -1e9; camera.desvioY = 1e9;
+                    limitarCamera();
+                    conferirIgual(nome + "limitarCamera(valor absurdo) volta ao permitido, eixo " + eixo[0], camera[eixo[1]], desvioPermitido(eixo[0] === "x" ? -1e9 : 1e9, limite));
+                });
+                // Percurso aleatório: as bordas do mapa nunca entram na janela.
+                semearSorteio(7 + zoom * 10);
+                let violacoes = 0;
+                definirCamera(zoom, 0, 0);
+                for (let i = 0; i < 400; i++) {
+                    rolar((Math.random() - 0.5) * 160, (Math.random() - 0.5) * 160);
+                    ["x", "y"].forEach(function (eixo) {
+                        const desvio = camera[eixo === "x" ? "desvioX" : "desvioY"], mapa = MAPA_EM_PIXELS[eixo] * zoom, vista = VISTA_EM_PIXELS[eixo];
+                        if (mapa >= vista) { if (desvio > 1e-9 || desvio + mapa < vista - 1e-9) violacoes++; }
+                        else if (Math.abs(desvio - (vista - mapa) / 2) > 1e-9) violacoes++;
+                    });
+                }
+                conferirIgual(nome + "400 rolagens aleatórias: nenhuma deixa um vazio na janela, e o mapa menor fica centrado", violacoes, 0);
+            });
+            definirCamera(2, -100, -100);
+            rolar(-7, 5);
+            conferirIgual("rolar(-7, 5) soma ao desvio (x)", camera.desvioX, -107);
+            conferirIgual("rolar(-7, 5) soma ao desvio (y)", camera.desvioY, -95);
+            definirCamera(1, 0, 0);
+            rolar(30, -30);
+            conferirIgual("com zoom 1 o mapa inteiro cabe: rolar não desloca (x)", camera.desvioX, 0);
+            conferirIgual("e (y) continua no centro, 24", camera.desvioY, 24);
+        });
+
+        testar("ZOOM mantém o ponto sob o foco no lugar (conta estrita: prevê o desvio, não confia no resultado)", function () {
+            let mantidos = 0, comLimite = 0, aproximacoes = 0, afastamentos = 0, erros = [];
+            const focos = [];
+            for (let fy = 20; fy <= 280; fy += 65) for (let fx = 20; fx <= 364; fx += 86) focos.push({ x: fx, y: fy });
+            focos.push({ x: 192, y: 150 }, { x: 0, y: 0 }, { x: 383, y: 299 }, { x: 5, y: 290 });
+            semearSorteio(2026);
+            NIVEIS_DE_ZOOM.forEach(function (zoomInicial, indiceInicial) {
+                [1, -1].forEach(function (passo) {
+                    focos.forEach(function (foco) {
+                        for (let tentativa = 0; tentativa < 6; tentativa++) {
+                            const limitesAntes = limitesAtuais(zoomInicial);
+                            definirCamera(zoomInicial, tentativa === 0 ? limitesAntes.x.minimo : tentativa === 1 ? limitesAntes.x.maximo : desvioSorteado(limitesAntes.x), tentativa === 2 ? limitesAntes.y.minimo : desvioSorteado(limitesAntes.y));
+                            const desvioXAntes = camera.desvioX, desvioYAntes = camera.desvioY;
+                            const sobOFoco = { x: (foco.x - desvioXAntes) / zoomInicial, y: (foco.y - desvioYAntes) / zoomInicial };
+                            const indiceFinal = Math.max(0, Math.min(NIVEIS_DE_ZOOM.length - 1, indiceInicial + passo));
+                            const zoomFinal = NIVEIS_DE_ZOOM[indiceFinal];
+                            const limites = limitesAtuais(zoomFinal);
+                            const semLimiteX = foco.x - sobOFoco.x * zoomFinal, semLimiteY = foco.y - sobOFoco.y * zoomFinal;
+                            aproximar(passo, { x: foco.x, y: foco.y });
+                            const rotulo = "zoom " + zoomInicial + " passo " + passo + " foco (" + foco.x + "," + foco.y + ") desvio (" + desvioXAntes.toFixed(1) + "," + desvioYAntes.toFixed(1) + ")";
+                            if (camera.zoom !== zoomFinal) { erros.push(rotulo + ": zoom " + camera.zoom + ", esperado " + zoomFinal); continue; }
+                            const esperadoX = desvioPermitido(semLimiteX, limites.x), esperadoY = desvioPermitido(semLimiteY, limites.y);
+                            if (Math.abs(camera.desvioX - esperadoX) > 1e-9 || Math.abs(camera.desvioY - esperadoY) > 1e-9) {
+                                erros.push(rotulo + ": desvio (" + camera.desvioX + "," + camera.desvioY + "), previsto (" + esperadoX + "," + esperadoY + ")");
+                                continue;
+                            }
+                            if (zoomFinal === zoomInicial) continue;
+                            const sob = { x: (foco.x - camera.desvioX) / camera.zoom, y: (foco.y - camera.desvioY) / camera.zoom };
+                            const eixoXLivre = !limites.x.centrado && Math.abs(semLimiteX - esperadoX) < 1e-9, eixoYLivre = !limites.y.centrado && Math.abs(semLimiteY - esperadoY) < 1e-9;
+                            if (eixoXLivre && Math.abs(sob.x - sobOFoco.x) > 1e-9) erros.push(rotulo + ": o ponto sob o foco andou em x (" + sob.x + " em vez de " + sobOFoco.x + ")");
+                            if (eixoYLivre && Math.abs(sob.y - sobOFoco.y) > 1e-9) erros.push(rotulo + ": o ponto sob o foco andou em y (" + sob.y + " em vez de " + sobOFoco.y + ")");
+                            if (eixoXLivre) { mantidos++; if (passo > 0) aproximacoes++; else afastamentos++; }
+                            if (eixoYLivre) mantidos++;
+                            if (!eixoXLivre || !eixoYLivre) comLimite++;
+                        }
+                    });
+                });
+            });
+            conferir("nenhuma divergência entre o desvio previsto e o do jogo (e o ponto sob o foco não andou nos eixos livres)", erros.length === 0, erros.slice(0, 3).join(" | "));
+            conferir("a conta não é vazia: " + mantidos + " eixos conferidos com o foco fixo (" + aproximacoes + " aproximando, " + afastamentos + " afastando); " + comLimite + " casos com limite", mantidos > 300 && aproximacoes > 40 && afastamentos > 40);
+            definirCamera(1, 0, 0);
+        });
+
+        testar("ZOOM: nos extremos não muda nada; dois passos andam 1 → 1,5 → 2 → 1,5 → 1; botões Perto e Longe iguais", function () {
+            definirCamera(2, -150, -90);
+            const antes = JSON.stringify(camera);
+            aproximar(1, { x: 100, y: 100 });
+            conferirIgual("aproximar além do Perto não muda a câmera", JSON.stringify(camera), antes);
+            definirCamera(1, 0, 0);
+            const inicio = JSON.stringify(camera);
+            aproximar(-1, { x: 100, y: 100 });
+            conferirIgual("afastar além do Longe não muda a câmera", JSON.stringify(camera), inicio);
+
+            const zooms = [];
+            [1, 1, -1, -1].forEach(function (passo) { aproximar(passo, { x: 192, y: 150 }); zooms.push(camera.zoom); });
+            conferirIgual("aproximar, aproximar, afastar, afastar", zooms.join(","), "1.5,2,1.5,1");
+            conferirIgual("voltar ao Longe devolve a câmera ao centro (zoom 1 não rola)", JSON.stringify(camera), inicio);
+
+            document.querySelector('[data-acao="aproximar"]').click();
+            conferirIgual("o botão Perto aproxima um nível", camera.zoom, 1.5);
+            document.querySelector('[data-acao="aproximar"]').click();
+            conferirIgual("e outro, até 2", camera.zoom, 2);
+            document.querySelector('[data-acao="aproximar"]').click();
+            conferirIgual("e não passa de 2", camera.zoom, 2);
+            document.querySelector('[data-acao="afastar"]').click();
+            document.querySelector('[data-acao="afastar"]').click();
+            document.querySelector('[data-acao="afastar"]').click();
+            conferirIgual("o botão Longe afasta até 1 e para", camera.zoom, 1);
+            definirCamera(1, 0, 0);
+        });
+
+        testar("o mesmo ponto do mundo dá a mesma casa e face em qualquer câmera: 5 terrenos × 4 giros × 3 zooms × rolagens aleatórias", function () {
+            semearSorteio(555);
+            let comparados = 0, divergencias = 0, cruzados = 0, divergenciasCruzadas = 0, nada = 0;
+            const porFace = { topo: 0, esquerda: 0, direita: 0 };
+            const exemplos = [];
+            for (let terreno = 0; terreno < 5; terreno++) {
+                if (terreno > 0) sortearTerreno();
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    const cenario = construirCenario();
+                    const pontosDoMundo = [];
+                    for (let i = 0; i < 250; i++) pontosDoMundo.push({ x: Math.random() * MAPA_EM_PIXELS.x, y: Math.random() * MAPA_EM_PIXELS.y });
+                    const resultadoPorPonto = pontosDoMundo.map(function () { return null; });
+                    NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                        const limites = limitesAtuais(zoom);
+                        for (let rolagem = 0; rolagem < 3; rolagem++) {
+                            definirCamera(zoom, rolagem === 0 ? limites.x.minimo : desvioSorteado(limites.x), rolagem === 0 ? limites.y.minimo : desvioSorteado(limites.y));
+                            // (a) o ponto do mundo → o pixel da janela → o toque
+                            pontosDoMundo.forEach(function (p, i) {
+                                const q = paraAJanela(p, camera.zoom, camera.desvioX, camera.desvioY);
+                                if (!dentroDaJanela(q, 0)) return;
+                                const obtido = casaSobOPixel(q), referencia = acharPelaMinhaForcaBruta(cenario, p.x, p.y);
+                                comparados++;
+                                if (!referencia) nada++; else porFace[referencia.face]++;
+                                if (nomeDoAcerto(obtido) !== nomeDoAcerto(referencia)) {
+                                    divergencias++;
+                                    if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° zoom " + zoom + " p (" + p.x.toFixed(2) + "," + p.y.toFixed(2) + "): jogo " + nomeDoAcerto(obtido) + ", bruta " + nomeDoAcerto(referencia));
+                                }
+                                if (resultadoPorPonto[i] === null) resultadoPorPonto[i] = nomeDoAcerto(obtido);
+                                else { cruzados++; if (resultadoPorPonto[i] !== nomeDoAcerto(obtido)) divergenciasCruzadas++; }
+                            });
+                            // (b) o pixel da janela → o ponto do mundo (pela minha conta) → a bruta
+                            for (let i = 0; i < 80; i++) {
+                                const q = { x: Math.random() * 384, y: Math.random() * 300 };
+                                const p = { x: (q.x - camera.desvioX) / camera.zoom, y: (q.y - camera.desvioY) / camera.zoom };
+                                comparados++;
+                                if (nomeDoAcerto(casaSobOPixel(q)) !== nomeDoAcerto(acharPelaMinhaForcaBruta(cenario, p.x, p.y))) {
+                                    divergencias++;
+                                    if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° zoom " + zoom + " q (" + q.x.toFixed(2) + "," + q.y.toFixed(2) + ")");
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            restaurarTerreno();
+            definirCamera(1, 0, 0);
+            conferir(comparados + " toques (casa e face, ou nada) = a força bruta no ponto do mundo", divergencias === 0 && comparados > 20000, divergencias + " divergências; " + exemplos.join(" | ") + " (comparados = " + comparados + ")");
+            conferir(cruzados + " pares do MESMO ponto do mundo em câmeras diferentes deram o mesmo resultado", divergenciasCruzadas === 0 && cruzados > 10000, divergenciasCruzadas + " divergências");
+            conferir("a amostra pega as três faces e o vazio: topo " + porFace.topo + ", esquerda " + porFace.esquerda + ", direita " + porFace.direita + ", nada " + nada, porFace.topo > 500 && porFace.esquerda > 500 && porFace.direita > 500 && nada > 300);
+        });
+
+        testar("o canvas de verdade segue a câmera: a cor sob o centro do pico (4, 4) está onde a câmera diz, em cada zoom", function () {
+            reiniciar();
+            NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                const limites = limitesAtuais(zoom);
+                definirCamera(zoom, limites.x.centrado ? limites.x.fixo : limites.x.minimo / 2, limites.y.centrado ? limites.y.fixo : limites.y.minimo / 2);
+                avancarQuadro(16);
+                const pico = paraAJanela(projetarMinha(4.5 + 0, 4.5 + 0, 4), camera.zoom, camera.desvioX, camera.desvioY);
+                const pixel = lerPixel(pico.x, pico.y + 3);
+                conferir("zoom " + zoom + ": o centro do topo de altura 4 é cinza-claro em " + Math.round(pico.x) + "," + Math.round(pico.y), pixel.r > 190 && pixel.g > 190 && pixel.b > 190, JSON.stringify(pixel));
+                const foraDoMapa = lerPixel(2, 2);
+                conferir("zoom " + zoom + ": o canto da janela é fundo escuro ou mar, nunca o topo cinza", !(foraDoMapa.r > 190 && foraDoMapa.g > 190 && foraDoMapa.b > 190));
+            });
+            reiniciar();
+        });
+
+        testar("W A S D rolam a janela (o mapa anda ao contrário), maiúsculas valem, e param nos limites", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            conferir("PASSO_DA_ROLAGEM é um passo positivo de verdade (" + PASSO_DA_ROLAGEM + " px)", PASSO_DA_ROLAGEM >= 8 && PASSO_DA_ROLAGEM <= 96);
+            const passo = PASSO_DA_ROLAGEM;
+            apertarTecla("w");
+            conferirIgual("W: a janela sobe, o mapa desce (desvio y aumenta um passo)", camera.desvioY, -100 + passo);
+            conferirIgual("e o x não mexe", camera.desvioX, -100);
+            apertarTecla("s"); apertarTecla("s");
+            conferirIgual("S, S: dois passos para baixo", camera.desvioY, -100 - passo);
+            apertarTecla("a");
+            conferirIgual("A: a janela vai para a esquerda, o mapa para a direita (desvio x aumenta)", camera.desvioX, -100 + passo);
+            apertarTecla("d"); apertarTecla("d");
+            conferirIgual("D, D: dois passos para a direita", camera.desvioX, -100 - passo);
+            apertarTecla("W");
+            conferirIgual("W maiúsculo também rola", camera.desvioY, -100);
+            apertarTecla("D");
+            conferirIgual("D maiúsculo também rola", camera.desvioX, -100 - 2 * passo);
+
+            for (let i = 0; i < 40; i++) { apertarTecla("w"); apertarTecla("a"); }
+            conferirIgual("40 × W: para no começo do mapa (y = 0)", camera.desvioY, 0);
+            conferirIgual("40 × A: para no começo do mapa (x = 0)", camera.desvioX, 0);
+            for (let i = 0; i < 40; i++) { apertarTecla("s"); apertarTecla("d"); }
+            conferirIgual("40 × S: para no fim (y = 300 − 504 = −204)", camera.desvioY, -204);
+            conferirIgual("40 × D: para no fim (x = 384 − 768 = −384)", camera.desvioX, -384);
+
+            definirCamera(1, 0, 0);
+            ["w", "a", "s", "d"].forEach(function (tecla) { apertarTecla(tecla); });
+            conferirIgual("com zoom 1 o mapa cabe: WASD não mexem (x)", camera.desvioX, 0);
+            conferirIgual("e (y) fica no centro", camera.desvioY, 24);
+
+            definirCamera(2, -100, -100);
+            apertarTecla("w", { ctrlKey: true }); apertarTecla("a", { metaKey: true }); apertarTecla("s", { altKey: true });
+            conferirIgual("Ctrl/Cmd/Alt + tecla são ignorados (x)", camera.desvioX, -100);
+            conferirIgual("Ctrl/Cmd/Alt + tecla são ignorados (y)", camera.desvioY, -100);
+            reiniciar();
+        });
+
+        testar("as teclas + = − aproximam e afastam em volta do centro da janela (ponto fixo), e Ctrl+ é do navegador", function () {
+            reiniciar();
+            const centro = { x: 192, y: 150 };
+            definirCamera(1.5, -60, -30);
+            const sobOCentro = { x: (centro.x - camera.desvioX) / camera.zoom, y: (centro.y - camera.desvioY) / camera.zoom };
+            apertarTecla("+");
+            conferirIgual("+ aproxima", camera.zoom, 2);
+            const depois = paraAJanela(sobOCentro, camera.zoom, camera.desvioX, camera.desvioY);
+            conferir("e o ponto sob o centro da janela continua lá (erro " + Math.hypot(depois.x - centro.x, depois.y - centro.y).toExponential(1) + ")", Math.hypot(depois.x - centro.x, depois.y - centro.y) < TOLERANCIA);
+            apertarTecla("-");
+            conferirIgual("− afasta", camera.zoom, 1.5);
+            apertarTecla("=");
+            conferirIgual("= também aproxima (o + sem Shift)", camera.zoom, 2);
+            apertarTecla("=");
+            conferirIgual("e não passa do Perto", camera.zoom, 2);
+            apertarTecla("-"); apertarTecla("-"); apertarTecla("-");
+            conferirIgual("− três vezes chega ao Longe e para", camera.zoom, 1);
+            apertarTecla("+", { ctrlKey: true });
+            conferirIgual("Ctrl + + não mexe no zoom do jogo (é o zoom do navegador)", camera.zoom, 1);
+            reiniciar();
+        });
+
+        testar("a roda do mouse faz zoom no ponteiro e não rola a página", function () {
+            reiniciar();
+            definirCamera(1.5, -80, -40);
+            const para_cima = new WheelEvent("wheel", Object.assign({ deltaY: -100, cancelable: true, bubbles: true }, posicaoNaPagina(120, 90)));
+            const caixaDoCanvas = tela.getBoundingClientRect();       // o navegador arredonda clientX/clientY da roda: o foco é o que o EVENTO diz
+            const foco = { x: (para_cima.clientX - caixaDoCanvas.left) * tela.width / caixaDoCanvas.width, y: (para_cima.clientY - caixaDoCanvas.top) * tela.height / caixaDoCanvas.height };
+            const sobOFoco = { x: (foco.x - camera.desvioX) / camera.zoom, y: (foco.y - camera.desvioY) / camera.zoom };
+            tela.dispatchEvent(para_cima);
+            conferirIgual("roda para cima (deltaY < 0) aproxima", camera.zoom, 2);
+            conferirIgual("e chama preventDefault (a página não rola)", para_cima.defaultPrevented, true);
+            const limites = limitesAtuais(2);
+            const esperado = { x: desvioPermitido(foco.x - sobOFoco.x * 2, limites.x), y: desvioPermitido(foco.y - sobOFoco.y * 2, limites.y) };
+            conferir("o desvio é o previsto pelo foco no ponteiro (" + esperado.x + "," + esperado.y + ")", Math.abs(camera.desvioX - esperado.x) < TOLERANCIA && Math.abs(camera.desvioY - esperado.y) < TOLERANCIA, camera.desvioX + "," + camera.desvioY);
+            const para_baixo = new WheelEvent("wheel", Object.assign({ deltaY: 100, cancelable: true, bubbles: true }, posicaoNaPagina(foco.x, foco.y)));
+            tela.dispatchEvent(para_baixo);
+            conferirIgual("roda para baixo afasta", camera.zoom, 1.5);
+            conferirIgual("e também chama preventDefault", para_baixo.defaultPrevented, true);
+            tela.dispatchEvent(new WheelEvent("wheel", Object.assign({ deltaY: 100, cancelable: true, bubbles: true }, posicaoNaPagina(foco.x, foco.y))));
+            tela.dispatchEvent(new WheelEvent("wheel", Object.assign({ deltaY: 100, cancelable: true, bubbles: true }, posicaoNaPagina(foco.x, foco.y))));
+            conferirIgual("e para no Longe", camera.zoom, 1);
+            const noMaximo = new WheelEvent("wheel", { deltaY: -100, cancelable: true, bubbles: true });
+            definirCamera(2, -100, -100);
+            tela.dispatchEvent(noMaximo);
+            conferirIgual("no Perto, a roda para cima não muda o zoom", camera.zoom, 2);
+            conferirIgual("mas ainda assim não rola a página", noMaximo.defaultPrevented, true);
+            reiniciar();
+        });
+
+        testar("as setas movem o cursor UMA casa pela tela em qualquer giro e a janela o acompanha até a ilha toda", function () {
+            reiniciar();
+            const SETAS_DA_TELA = [["ArrowRight", 1, 0], ["ArrowLeft", -1, 0], ["ArrowDown", 0, 1], ["ArrowUp", 0, -1]];
+            function casaDoCentroGirado(alvo, giros) {
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giros);
+                        if (Math.abs(centro[0] - alvo[0]) < 1e-9 && Math.abs(centro[1] - alvo[1]) < 1e-9) return { x: x, y: y };
+                    }
+                }
+                return null;
+            }
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, naBorda = 0, semPreventDefault = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        SETAS_DA_TELA.forEach(function (seta) {
+                            cursor = { x: x, y: y };
+                            const evento = apertarTecla(seta[0]);
+                            const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giro);
+                            const alvo = casaDoCentroGirado([centro[0] + seta[1], centro[1] + seta[2]], giro);
+                            if (!alvo) naBorda++;
+                            const esperada = alvo || { x: x, y: y };
+                            if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                                erros++;
+                                if (primeiro === null) primeiro = seta[0] + " em (" + x + "," + y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                            }
+                            if (!evento.defaultPrevented) semPreventDefault++;
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: 400 setas andam uma casa pela tela (ou ficam na borda: " + naBorda + " paradas)", erros === 0 && naBorda === 40, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: toda seta chama preventDefault", semPreventDefault, 0);
+            });
+
+            // Com zoom 2 só uma parte da ilha cabe na janela: a serpentina de setas, nos 4 giros, tem de manter o cursor à vista.
+            let foraDaJanela = 0, foraDaMargem = 0, rolagens = 0, passos = 0, primeiroFora = null;
+            const visitadas = new Set();
+            rodarNosQuatroGiros(function (giro) {
+                definirCamera(2, 0, 0);
+                cursor = { x: 4, y: 4 };
+                for (let i = 0; i < 12; i++) { apertarTecla("ArrowLeft"); apertarTecla("ArrowUp"); }
+                function conferirOCursor(rotulo) {
+                    passos++;
+                    visitadas.add(giro + ":" + nomeDaCasa(cursor));
+                    const centro = girarPeloMeuCaminho(cursor.x + 0.5, cursor.y + 0.5, giro);
+                    const q = paraAJanela(projetarMinha(centro[0], centro[1], Math.max(alturas[cursor.y][cursor.x], 1)), camera.zoom, camera.desvioX, camera.desvioY);
+                    if (!dentroDaJanela(q, 0)) { foraDaJanela++; if (primeiroFora === null) primeiroFora = "giro " + giro * 90 + "° " + rotulo + " cursor (" + nomeDaCasa(cursor) + ") em " + q.x.toFixed(1) + "," + q.y.toFixed(1); }
+                    const limites = limitesAtuais(camera.zoom);
+                    const noLimiteX = Math.abs(camera.desvioX - limites.x.minimo) < 1e-9 || Math.abs(camera.desvioX - limites.x.maximo) < 1e-9;
+                    const noLimiteY = Math.abs(camera.desvioY - limites.y.minimo) < 1e-9 || Math.abs(camera.desvioY - limites.y.maximo) < 1e-9;
+                    if ((!noLimiteX && (q.x < 24 - 1e-9 || q.x > 384 - 24 + 1e-9)) || (!noLimiteY && (q.y < 24 - 1e-9 || q.y > 300 - 24 + 1e-9))) foraDaMargem++;
+                }
+                conferirOCursor("canto");
+                let anterior = JSON.stringify([camera.desvioX, camera.desvioY]);
+                for (let linha = 0; linha < TAMANHO; linha++) {
+                    const teclas = [];
+                    for (let coluna = 0; coluna < TAMANHO - 1; coluna++) teclas.push(linha % 2 === 0 ? "ArrowRight" : "ArrowLeft");
+                    if (linha < TAMANHO - 1) teclas.push("ArrowDown");
+                    teclas.forEach(function (tecla) {
+                        apertarTecla(tecla);
+                        conferirOCursor(tecla);
+                        const agora = JSON.stringify([camera.desvioX, camera.desvioY]);
+                        if (agora !== anterior) rolagens++;
+                        anterior = agora;
+                    });
+                }
+            });
+            conferirIgual("serpentina de setas com zoom 2, 4 giros: o cursor passa por 400 combinações giro/casa", visitadas.size, 400);
+            conferir("o cursor ficou dentro da janela em todos os " + passos + " passos" + (primeiroFora ? " (" + primeiroFora + ")" : ""), foraDaJanela === 0 && passos === 400);
+            conferir("e dentro da margem de 24 px sempre que a câmera ainda podia rolar", foraDaMargem === 0);
+            conferir("a janela de fato rolou atrás do cursor (" + rolagens + " vezes)", rolagens > 50);
+            reiniciar();
+        });
+
+        testar("arrastar mais de 8 px rola o mapa e NÃO é um toque; tremor de 4 px é um toque e não rola", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            const antesDoToque = JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent });
+            const origem = { x: 200, y: 150 };
+
+            descer(1, origem.x, origem.y);
+            [[203, 150], [206, 151], [212, 152], [225, 160], [230, 170]].forEach(function (ponto) { mover(1, ponto[0], ponto[1]); });
+            const rolouX = camera.desvioX + 100, rolouY = camera.desvioY + 100;
+            soltar(1, 230, 170);
+            conferir("arrasto de (30, 20): o mapa anda junto com o dedo (x: " + rolouX + ")", rolouX > 30 - 8 - 1e-9 && rolouX <= 30 + 1e-9, String(rolouX));
+            conferir("e em y: " + rolouY, rolouY > 20 - 8 - 1e-9 && rolouY <= 20 + 1e-9, String(rolouY));
+            conferirIgual("soltar depois de arrastar NÃO marca nada (nem cursor, nem pino, nem aviso)", JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent }), antesDoToque);
+
+            definirCamera(2, -100, -100);
+            let toque = acharToqueNaJanela();
+            conferir("preparação: há uma casa com o topo à vista no meio da janela (" + (toque && nomeDaCasa(toque.casa)) + ")", toque !== null);
+            descer(1, toque.q.x, toque.q.y);
+            mover(1, toque.q.x + 2.4, toque.q.y + 3.2);        // 4 px de tremor
+            soltar(1, toque.q.x + 2.4, toque.q.y + 3.2);
+            conferirIgual("tremor de 4 px: o mapa não rolou (x)", camera.desvioX, -100);
+            conferirIgual("tremor de 4 px: o mapa não rolou (y)", camera.desvioY, -100);
+            conferirIgual("tremor de 4 px: é um toque e marca a casa", marcada + " " + nomeDaCasa(cursor), "true " + nomeDaCasa(toque.casa));
+
+            marcada = false; cursor = { x: 0, y: 0 };
+            descer(1, toque.q.x, toque.q.y);
+            mover(1, toque.q.x + 7, toque.q.y);
+            soltar(1, toque.q.x + 7, toque.q.y);
+            conferirIgual("7 px (abaixo do limite de 8): sem rolagem", camera.desvioX, -100);
+            conferirIgual("7 px: ainda é um toque", marcada, true);
+
+            marcada = false; cursor = { x: 0, y: 0 };
+            descer(1, toque.q.x, toque.q.y);
+            mover(1, toque.q.x + 9, toque.q.y);
+            soltar(1, toque.q.x + 9, toque.q.y);
+            conferir("9 px (acima do limite): o mapa rolou " + (camera.desvioX + 100), camera.desvioX > -100 && camera.desvioX <= -100 + 9 + 1e-9);
+            conferirIgual("9 px: não é um toque", marcada, false);
+            conferirIgual("9 px: o cursor ficou onde estava", nomeDaCasa(cursor), "0,0");
+
+            definirCamera(2, -100, -100);
+            descer(1, 200, 150);
+            mover(1, 215, 150);
+            mover(1, 215 + 400, 150 + 300);
+            conferir("o arrasto continua mesmo com o dedo fora do canvas (move na janela): o mapa chegou ao limite (" + camera.desvioX + "," + camera.desvioY + ")", camera.desvioX === 0 && camera.desvioY === 0);
+            soltar(1, 215 + 400, 150 + 300);
+            conferirIgual("e o final fora do canvas não marca nada", marcada, false);
+            reiniciar();
+        });
+
+        testar("o dedo é guardado pelo pointerId: um SEGUNDO ponteiro não rouba o arrasto nem vira toque", function () {
+            reiniciar();
+            definirCamera(2, -200, -100);
+            const antesDoToque = JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent });
+            descer(1, 100, 100);
+            mover(1, 110, 100);
+            mover(1, 140, 100);
+            const depoisDoPrimeiroArrasto = camera.desvioX;
+            conferir("preparação: o primeiro dedo já arrasta (o mapa andou " + (depoisDoPrimeiroArrasto + 200) + ")", depoisDoPrimeiroArrasto > -200);
+
+            descer(2, 300, 200);                      // o segundo dedo toca a tela
+            mover(2, 330, 230);                       // e se mexe
+            mover(2, 360, 260);
+            conferirIgual("o segundo dedo não rola o mapa (x)", camera.desvioX, depoisDoPrimeiroArrasto);
+            conferirIgual("o segundo dedo não rola o mapa (y)", camera.desvioY, -100);
+
+            mover(1, 160, 100);
+            conferirIgual("o primeiro dedo CONTINUA arrastando depois que o segundo chegou: mais 20 px", camera.desvioX, depoisDoPrimeiroArrasto + 20);
+
+            soltar(2, 360, 260);
+            conferirIgual("soltar o segundo dedo não é um toque (nada marcado)", JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent }), antesDoToque);
+            mover(1, 170, 100);
+            conferirIgual("e o primeiro dedo segue arrastando depois disso", camera.desvioX, depoisDoPrimeiroArrasto + 30);
+            soltar(1, 170, 100);
+            conferirIgual("soltar o primeiro (que arrastou) também não marca", marcada, false);
+            reiniciar();
+        });
+
+        testar("pointercancel encerra o dedo sem tocar; depois um toque novo funciona; só o ponteiro certo solta", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            const toque = acharToqueNaJanela();
+            descer(1, toque.q.x, toque.q.y);
+            cancelar(1, toque.q.x, toque.q.y);
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("pointercancel e depois pointerup: nada marcado", marcada, false);
+            descer(1, toque.q.x, toque.q.y);
+            soltar(7, toque.q.x, toque.q.y);          // outro ponteiro soltando não fecha o toque do dedo 1
+            conferirIgual("pointerup de OUTRO ponteiro não conta como o toque do dedo 1", marcada, false);
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("o pointerup do dedo certo marca a casa", marcada + " " + nomeDaCasa(cursor), "true " + nomeDaCasa(toque.casa));
+            descer(1, toque.q.x, toque.q.y);
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("segundo toque na mesma casa confirma o pino", Array.from(pinos).join("|"), nomeDaCasa(toque.casa));
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("um pointerup sem pointerdown não faz nada", pinos.size, 1);
+            reiniciar();
+        });
+
+        testar("o toque é pelo mundo, não pela tela: com zoom e rolagem, tocar o topo de uma casa marca ESSA casa, e o dique à frente responde onde cobre", function () {
+            reiniciar();
+            let tocadas = 0, erradas = 0;
+            const exemplos = [];
+            NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                [0, 1, 2, 3].forEach(function (giro) {
+                    irParaOGiro(giro);
+                    const limites = limitesAtuais(zoom);
+                    definirCamera(zoom, desvioSorteado(limites.x), desvioSorteado(limites.y));
+                    const cenario = construirCenario();
+                    cenario.forEach(function (casa) {
+                        const alvo = alvoDoToque(casa), q = paraAJanela(alvo, camera.zoom, camera.desvioX, camera.desvioY);
+                        if (!dentroDaJanela(q, 1)) return;
+                        const esperado = acharPelaMinhaForcaBruta(cenario, alvo.x, alvo.y);
+                        marcada = false; cursor = { x: -1, y: -1 };
+                        descer(1, q.x, q.y);
+                        soltar(1, q.x, q.y);
+                        tocadas++;
+                        const obtido = marcada ? nomeDaCasa(cursor) : "nada";
+                        if (obtido !== (esperado ? esperado.x + "," + esperado.y : "nada")) {
+                            erradas++;
+                            if (exemplos.length < 3) exemplos.push("zoom " + zoom + " giro " + giro * 90 + "° casa " + nomeDaCasa(casa) + ": marcou " + obtido);
+                        }
+                    });
+                });
+            });
+            reiniciar();
+            conferir(tocadas + " toques no centro do topo de cada casa visível: marca o que a força bruta manda (a própria casa, ou o dique que a cobre)", erradas === 0 && tocadas > 500, exemplos.join(" | "));
+        });
+
+        testar("o DIQUE esconde a casa de trás: (7, 7) some nos giros 0° e 270°, e 90° e 180° a revelam", function () {
+            reiniciar();
+            const casasDoMapa = casasComObjeto("C");
+            conferirIgual("o mapa tem 4 casas (C)", casasDoMapa.length, 4);
+            conferir("e (7, 7) é uma delas", casasDoMapa.some(function (casa) { return casa.x === 7 && casa.y === 7; }));
+            const esperadoParaASete = { 0: true, 1: false, 2: false, 3: true };
+            const textos = {};
+            [0, 1, 2, 3].forEach(function (giro) {
+                irParaOGiro(giro);
+                const cenario = construirCenario();
+                const minhas = casasDoMapa.filter(function (casa) { return escondedoresPelaMinhaConta(cenario, casa.x, casa.y).length > 0; }).map(nomeDaCasa).sort();
+                const dele = casasEscondidas().map(nomeDaCasa).sort();
+                conferirIgual("giro " + giro * 90 + "°: casasEscondidas() = minha conta (" + minhas.join(" ") + ")", dele.join("|"), minhas.join("|"));
+                conferirIgual("giro " + giro * 90 + "°: (7, 7) " + (esperadoParaASete[giro] ? "está escondida" : "aparece"), dele.indexOf("7,7") !== -1, esperadoParaASete[giro]);
+                conferirIgual("giro " + giro * 90 + "°: é a quemEsconde que diz quem esconde (7, 7)", Boolean(quemEsconde(7, 7)), esperadoParaASete[giro]);
+                textos[giro] = dele;
+            });
+
+            // O toque no centro do topo da casa: no giro 0° quem responde é o dique à frente; no 180° é a própria casa.
+            irParaOGiro(0);
+            let cenario = construirCenario();
+            let centro = alvoDoToque(cenario.find(function (casa) { return casa.x === 7 && casa.y === 7; }));
+            let acerto = casaSobOPixel(paraAJanela(centro, camera.zoom, camera.desvioX, camera.desvioY));
+            conferir("giro 0°: o toque no topo da casa (7, 7) cai no dique (" + nomeDoAcerto(acerto) + "), não nela", acerto !== null && !(acerto.x === 7 && acerto.y === 7));
+            irParaOGiro(2);
+            cenario = construirCenario();
+            centro = alvoDoToque(cenario.find(function (casa) { return casa.x === 7 && casa.y === 7; }));
+            acerto = casaSobOPixel(paraAJanela(centro, camera.zoom, camera.desvioX, camera.desvioY));
+            conferirIgual("giro 180°: o mesmo toque acerta a própria casa, topo", nomeDoAcerto(acerto), "7,7 topo");
+
+            // Girar pela tecla: o anúncio conta as escondidas, e H lista quais.
+            irParaOGiro(0);
+            avisar("");
+            apertarTecla("r");
+            conferirIgual("R gira para 90°", rotacao, 1);
+            conferirIgual("e o aviso conta as casas escondidas", aviso.textContent, "Vista girada para 90 graus. Casas escondidas: " + textos[1].length);
+            apertarTecla("r");
+            conferirIgual("180°: aviso", aviso.textContent, "Vista girada para 180 graus. Casas escondidas: " + textos[2].length);
+            apertarTecla("r"); apertarTecla("r");
+            conferirIgual("4 R voltam ao 0°", rotacao, 0);
+            conferirIgual("0°: aviso", aviso.textContent, "Vista girada para 0 graus. Casas escondidas: " + textos[0].length);
+            apertarTecla("q");
+            conferirIgual("Q gira para 270°", rotacao, 3);
+            conferirIgual("270°: aviso", aviso.textContent, "Vista girada para 270 graus. Casas escondidas: " + textos[3].length);
+            irParaOGiro(0);
+
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferir("H, giro 0°: a leitura lista (7, 7) entre as escondidas", /casas escondidas: .*\(7, 7\)/.test(leitura.textContent), leitura.textContent);
+            irParaOGiro(2);
+            avancarQuadro(16);
+            conferir("H, giro 180°: (7, 7) não está na lista", !/casas escondidas: .*\(7, 7\)/.test(leitura.textContent), leitura.textContent);
+
+            // O desenho: com H, cada casa escondida ganha um contorno tracejado branco por cima do dique.
+            [0, 1, 2, 3].forEach(function (giro) {
+                irParaOGiro(giro);
+                const tracejadosBrancos = gravarQuadros(1).filter(function (operacao) { return operacao.tipo === "traco" && operacao.tracejado && operacao.cor === "#ffffff"; });
+                conferirIgual("H, giro " + giro * 90 + "°: um contorno tracejado por casa escondida", tracejadosBrancos.length, textos[giro].length);
+            });
+            reiniciar();
+        });
+
+        testar("todo contorno tem 1 px na janela, em qualquer zoom (a espessura vem dividida pelo zoom)", function () {
+            reiniciar();
+            pinos.add("4,4");
+            let contornos = 0;
+            const problemas = [];
+            NIVEIS_DE_ZOOM.forEach(function (zoom) {
+                [false, true].forEach(function (comH) {
+                    const limites = limitesAtuais(zoom);
+                    definirCamera(zoom, limites.x.centrado ? limites.x.fixo : limites.x.minimo / 2, limites.y.centrado ? limites.y.fixo : limites.y.minimo / 2);
+                    depuracaoLigada = comH;
+                    ponteiro = comH ? { x: 200, y: 150 } : null;
+                    cursor = comH ? { x: 7, y: 7 } : { x: 4, y: 4 };
+                    const registro = gravarQuadros(2);
+                    registro.filter(function (operacao) { return operacao.tipo === "traco"; }).forEach(function (traco) {
+                        const naJanela = traco.largura * zoom;
+                        if (traco.dentroDe || traco.cor === COR_DO_CONTORNO || traco.cor === "#101820") {
+                            contornos++;
+                            if (Math.abs(naJanela - 1) > 1e-6) problemas.push("zoom " + zoom + " H " + comH + ": contorno " + traco.cor + " com " + naJanela + " px");
+                        }
+                        if (traco.cor === COR_DO_CURSOR && Math.abs(naJanela - 3) > 1e-6) problemas.push("zoom " + zoom + " H " + comH + ": cursor com " + naJanela + " px");
+                    });
+                });
+            });
+            depuracaoLigada = false;
+            reiniciar();
+            conferir(contornos + " contornos de bloco, água e pino, todos com 1 px na janela (e o cursor com 3)", problemas.length === 0 && contornos > 1500, problemas.slice(0, 3).join(" | ") + " (contornos = " + contornos + ")");
+        });
+
+        testar("verificarMapa recusa camadas curtas com UM aviso e sem exceção (herdado do passo 2)", function () {
+            function contar() {
+                const antes = errosDeConsole.length;
+                let valido = null, excecao = null;
+                try { valido = verificarMapa(); } catch (erro) { excecao = erro; }
+                return { valido: valido, excecao: excecao, avisos: errosDeConsole.length - antes };
+            }
+            const antes = errosDeConsole.length;
+            const base = contar();
+            conferir("o mapa de verdade é válido e não avisa", base.valido === true && base.avisos === 0 && base.excecao === null);
+            [["objetos com uma linha a menos", OBJETOS_EM_TEXTO], ["alturas com uma linha a menos", ALTURAS_EM_TEXTO]].forEach(function (caso) {
+                const retirada = caso[1].pop();
+                const resultado = contar();
+                caso[1].push(retirada);
+                conferir(caso[0] + ": recusa, um aviso, sem exceção (" + resultado.excecao + ")", resultado.excecao === null && resultado.valido === false && resultado.avisos === 1);
+            });
+            conferirIgual("depois dos testes o mapa de verdade ainda é válido", contar().valido, true);
+            errosDeConsole.length = antes;
+        });
+
+        testar("sem erro de console e com o estado restaurado", function () {
+            reiniciar();
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("o terreno de verdade foi restaurado", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("o giro final é 0", rotacao, 0);
+            conferirIgual("nenhum aviso de erro sobrou", errosDeConsole.join(" | "), "");
+            conferir("o laço segue vivo", avancarQuadro(16));
+        });
+
+        // ------------------------------------------------------------
+        // O passo inteiro com o style.css de verdade, num tamanho de tela conhecido: sem rolar a página, alvos ≥ 48 px, touch-action
+        // ------------------------------------------------------------
+        const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
+            + '<canvas id="jogo" width="384" height="300">Seu navegador não suporta canvas.</canvas>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<pre id="leitura" aria-live="off"></pre>'
+            + '<p id="ajuda">Arraste: rolar · Toque: marcar, de novo: confirmar · setas: cursor · W A S D: rolar · + −: zoom · Q R: girar · H: invisível</p>';
+
+        function montarDocumentoDoIframe() {
+            const fecharScript = "<" + "/script>";
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../dique/04-camera/style.css"></head><body>'
+                + MARCACAO_DO_PASSO
+                + "<script>window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };" + fecharScript
+                + '<script src="../../dique/04-camera/regras.js">' + fecharScript
+                + '<script src="../../dique/04-camera/script.js">' + fecharScript
+                + "</body></html>";
+        }
+
+        function abrirNumIframe(largura, altura) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe();
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirLayout(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura);
+            try {
+                const janela = quadro.contentWindow, documento = janela.document, nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                conferirIgual(nome + ": o passo carregou no iframe com o laço de quadros", typeof janela.__proximoQuadro, "function");
+                darQuadro(janela, 16);
+                const textoLongo = "Marcada a casa 7, 7, altura 1, escondida atrás de um bloco. Toque de novo na mesma casa para confirmar";
+                [false, true].forEach(function (comH) {
+                    if (comH) {
+                        documento.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "h", bubbles: true }));
+                        janela.dispatchEvent(new janela.PointerEvent("pointermove", { clientX: 120, clientY: 120, pointerId: 1, bubbles: true }));
+                    }
+                    janela.avisar(textoLongo);       // o pior aviso que o jogo escreve
+                    darQuadro(janela, comH ? 32 : 24);
+                    const estado = nome + (comH ? " com H" : " sem H");
+                    const raiz = documento.documentElement;
+                    conferir(estado + ": não rola na vertical (conteúdo " + raiz.scrollHeight + " ≤ " + janela.innerHeight + ")", raiz.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + raiz.scrollWidth + " ≤ " + janela.innerWidth + ")", raiz.scrollWidth <= janela.innerWidth);
+                    const corpo = documento.body.getBoundingClientRect();
+                    conferir(estado + ": o corpo termina dentro da janela (" + Math.round(corpo.bottom) + " ≤ " + janela.innerHeight + ")", corpo.bottom <= janela.innerHeight);
+                    if (comH) conferir(estado + ": a leitura ligada tem texto (" + documento.getElementById("leitura").textContent.split("\n").length + " linhas)", documento.getElementById("leitura").textContent.length > 20);
+                });
+                const botoes = Array.from(documento.querySelectorAll("#botoes button"));
+                const pequenos = botoes.filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 - 0.01 || caixa.height < 48 - 0.01;
+                }).map(function (botao) { return botao.dataset.acao + " " + botao.getBoundingClientRect().width.toFixed(1) + "×" + botao.getBoundingClientRect().height.toFixed(1); });
+                conferirIgual(nome + ": são 6 botões", botoes.length, 6);
+                conferir(nome + ": todo botão tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+                const dentroDaTela = botoes.every(function (botao) { const caixa = botao.getBoundingClientRect(); return caixa.left >= 0 && caixa.right <= janela.innerWidth && caixa.bottom <= janela.innerHeight; });
+                conferir(nome + ": todos os botões cabem na tela, sem rolar para alcançar", dentroDaTela);
+                const canvas = documento.getElementById("jogo"), caixaDoCanvas = canvas.getBoundingClientRect();
+                conferir(nome + ": o canvas cabe na largura (" + Math.round(caixaDoCanvas.width) + " px) mantendo a proporção 384:300", caixaDoCanvas.right <= janela.innerWidth && Math.abs(caixaDoCanvas.width / caixaDoCanvas.height - 384 / 300) < 0.01);
+                conferirIgual(nome + ": o canvas tem touch-action: none (o dedo rola o mapa, não a página)", janela.getComputedStyle(canvas).touchAction, "none");
+                conferirIgual(nome + ": o #aviso é uma região role=status", documento.getElementById("aviso").getAttribute("role"), "status");
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("layout 390×750", function () { return conferirLayout(390, 750); });
+            await testarNoIframe("layout 360×640", function () { return conferirLayout(360, 640); });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

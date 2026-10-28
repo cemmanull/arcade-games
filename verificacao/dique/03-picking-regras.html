@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 3: o picking (regras puras)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 3: o picking</h1>
+    <p>Só o <code>regras.js</code>: sem canvas e sem DOM do jogo. O raio que desce pelas colunas contra a força bruta, polígono a polígono.</p>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/03-picking/regras.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const ALTURAS_ORIGINAIS = JSON.stringify(alturas);
+        const errosNaCarga = errosDeConsole.slice();
+        const FACES = ["topo", "esquerda", "direita"];
+
+        // ------------------------------------------------------------
+        // Ajudantes de estado
+        // ------------------------------------------------------------
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            const rotacaoOriginal = rotacao;
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(rotacaoOriginal);
+            }
+        }
+
+        // Terreno sorteado: metade uniforme (0 a 4), metade com mais terra baixa e lagos (parecida com uma ilha).
+        function sortearTerreno(inclinadoParaBaixo) {
+            alturas.forEach(function (linha) {
+                for (let x = 0; x < linha.length; x++) {
+                    const sorteio = Math.random();
+                    linha[x] = Math.floor((inclinadoParaBaixo ? sorteio * sorteio : sorteio) * 5);
+                }
+            });
+        }
+
+        function restaurarTerreno() {
+            const original = JSON.parse(ALTURAS_ORIGINAIS);
+            alturas.forEach(function (linha, y) {
+                for (let x = 0; x < linha.length; x++) linha[x] = original[y][x];
+            });
+            irParaOGiro(0);
+        }
+
+        function nomeDaCasa(casa) {
+            return casa.x + "," + casa.y;
+        }
+
+        function nomeDoAcerto(acerto) {
+            return acerto ? acerto.x + "," + acerto.y + " " + acerto.face : "nada";
+        }
+
+        // ------------------------------------------------------------
+        // A força bruta escrita de novo aqui, sem usar nenhuma função de projeção do jogo:
+        // sx = ox + 18 (u − v), sy = oy + 9 (u + v) − 12 z, com (u, v) o centro da casa já girado.
+        // ------------------------------------------------------------
+        function girarPeloMeuCaminho(x, y, giros) {
+            let ponto = [x, y];
+            for (let i = 0; i < giros; i++) ponto = [TAMANHO - ponto[1], ponto[0]];
+            return ponto;
+        }
+
+        function projetarMinha(u, v, z) {
+            return { x: 192 + 18 * (u - v), y: 60 + 9 * (u + v) - 12 * z };
+        }
+
+        function pontoNoPoligonoConvexo(poligono, ponto) {       // inclusivo: encostar na aresta conta
+            let positivo = false, negativo = false;
+            for (let i = 0; i < poligono.length; i++) {
+                const canto = poligono[i], proximo = poligono[(i + 1) % poligono.length];
+                const lado = (proximo.x - canto.x) * (ponto.y - canto.y) - (proximo.y - canto.y) * (ponto.x - canto.x);
+                if (lado > 1e-9) positivo = true;
+                if (lado < -1e-9) negativo = true;
+            }
+            return !(positivo && negativo);
+        }
+
+        // Prepara, uma vez por terreno e giro, os três polígonos de cada casa (a água mostra a superfície no nível 1)
+        // e as casas da mais perto para a mais longe (x'+y' maior primeiro).
+        function construirCenario() {
+            const casas = [];
+            alturas.forEach(function (linha, y) {
+                linha.forEach(function (altura, x) {
+                    const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, rotacao);
+                    const nivel = Math.max(altura, 1);
+                    const canto = function (du, dv, z) { return projetarMinha(centro[0] + du, centro[1] + dv, z); };
+                    const topoCima = canto(-0.5, -0.5, nivel), topoDireita = canto(0.5, -0.5, nivel);
+                    const topoBaixo = canto(0.5, 0.5, nivel), topoEsquerda = canto(-0.5, 0.5, nivel);
+                    const baseDireita = canto(0.5, -0.5, 0), baseBaixo = canto(0.5, 0.5, 0), baseEsquerda = canto(-0.5, 0.5, 0);
+                    casas.push({
+                        x: x, y: y, proximidade: centro[0] + centro[1], altura: altura,
+                        faces: {
+                            topo: [topoCima, topoDireita, topoBaixo, topoEsquerda],
+                            esquerda: [topoEsquerda, topoBaixo, baseBaixo, baseEsquerda],
+                            direita: [topoBaixo, topoDireita, baseDireita, baseBaixo],
+                        },
+                        minX: topoEsquerda.x, maxX: topoDireita.x, minY: topoCima.y, maxY: baseBaixo.y,
+                    });
+                });
+            });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            return casas;
+        }
+
+        function acharPelaMinhaForcaBruta(cenario, sx, sy) {
+            const ponto = { x: sx, y: sy };
+            for (let i = 0; i < cenario.length; i++) {
+                const casa = cenario[i];
+                if (sx < casa.minX || sx > casa.maxX || sy < casa.minY || sy > casa.maxY) continue;
+                for (let f = 0; f < 3; f++) {
+                    if (pontoNoPoligonoConvexo(casa.faces[FACES[f]], ponto)) return { x: casa.x, y: casa.y, face: FACES[f] };
+                }
+            }
+            return null;
+        }
+
+        // Quem esconde o centro do topo de (x, y): alguma casa mais à frente que tenha um polígono sobre esse ponto.
+        function escondedoresPelaMinhaConta(cenario, x, y) {
+            const dela = cenario.find(function (casa) { return casa.x === x && casa.y === y; });
+            const ponto = dela.faces.topo.reduce(function (soma, canto) { return { x: soma.x + canto.x / 4, y: soma.y + canto.y / 4 }; }, { x: 0, y: 0 });
+            return cenario.filter(function (casa) {
+                return casa.proximidade > dela.proximidade + 1e-9 && FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], ponto); });
+            }).map(nomeDaCasa);
+        }
+
+        // Pixels do centro de cada pixel (x + 0,5): nenhuma aresta passa por aí (arestas de 2:1 em vértices inteiros), então não há empate.
+        function gradeDePixels(passo, deslocamentoX, deslocamentoY, margem) {
+            const pixels = [];
+            for (let sy = -margem + 0.5 + (deslocamentoY || 0); sy < 252 + margem; sy += passo) {
+                for (let sx = -margem + 0.5 + (deslocamentoX || 0); sx < 384 + margem; sx += passo) pixels.push([sx, sy]);
+            }
+            return pixels;
+        }
+
+        function pixelsSorteados(quantidade) {
+            const pixels = [];
+            for (let i = 0; i < quantidade; i++) pixels.push([Math.floor(10 + Math.random() * 364) + 0.5, Math.floor(10 + Math.random() * 232) + 0.5]);
+            return pixels;
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("o mapa e a altura máxima do raio", function () {
+            conferirIgual("TAMANHO deduzido do texto (10)", TAMANHO, 10);
+            conferirIgual("ALTURA_MAXIMA é 4", ALTURA_MAXIMA, 4);
+            conferir("nenhum bloco passa da ALTURA_MAXIMA (o raio começa a descer dali)", Math.max.apply(null, alturas.map(function (linha) { return Math.max.apply(null, linha); })) <= ALTURA_MAXIMA);
+            conferirIgual("o nível da água é 1", NIVEL_DA_AGUA, 1);
+            conferirIgual("o degrau sobe 12 px", ALTURA_DO_DEGRAU, 12);
+            conferirIgual("a ORIGEM é a da página (192, 60)", JSON.stringify(ORIGEM), JSON.stringify({ x: 192, y: 60 }));
+            conferir("o mapa de verdade é válido", MAPA_VALIDO === true && errosNaCarga.length === 0);
+            conferirIgual("a lista de desenho foi montada (100 casas)", listaDeDesenho.length, 100);
+        });
+
+        testar("alturaVisivel: a água cobre o que está abaixo do nível", function () {
+            conferirIgual("altura 0 mostra o nível 1", alturaVisivel(0), 1);
+            conferirIgual("altura 1 fica em 1", alturaVisivel(1), 1);
+            conferirIgual("altura 4 fica em 4", alturaVisivel(4), 4);
+        });
+
+        testar("ida e volta com altura nos 4 giros (a inversa do picking)", function () {
+            semearSorteio(5150);
+            rodarNosQuatroGiros(function (giro) {
+                let pior = 0, piorGirado = 0;
+                for (let i = 0; i < 1000; i++) {
+                    const x = Math.random() * TAMANHO, y = Math.random() * TAMANHO, z = Math.random() * 4;
+                    const naTela = mundoParaTela(x, y, z);
+                    const devolta = telaParaMundo(naTela.x, naTela.y, z);
+                    pior = Math.max(pior, Math.abs(devolta.x - x), Math.abs(devolta.y - y));
+                    const minha = projetarMinha.apply(null, girarPeloMeuCaminho(x, y, giro).concat([z]));
+                    piorGirado = Math.max(piorGirado, Math.abs(minha.x - naTela.x), Math.abs(minha.y - naTela.y));
+                }
+                conferir("giro " + giro * 90 + "°: mundo → tela → mundo, erro " + pior.toExponential(2), pior < TOLERANCIA);
+                conferir("giro " + giro * 90 + "°: mundoParaTela bate com a minha fórmula, erro " + piorGirado.toExponential(2), piorGirado < TOLERANCIA);
+            });
+            const girado = telaParaGirado(192, 60 - 12 * 2, 2);
+            conferir("telaParaGirado(origem acima em 2 degraus, z = 2) é o canto (0, 0)", Math.abs(girado.x) < TOLERANCIA && Math.abs(girado.y) < TOLERANCIA, JSON.stringify(girado));
+            conferirIgual("telaParaMundo sem z é o mesmo que z = 0", JSON.stringify(telaParaMundo(200, 100)), JSON.stringify(telaParaMundo(200, 100, 0)));
+        });
+
+        testar("casaDaTela e casaVizinha: as setas andam pela tela, em qualquer giro (contra a minha conta)", function () {
+            const SETAS_DA_TELA = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, naBorda = 0, idaEVoltaErrada = 0, casaDaTelaErrada = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giro);
+                        const doCentro = casaDaTela(Math.floor(centro[0]), Math.floor(centro[1]));
+                        if (doCentro.x !== x || doCentro.y !== y) casaDaTelaErrada++;
+                        SETAS_DA_TELA.forEach(function (seta) {
+                            const alvo = [centro[0] + seta[0], centro[1] + seta[1]];
+                            let esperada = null;
+                            for (let yy = 0; yy < TAMANHO && !esperada; yy++) {
+                                for (let xx = 0; xx < TAMANHO && !esperada; xx++) {
+                                    const outro = girarPeloMeuCaminho(xx + 0.5, yy + 0.5, giro);
+                                    if (Math.abs(outro[0] - alvo[0]) < 1e-9 && Math.abs(outro[1] - alvo[1]) < 1e-9) esperada = { x: xx, y: yy };
+                                }
+                            }
+                            if (!esperada) naBorda++;
+                            const obtida = casaVizinha(x, y, seta[0], seta[1]);
+                            if (JSON.stringify(obtida) !== JSON.stringify(esperada)) {
+                                erros++;
+                                if (primeiro === null) primeiro = "(" + x + "," + y + ") seta " + seta + ": obtido " + JSON.stringify(obtida) + ", esperado " + JSON.stringify(esperada);
+                            }
+                            if (obtida) {
+                                const volta = casaVizinha(obtida.x, obtida.y, -seta[0], -seta[1]);
+                                if (!volta || volta.x !== x || volta.y !== y) idaEVoltaErrada++;
+                            }
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: casaVizinha acerta as 400 setas e dá null só na borda (" + naBorda + " vezes)", erros === 0 && naBorda === 40, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: andar e voltar devolve a casa", idaEVoltaErrada, 0);
+                conferirIgual("giro " + giro * 90 + "°: casaDaTela desfaz o giro nas 100 casas", casaDaTelaErrada, 0);
+            });
+        });
+
+        testar("a lista de desenho: completa, ordenada por x'+y', empates na ordem do mapa", function () {
+            semearSorteio(8);
+            [0, 1].forEach(function (rodada) {
+                if (rodada === 1) sortearTerreno(false);
+                rodarNosQuatroGiros(function (giro) {
+                    const nome = (rodada ? "terreno sorteado" : "mapa") + ", giro " + giro * 90 + "°: ";
+                    conferirIgual(nome + "100 casas sem repetição", new Set(listaDeDesenho.map(nomeDaCasa)).size, 100);
+                    conferir(nome + "a proximidade é x'+y' do centro, já girado",
+                        listaDeDesenho.every(function (casa) { const c = girarPeloMeuCaminho(casa.x + 0.5, casa.y + 0.5, giro); return Math.abs(casa.proximidade - (c[0] + c[1])) < TOLERANCIA; }));
+                    conferir(nome + "nunca decresce", listaDeDesenho.every(function (casa, i) { return i === 0 || casa.proximidade >= listaDeDesenho[i - 1].proximidade; }));
+                    conferir(nome + "sem desempate por altura: o empate segue a ordem do mapa (linha por linha)",
+                        listaDeDesenho.every(function (casa, i) {
+                            if (i === 0 || casa.proximidade !== listaDeDesenho[i - 1].proximidade) return true;
+                            const anterior = listaDeDesenho[i - 1];
+                            return anterior.y < casa.y || (anterior.y === casa.y && anterior.x < casa.x);
+                        }));
+                });
+            });
+            restaurarTerreno();
+        });
+
+        testar("quemEsconde concorda com a minha conta (polígonos das casas à frente) em 4 terrenos × 4 giros", function () {
+            semearSorteio(321);
+            let divergencias = 0, escondidas = 0;
+            const exemplos = [];
+            [false, true, true, false].forEach(function (inclinado, terreno) {
+                if (terreno > 0) sortearTerreno(inclinado);
+                rodarNosQuatroGiros(function (giro) {
+                    const cenario = construirCenario();
+                    for (let y = 0; y < TAMANHO; y++) {
+                        for (let x = 0; x < TAMANHO; x++) {
+                            const meus = escondedoresPelaMinhaConta(cenario, x, y), dele = quemEsconde(x, y);
+                            if (meus.length > 0) escondidas++;
+                            if (Boolean(dele) !== (meus.length > 0) || (dele && meus.indexOf(nomeDaCasa(dele)) === -1)) {
+                                divergencias++;
+                                if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° (" + x + "," + y + ")");
+                            }
+                        }
+                    }
+                });
+            });
+            restaurarTerreno();
+            conferir("1.600 casas: quemEsconde bate com a minha conta (" + escondidas + " escondidas)", divergencias === 0 && escondidas > 100, exemplos.join(" | "));
+        });
+
+        testar("PICKING = FORÇA BRUTA (a do jogo): 20 terrenos sorteados × 4 giros, pixels sorteados", function () {
+            semearSorteio(20261027);
+            let comparados = 0, acertos = 0, vazios = 0, divergenciasDoRaio = 0, divergenciasDaBruta = 0;
+            const porFace = { topo: 0, esquerda: 0, direita: 0 };
+            const exemplos = [];
+            for (let terreno = 0; terreno < 20; terreno++) {
+                sortearTerreno(terreno % 2 === 1);
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    const cenario = construirCenario();
+                    pixelsSorteados(400).forEach(function (pixel) {
+                        const doRaio = acharCasaPeloRaio(pixel[0], pixel[1]);
+                        const daBruta = acharCasaPorForcaBruta(pixel[0], pixel[1]);
+                        const minha = acharPelaMinhaForcaBruta(cenario, pixel[0], pixel[1]);
+                        comparados++;
+                        if (daBruta) { acertos++; porFace[daBruta.face]++; } else vazios++;
+                        if (nomeDoAcerto(doRaio) !== nomeDoAcerto(daBruta)) {
+                            divergenciasDoRaio++;
+                            if (exemplos.length < 4) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": raio " + nomeDoAcerto(doRaio) + ", força bruta " + nomeDoAcerto(daBruta));
+                        }
+                        if (nomeDoAcerto(minha) !== nomeDoAcerto(daBruta)) {
+                            divergenciasDaBruta++;
+                            if (exemplos.length < 4) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": a bruta do jogo " + nomeDoAcerto(daBruta) + ", a minha " + nomeDoAcerto(minha));
+                        }
+                    });
+                }
+            }
+            restaurarTerreno();
+            conferir(comparados + " pixels: acharCasaPeloRaio = acharCasaPorForcaBruta (casa, face ou nada), 0 divergências", divergenciasDoRaio === 0 && comparados === 32000, divergenciasDoRaio + " divergências; " + exemplos.join(" | "));
+            conferir("e a força bruta do jogo concorda com a minha, escrita aqui", divergenciasDaBruta === 0, divergenciasDaBruta + " divergências; " + exemplos.join(" | "));
+            conferir("a amostra cobre as três faces e o vazio: topo " + porFace.topo + ", esquerda " + porFace.esquerda + ", direita " + porFace.direita + ", nada " + vazios,
+                porFace.topo > 500 && porFace.esquerda > 500 && porFace.direita > 500 && vazios > 500);
+        });
+
+        testar("PICKING denso: o raio = minha força bruta em toda a tela (e 40 px de margem), 20 terrenos × 4 giros", function () {
+            semearSorteio(777001);
+            let comparados = 0, divergencias = 0;
+            const exemplos = [];
+            const porFace = { topo: 0, esquerda: 0, direita: 0 };
+            let nada = 0, hitsComZRuim = 0, geometriaErrada = 0;
+            const grade = gradeDePixels(4, 0, 0, 0);
+            for (let terreno = 0; terreno < 20; terreno++) {
+                sortearTerreno(terreno % 2 === 1);
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    const cenario = construirCenario();
+                    grade.forEach(function (pixel) {
+                        const doRaio = acharCasaPeloRaio(pixel[0], pixel[1]);
+                        const minha = acharPelaMinhaForcaBruta(cenario, pixel[0], pixel[1]);
+                        comparados++;
+                        if (nomeDoAcerto(doRaio) !== nomeDoAcerto(minha)) {
+                            divergencias++;
+                            if (exemplos.length < 4) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": raio " + nomeDoAcerto(doRaio) + ", minha bruta " + nomeDoAcerto(minha));
+                        }
+                        if (!doRaio) { nada++; return; }
+                        porFace[doRaio.face]++;
+                        const nivel = alturaVisivel(alturas[doRaio.y][doRaio.x]);
+                        if (!(doRaio.z >= 0 && doRaio.z <= nivel + TOLERANCIA && (doRaio.face !== "topo" || Math.abs(doRaio.z - nivel) < TOLERANCIA))) hitsComZRuim++;
+                        // O ponto do raio, no plano z do acerto, tem de estar sobre a face (a conta da página, sem a bruta).
+                        const ponto = telaParaGirado(pixel[0], pixel[1], doRaio.z);
+                        const centro = girarPeloMeuCaminho(doRaio.x + 0.5, doRaio.y + 0.5, giro);
+                        const coluna = Math.floor(centro[0]), linha = Math.floor(centro[1]);
+                        const dentroX = ponto.x >= coluna - TOLERANCIA && ponto.x <= coluna + 1 + TOLERANCIA, dentroY = ponto.y >= linha - TOLERANCIA && ponto.y <= linha + 1 + TOLERANCIA;
+                        const naFace = doRaio.face === "topo" ? dentroX && dentroY
+                            : doRaio.face === "direita" ? Math.abs(ponto.x - (coluna + 1)) < TOLERANCIA && dentroY
+                                : Math.abs(ponto.y - (linha + 1)) < TOLERANCIA && dentroX;
+                        if (!naFace) geometriaErrada++;
+                    });
+                }
+            }
+            restaurarTerreno();
+            conferir(comparados + " pixels: raio = minha força bruta, 0 divergências", divergencias === 0 && comparados > 150000, divergencias + " divergências; " + exemplos.join(" | ") + " (comparados = " + comparados + ")");
+            conferir("a grade pega as três faces e o vazio: topo " + porFace.topo + ", esquerda " + porFace.esquerda + ", direita " + porFace.direita + ", nada " + nada,
+                porFace.topo > 10000 && porFace.esquerda > 10000 && porFace.direita > 10000 && nada > 10000);
+            conferirIgual("todo acerto tem 0 ≤ z ≤ altura visível, e o topo está exatamente na altura visível", hitsComZRuim, 0);
+            conferirIgual("o ponto do raio, no plano do acerto, cai sobre a face dita (topo: dentro da casa; lateral: na linha da grade)", geometriaErrada, 0);
+        });
+
+        testar("z ≥ 0 na borda do mapa: abaixo do chão nada é acertado (o defeito do z negativo)", function () {
+            // Pixels logo abaixo e ao lado da ilha, onde o raio sai do mapa sem encontrar nada acima do chão.
+            const exemplos = [];
+            let comparados = 0, divergencias = 0, negativos = 0, vazios = 0;
+            rodarNosQuatroGiros(function (giro) {
+                const cenario = construirCenario();
+                const abaixoDaIlha = [];
+                for (let sy = 100.5; sy < 252; sy += 1) for (let sx = 0.5; sx < 384; sx += 1) abaixoDaIlha.push([sx, sy]);
+                abaixoDaIlha.forEach(function (pixel) {
+                    const doRaio = acharCasaPeloRaio(pixel[0], pixel[1]);
+                    const minha = acharPelaMinhaForcaBruta(cenario, pixel[0], pixel[1]);
+                    comparados++;
+                    if (!minha) vazios++;
+                    if (doRaio && doRaio.z < 0) negativos++;
+                    if (nomeDoAcerto(doRaio) !== nomeDoAcerto(minha)) {
+                        divergencias++;
+                        if (exemplos.length < 3) exemplos.push("giro " + giro * 90 + "° pixel " + pixel + ": raio " + nomeDoAcerto(doRaio) + " z " + (doRaio && doRaio.z) + ", bruta " + nomeDoAcerto(minha));
+                    }
+                });
+            });
+            conferirIgual("nenhum acerto com z negativo em " + comparados + " pixels da metade de baixo, nos 4 giros", negativos, 0);
+            conferir("e o raio concorda com a força bruta em todos eles (a ilha deixa " + vazios + " pixels vazios na faixa)", divergencias === 0 && vazios > 50000, exemplos.join(" | "));
+
+            // Os pixels que o defeito pegava: logo abaixo do canto esquerdo e do canto direito da ilha, no giro 0.
+            irParaOGiro(0);
+            [[13.5, 154.5], [19.5, 154.5], [370.5, 154.5], [13.5, 151.5]].forEach(function (pixel) {
+                conferirIgual("giro 0°, pixel " + pixel + " (abaixo do chão da casa de ponta): nada", nomeDoAcerto(acharCasaPeloRaio(pixel[0], pixel[1])), "nada");
+            });
+        });
+
+        testar("a superfície da água é o que se acerta: o lago e o mar respondem na altura 1, nunca no fundo", function () {
+            const casasDeAgua = [[5, 5], [5, 6], [6, 6], [0, 0], [9, 9], [0, 9], [9, 0], [4, 0]];
+            casasDeAgua.forEach(function (casa) {
+                conferir("a casa (" + casa + ") tem altura 0 no mapa", alturas[casa[1]][casa[0]] === 0);
+            });
+            let aSuperficieFoiAcertada = 0, aSuperficieEstavaEscondida = 0, erros = [];
+            rodarNosQuatroGiros(function (giro) {
+                const cenario = construirCenario();
+                casasDeAgua.forEach(function (casa) {
+                    const centro = girarPeloMeuCaminho(casa[0] + 0.5, casa[1] + 0.5, giro);
+                    const superficie = projetarMinha(centro[0], centro[1], 1), fundo = projetarMinha(centro[0], centro[1], 0);
+                    const escondida = escondedoresPelaMinhaConta(cenario, casa[0], casa[1]).length > 0;
+                    const naSuperficie = acharCasaPeloRaio(superficie.x, superficie.y);
+                    if (escondida) {
+                        aSuperficieEstavaEscondida++;
+                        if (nomeDoAcerto(naSuperficie) === casa[0] + "," + casa[1] + " topo") erros.push("giro " + giro * 90 + "° (" + casa + "): escondida, mas o raio a acertou");
+                        return;
+                    }
+                    aSuperficieFoiAcertada++;
+                    if (!naSuperficie || naSuperficie.x !== casa[0] || naSuperficie.y !== casa[1] || naSuperficie.face !== "topo" || Math.abs(naSuperficie.z - 1) > TOLERANCIA) {
+                        erros.push("giro " + giro * 90 + "° (" + casa + "): superfície devolveu " + nomeDoAcerto(naSuperficie) + " z " + (naSuperficie && naSuperficie.z));
+                    }
+                    const noFundo = acharCasaPeloRaio(fundo.x, fundo.y);
+                    if (noFundo && noFundo.x === casa[0] && noFundo.y === casa[1] && noFundo.face === "topo") erros.push("giro " + giro * 90 + "° (" + casa + "): o fundo (z 0) virou topo");
+                });
+            });
+            conferir("a superfície (z = 1) de " + aSuperficieFoiAcertada + " casas de água à vista devolve a própria casa, face topo, z 1; as " + aSuperficieEstavaEscondida + " escondidas não", erros.length === 0 && aSuperficieFoiAcertada > 10, erros.slice(0, 3).join(" | "));
+            irParaOGiro(0);
+            const alto = acharCasaPeloRaio(mundoParaTela(5.5, 5.5, 1).x, mundoParaTela(5.5, 5.5, 1).y);
+            conferir("giro 0°: o topo de uma casa de altura 0 responde z = " + (alto && alto.z), alto !== null && alto.z === 1);
+        });
+
+        testar("visitadas: as colunas ao longo do raio, de frente para trás, terminando na casa acertada", function () {
+            semearSorteio(404);
+            let raios = 0, divergencias = 0, semDuplicata = 0;
+            const exemplos = [];
+            [false, true, true, false].forEach(function (inclinado, terreno) {
+                if (terreno > 0) sortearTerreno(inclinado);
+                rodarNosQuatroGiros(function (giro) {
+                    gradeDePixels(5, 0.25, 0.25, 0).forEach(function (pixel) {
+                        const acerto = acharCasaPeloRaio(pixel[0], pixel[1]);
+                        if (!acerto) return;
+                        raios++;
+                        // A minha conta: ando pelo raio de z = 4 até o z do acerto e anoto cada coluna (x', y') dentro do mapa que ele cruza.
+                        const esperadas = [];
+                        for (let z = ALTURA_MAXIMA; z >= acerto.z; z -= 0.002) {
+                            const ponto = telaParaGirado(pixel[0], pixel[1], z);
+                            const coluna = Math.floor(ponto.x), linha = Math.floor(ponto.y);
+                            if (coluna < 0 || linha < 0 || coluna >= TAMANHO || linha >= TAMANHO) continue;
+                            const chave = coluna + "," + linha;
+                            if (esperadas[esperadas.length - 1] !== chave) esperadas.push(chave);
+                        }
+                        const centro = girarPeloMeuCaminho(acerto.x + 0.5, acerto.y + 0.5, giro);
+                        const colunaDoAcerto = Math.floor(centro[0]) + "," + Math.floor(centro[1]);
+                        if (esperadas[esperadas.length - 1] !== colunaDoAcerto) esperadas.push(colunaDoAcerto);       // numa lateral o raio só ENTRA na coluna do acerto no último z
+                        const obtidas = acerto.visitadas.map(function (casa) {
+                            const girada = girarPeloMeuCaminho(casa.x + 0.5, casa.y + 0.5, giro);
+                            return Math.floor(girada[0]) + "," + Math.floor(girada[1]);
+                        });
+                        if (new Set(obtidas).size === obtidas.length) semDuplicata++;
+                        const ultima = acerto.visitadas[acerto.visitadas.length - 1];
+                        if (obtidas.join("|") !== esperadas.join("|") || ultima.x !== acerto.x || ultima.y !== acerto.y) {
+                            divergencias++;
+                            if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": visitadas " + obtidas.join(" ") + " / esperadas " + esperadas.join(" "));
+                        }
+                    });
+                });
+            });
+            restaurarTerreno();
+            conferir(raios + " raios: visitadas = as colunas que o raio cruza, na ordem, e a última é a casa acertada", divergencias === 0 && raios > 3000, divergencias + " divergências; " + exemplos.join(" | ") + " (raios = " + raios + ")");
+            conferirIgual("nenhuma coluna aparece duas vezes", semDuplicata, raios);
+        });
+
+        testar("pixels absurdos: longe, NaN e as bordas da tela não travam nem acertam", function () {
+            irParaOGiro(0);
+            [[-1e5, 50], [1e5, 50], [200, -1e5], [200, 1e5], [1e5, 1e5], [-1e5, -1e5], [NaN, 100], [100, NaN]].forEach(function (pixel) {
+                conferirIgual("pixel " + pixel + ": nada", nomeDoAcerto(acharCasaPeloRaio(pixel[0], pixel[1])), "nada");
+                conferirIgual("pixel " + pixel + ": a força bruta também", nomeDoAcerto(acharCasaPorForcaBruta(pixel[0], pixel[1])), "nada");
+            });
+            conferirIgual("o canto (0, 0) da tela é vazio", nomeDoAcerto(acharCasaPeloRaio(0.5, 0.5)), "nada");
+            conferirIgual("o canto (383,5, 251,5) da tela é vazio", nomeDoAcerto(acharCasaPeloRaio(383.5, 251.5)), "nada");
+        });
+
+        testar("controle negativo: sem altura, a inversa do passo 1 erra o toque; o checker enxerga a diferença", function () {
+            semearSorteio(99);
+            sortearTerreno(false);
+            let erradas = 0, acertosReais = 0;
+            for (let giro = 0; giro < 4; giro++) {
+                irParaOGiro(giro);
+                const cenario = construirCenario();
+                gradeDePixels(6, 0.5, 0.5, 0).forEach(function (pixel) {
+                    const certa = acharPelaMinhaForcaBruta(cenario, pixel[0], pixel[1]);
+                    if (!certa) return;
+                    acertosReais++;
+                    const chao = telaParaMundo(pixel[0], pixel[1], 0);
+                    if (Math.floor(chao.x) !== certa.x || Math.floor(chao.y) !== certa.y) erradas++;
+                });
+            }
+            restaurarTerreno();
+            conferir("o chão plano erra " + erradas + " de " + acertosReais + " toques em um terreno com alturas (é o que o passo 3 conserta)", erradas > acertosReais * 0.2);
+
+            irParaOGiro(2);
+            const cenarioDoGiro2 = construirCenario();
+            irParaOGiro(0);
+            let diferentes = 0;
+            gradeDePixels(12, 0.5, 0.5, 0).forEach(function (pixel) {
+                if (nomeDoAcerto(acharCasaPeloRaio(pixel[0], pixel[1])) !== nomeDoAcerto(acharPelaMinhaForcaBruta(cenarioDoGiro2, pixel[0], pixel[1]))) diferentes++;
+            });
+            conferir("e comparar o raio de um giro com a bruta de OUTRO giro dá divergências (" + diferentes + "): a comparação não é cega", diferentes > 20);
+        });
+
+        testar("verificarMapa recusa camadas curtas com UM aviso e sem exceção", function () {
+            function contar() {
+                const antes = errosDeConsole.length;
+                let valido = null, excecao = null;
+                try { valido = verificarMapa(); } catch (erro) { excecao = erro; }
+                return { valido: valido, excecao: excecao, avisos: errosDeConsole.length - antes };
+            }
+            const antes = errosDeConsole.length;
+            const base = contar();
+            conferir("o mapa de verdade é válido e não avisa", base.valido === true && base.avisos === 0 && base.excecao === null);
+
+            [["objetos com uma linha a menos", OBJETOS_EM_TEXTO], ["alturas com uma linha a menos", ALTURAS_EM_TEXTO]].forEach(function (caso) {
+                const retirada = caso[1].pop();
+                const resultado = contar();
+                caso[1].push(retirada);
+                conferir(caso[0] + ": recusa, um aviso, sem exceção (" + resultado.excecao + ")", resultado.excecao === null && resultado.valido === false && resultado.avisos === 1);
+            });
+            const guardadas = OBJETOS_EM_TEXTO.splice(0, OBJETOS_EM_TEXTO.length);
+            const vazia = contar();
+            guardadas.forEach(function (linha) { OBJETOS_EM_TEXTO.push(linha); });
+            conferir("camada de objetos vazia: recusa, um aviso, sem exceção", vazia.excecao === null && vazia.valido === false && vazia.avisos === 1);
+
+            const linhaOriginal = OBJETOS_EM_TEXTO[2];
+            OBJETOS_EM_TEXTO[2] = linhaOriginal.slice(0, 9);
+            const curta = contar();
+            OBJETOS_EM_TEXTO[2] = linhaOriginal;
+            conferir("linha de objetos mais curta: recusa com um aviso", curta.excecao === null && curta.valido === false && curta.avisos === 1);
+            conferir("o aviso fala de mapa inválido", /Mapa inválido/.test(errosDeConsole[errosDeConsole.length - 1]));
+            conferirIgual("depois dos testes o mapa de verdade ainda é válido", contar().valido, true);
+            errosDeConsole.length = antes;
+        });
+
+        testar("sem erro de console e com o estado restaurado", function () {
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("o terreno de verdade foi restaurado", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("e o giro final é 0", rotacao, 0);
+            conferirIgual("nenhum aviso sobrou", errosDeConsole.join(" | "), "");
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>
