@@ -61,6 +61,9 @@
         let noitesRecomecadas = 0;
 
         window.addEventListener("load", function () {
+            /* Quem mede fica olhando a tela por minutos (fotossensibilidade): clarões suaves. Custo por quadro igual. */
+            reduzirClaroes = true;
+            mostrarOpcoes();
             montarPainelDeMedicao({
                 titulo: "Proa Acesa passo 8",
                 cenarios: [

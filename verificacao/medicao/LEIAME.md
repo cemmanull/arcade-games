@@ -48,7 +48,7 @@ não gire a tela durante a medição.
    Exemplos: `http://192.168.0.15:8000/verificacao/medicao/proa-acesa-08.html` e
    `http://192.168.0.15:8000/verificacao/medicao/reflexo-08.html`. Deve aparecer um painel escuro com o botão
    **Medir**. No Proa Acesa, se aparecer "Precisa de internet para baixar o three.js", o celular está sem
-   internet (o Reflexo não usa internet).
+   internet (o Reflexo não usa internet). A página do Proa Acesa começa com "Reduzir clarões" ligado; se quiser ver os clarões inteiros, aperte o botão para desligar.
 6. Aperte **Medir** e **espere sem mexer**, com a tela acesa e a página aberta (cerca de meio minuto por página; mostra
    "Cenário 1 de 2", "Cenário 2 de 2"). Se a tela apagar ou você trocar de aplicativo, aperte **Medir de novo**.
 7. Quando aparecer o texto do resultado, aperte **Copiar resultado** e cole na conversa. Se o celular não
