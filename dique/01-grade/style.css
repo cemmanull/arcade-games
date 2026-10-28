@@ -1,4 +1,4 @@
-/* DIQUE — PASSO 1: estilo. Canvas de 384x204: a ilha (360 de largura) mais 12 de margem de cada lado. */
+/* DIQUE — PASSO 1: estilo. O canvas tem o tamanho do mapa (script.js): 384x204 aqui, a ilha de 360 de largura mais 12 de margem de cada lado. */
 
 body {
     display: flex;
@@ -23,7 +23,7 @@ h1 {
 
 canvas {
     display: block;
-    width: min(384px, 100%);
+    max-width: 100%;                         /* o canvas tem o tamanho do mapa (script.js); em tela estreita, encolhe */
     height: auto;
     outline: 2px solid #9aa6c4;   /* outline não entra na conta do getBoundingClientRect */
     touch-action: none;                      /* o dedo aponta, a página não rola */

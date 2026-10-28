@@ -1,4 +1,4 @@
-/* DIQUE — PASSO 2: estilo. Canvas de 384x252: a ilha (360 de largura), o bloco mais alto e 12 de margem. */
+/* DIQUE — PASSO 2: estilo. O canvas tem o tamanho do mapa (script.js): 384x252 aqui, a ilha, o bloco mais alto e 12 de margem. */
 
 body {
     display: flex;
@@ -23,7 +23,7 @@ h1 {
 
 canvas {
     display: block;
-    width: min(384px, 100%);
+    max-width: 100%;                         /* o canvas tem o tamanho do mapa (script.js); em tela estreita, encolhe */
     height: auto;
     outline: 2px solid #9aa6c4;   /* outline não entra na conta do getBoundingClientRect */
     touch-action: none;                      /* o dedo aponta, a página não rola */
@@ -55,7 +55,9 @@ p, pre {
 }
 
 #leitura {
-    min-height: 3.9em;                       /* reserva o lugar: ligar o H não empurra a página */
+    max-width: 100%;
+    white-space: pre-wrap;                   /* linha longa quebra em vez de alargar a página */
+    min-height: 6em;                         /* reserva o lugar: ligar o H não empurra a página */
     font-size: 11px;
     color: #eaf0ff;
 }

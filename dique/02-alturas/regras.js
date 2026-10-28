@@ -39,9 +39,12 @@ const ORIGEM = { x: TAMANHO * LARGURA_DO_BLOCO / 2 + 12, y: 4 * ALTURA_DO_DEGRAU
 let rotacao = 0;                                // giros de 90° da vista (0 a 3)
 let listaDeDesenho = [];                        // as casas na ordem em que são pintadas: de trás para a frente
 
-function verificarMapa() {                      // quadrado, só símbolos da legenda, mar em toda a borda, objetos só em terra
-    const valido = ALTURAS_EM_TEXTO.every(function (linha, y) {
-        return linha.length === TAMANHO && OBJETOS_EM_TEXTO[y].length === TAMANHO && linha.split("").every(function (simbolo, x) {
+function verificarMapa() {                      // as duas camadas quadradas, só símbolos da legenda, mar em toda a borda, objetos só em terra
+    const dimensoesCertas = [ALTURAS_EM_TEXTO, OBJETOS_EM_TEXTO].every(function (camada) {
+        return camada.length === TAMANHO && camada.every(function (linha) { return linha.length === TAMANHO; });
+    });
+    const valido = dimensoesCertas && ALTURAS_EM_TEXTO.every(function (linha, y) {      // só com as dimensões certas se lê OBJETOS_EM_TEXTO[y][x]
+        return linha.split("").every(function (simbolo, x) {
             const naBorda = x === 0 || y === 0 || x === TAMANHO - 1 || y === TAMANHO - 1;
             const objetoNoMar = simbolo === "~" && OBJETOS_EM_TEXTO[y][x] !== ".";
             return /[~0-4]/.test(simbolo) && /[CP.]/.test(OBJETOS_EM_TEXTO[y][x]) && !objetoNoMar && (!naBorda || simbolo === "~");
@@ -55,6 +58,10 @@ function girarPonto(x, y, vezes) {              // cada giro de 90°: (x, y) →
     let ponto = { x: x, y: y };
     for (let giro = 0; giro < vezes; giro++) ponto = { x: TAMANHO - ponto.y, y: ponto.x };
     return ponto;
+}
+
+function alturaVisivel(altura) {                // a água cobre o que está abaixo do nível: o que se vê (e se marca) é a superfície dela
+    return Math.max(altura, NIVEL_DA_AGUA);
 }
 
 function projetar(u, v, z) {                    // a matriz em ação; z sobe o ponto na tela
@@ -79,15 +86,37 @@ function cantosDoBloco(x, y, z) {               // cima, direita, baixo, esquerd
     });
 }
 
-function montarListaDeDesenho() {               // algoritmo do pintor: x'+y' cresce para a frente; no empate, o mais baixo primeiro
-    const lista = [];
+function casaVizinha(x, y, dx, dy) {            // a vizinha na direção da TELA (dx, dy), em qualquer giro; null se cair fora do mapa
+    const centro = girarPonto(x + 0.5, y + 0.5, rotacao);
+    const vizinha = girarPonto(centro.x + dx, centro.y + dy, 4 - rotacao);
+    const casa = { x: Math.floor(vizinha.x), y: Math.floor(vizinha.y) };
+    return casa.x >= 0 && casa.y >= 0 && casa.x < TAMANHO && casa.y < TAMANHO ? casa : null;
+}
+
+function montarListaDeDesenho() {               // algoritmo do pintor: x'+y' cresce para a frente
+    const lista = [];                           // casas com a mesma soma nunca se sobrepõem na tela: a ordem entre elas não importa
     alturas.forEach(function (linha, y) {
         linha.forEach(function (altura, x) {
             const centro = girarPonto(x + 0.5, y + 0.5, rotacao);
             lista.push({ x: x, y: y, altura: altura, proximidade: centro.x + centro.y });
         });
     });
-    return lista.sort(function (a, b) { return a.proximidade - b.proximidade || a.altura - b.altura; });
+    return lista.sort(function (a, b) { return a.proximidade - b.proximidade; });
 }
 
-listaDeDesenho = montarListaDeDesenho();
+function silhuetaCobre(casa, ponto) {           // a caixa da casa (o losango do chão varrido para cima até a altura) cobre este pixel?
+    const chao = mundoParaTela(casa.x + 0.5, casa.y + 0.5, 0);
+    const afastamento = Math.abs(ponto.x - chao.x);
+    if (afastamento > LARGURA_DO_BLOCO / 2) return false;
+    const meiaAltura = LARGURA_DO_BLOCO / 4 * (1 - afastamento / (LARGURA_DO_BLOCO / 2));    // meia altura do losango nesta coluna
+    return ponto.y + casa.altura * ALTURA_DO_DEGRAU >= chao.y - meiaAltura && ponto.y <= chao.y + meiaAltura;
+}
+
+function quemEsconde(x, y) {                    // a casa pintada DEPOIS (mais à frente) que cobre o centro do topo de (x, y), ou undefined
+    const topo = mundoParaTela(x + 0.5, y + 0.5, alturaVisivel(alturas[y][x]));
+    const posicao = listaDeDesenho.findIndex(function (casa) { return casa.x === x && casa.y === y; });
+    return listaDeDesenho.slice(posicao + 1).find(function (casa) { return silhuetaCobre(casa, topo); });
+}
+
+const MAPA_VALIDO = verificarMapa();            // valida antes de montar a lista: um mapa torto não chega ao desenho
+if (MAPA_VALIDO) listaDeDesenho = montarListaDeDesenho();

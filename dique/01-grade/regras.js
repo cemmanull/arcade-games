@@ -51,3 +51,10 @@ function cantosDoBloco(x, y) {                  // cima, direita, baixo, esquerd
         return projetar(centro.x + canto[0], centro.y + canto[1]);
     });
 }
+
+function casaVizinha(x, y, dx, dy) {            // a vizinha na direção da TELA (dx, dy), em qualquer giro; null se cair fora do mapa
+    const centro = girarPonto(x + 0.5, y + 0.5, rotacao);
+    const vizinha = girarPonto(centro.x + dx, centro.y + dy, 4 - rotacao);
+    const casa = { x: Math.floor(vizinha.x), y: Math.floor(vizinha.y) };
+    return casa.x >= 0 && casa.y >= 0 && casa.x < TAMANHO && casa.y < TAMANHO ? casa : null;
+}

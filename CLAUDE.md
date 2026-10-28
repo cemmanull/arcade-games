@@ -72,6 +72,8 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
   intenção.
 - Som sintetizado com Web Audio. Sprites e texturas como texto dentro do código; arquivos de imagem,
   se um dia forem necessários, só no `final`.
+- Tetos de linhas dos documentos de design: conta-se **linhas não vazias de JS próprio**, sem os mapas em
+  texto (as linhas dos mapas literais) e sem bibliotecas. O teto é duro: estourou, corta-se escopo.
 - Antes de acrescentar qualquer dependência, ferramenta ou arquivo de infraestrutura: o curso promete
   "nenhuma instalação".
 

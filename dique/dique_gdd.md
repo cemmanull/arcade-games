@@ -97,7 +97,7 @@ primeiro. É o que o `THREE.Raycaster` do Proa Acesa automatiza. A página de te
 
 ### 4.4 Ordem de desenho: o algoritmo do pintor
 Sem z-buffer (o do `reflexo/06-objetos` era por coluna): desenha-se **de trás para a frente**, ordenando por
-`(x' + y')` já girado e, no empate, por altura. Cada bloco vira topo e duas laterais (polígonos).
+`(x' + y')` já girado (casas com a mesma soma nunca se sobrepõem na tela, então não há desempate a fazer). Cada bloco vira topo e duas laterais (polígonos).
 Vale enquanto os blocos são caixas inteiras da grade; sprites (casa, barco) entram na ordem do bloco onde
 estão. **A água é uma camada translúcida na mesma ordem**: a superfície do nível `T` sobre cada bloco
 alagado é desenhada logo depois do bloco, para um dique à frente cobrir a água de trás e a água da frente
@@ -203,7 +203,7 @@ casas fora do mar, `N` só em dias com chuva. Ele roda como **página de teste d
 
 ## 9. Orçamento de linhas
 
-Contagem: **JS próprio** (sem `GUIA.md`, `index.html`, `style.css`, nem os mapas dos dias). Teto **duro**:
+Contagem: **linhas não vazias de JS próprio** (sem `GUIA.md`, `index.html`, `style.css`, nem os mapas em texto), a regra do curso registrada no `CLAUDE.md`. Teto **duro**:
 estourou, corta-se escopo, não o teto. Menor que o Reflexo (2.500).
 
 | Passo | Teto de JS (acumulado) | Teto de CSS |
@@ -230,7 +230,7 @@ Páginas em `verificacao/dique/NN-passo.html`, no harness existente (`verificaca
 | Passo | A página afirma |
 |---|---|
 | 01 | **ida e volta**: mundo → tela → mundo devolve o ponto (erro < 1e-9) em 1.000 pontos, nos 4 giros; `det ≠ 0`; ilha 10×10 cabe em 390 px |
-| 02 | **ordem do pintor**: para todo par de blocos cujos polígonos se sobrepõem na tela, o desenhado depois está mais perto (`x'+y'` maior ou, no empate, mais alto), nos 4 giros |
+| 02 | **ordem do pintor**: para todo par de blocos cujos polígonos se sobrepõem na tela, o desenhado depois está mais perto (`x'+y'` maior), nos 4 giros; casas com a mesma soma nunca se sobrepõem, então não há desempate |
 | 03 | **picking** com alturas bate com a força bruta (polígono a polígono) em todos os pixels de uma grade da tela, para 20 terrenos aleatórios com semente; bloco, e se topo ou lateral |
 | 04 | rolar e aproximar não mudam o resultado do picking (mesmo bloco sob o mesmo ponto de mundo); 4 giros voltam ao início; limites da rolagem; sem rolagem da página em 390×750 |
 | 05 | **enchente = preenchimento independente** (outra implementação: ponto fixo sobre a grade inteira), sem volume; com volume, ordem baixa → alta; monotonia (alagado nunca seca) |
@@ -282,10 +282,10 @@ Pré-requisitos mínimos: **pacman, xadrez, reflexo** (tetris recomendado). "Reu
 
 | Passo | Conceito novo | Reusa | Seção |
 |---|---|---|---|
-| **01-grade** (IS1) | mapa em texto, projeção por matriz 2×2, inversa, ida e volta | `pacman/01-labirinto` (mapa em texto); `reflexo/01-planta` (vista de cima, planta) | 4.1, 4.2 |
-| **02-alturas** (IS2) | alturas, topo e laterais, **ordem do pintor** (× z-buffer), água translúcida | `reflexo/06-objetos` (z-buffer, ordem por distância); `shoot-em-up/04-inimigos` (listas de objetos) | 4.4, 6 |
-| **03-picking** (IS3) | toque com alturas: raio por colunas, topo × lateral, força bruta como referência | `reflexo/03-um-raio` (DDA); `tetris/04-controles` (entrada → intenção) | 3, 4.3 |
-| **04-camera** (IS4) | rolagem, zoom, **girar a vista 90°**, dique que esconde a casa, H | `tetris/05-rotacao` (rotação 90° de grade); `jogo-da-cobrinha/05-teclado` | 3, 4.2, 4.4 |
+| **01-grade** (IS1) | mapa em texto, projeção por matriz 2×2, inversa, ida e volta (o giro só como conta, sem botão) | `pacman/01-labirinto` (mapa em texto); `reflexo/01-planta` (vista de cima, planta) | 4.1, 4.2 |
+| **02-alturas** (IS2) | alturas, topo e laterais, **ordem do pintor** (× z-buffer; só `x'+y'`, sem desempate), **girar a vista 90°** (Q e R), água plana e translúcida, cursor pelas setas na ordem do pintor | `reflexo/06-objetos` (z-buffer, ordem por distância); `shoot-em-up/04-inimigos` (listas de objetos); `tetris/05-rotacao` (rotação 90° de grade); `jogo-da-cobrinha/05-teclado` | 3, 4.2, 4.4, 6 |
+| **03-picking** (IS3) | toque com alturas: raio por colunas, topo × lateral, força bruta como referência, **dois toques** (marcar e confirmar) | `reflexo/03-um-raio` (DDA); `tetris/04-controles` (entrada → intenção) | 3, 4.3 |
+| **04-camera** (IS4) | rolagem (arrastar e teclas), zoom, picking certo sob a câmera, **dique alto que esconde a casa** (a rotação do passo 2 a revela), H | `reflexo/06-objetos` (o que cobre o quê); `tetris/04-controles` (entrada → intenção) | 3, 4.2, 4.4 |
 | **05-enchente** (IS5) | a mecânica: erguer/cavar, BFS por altura, volume, casas salvas | `pacman/06-modos` (BFS); `pacman/04-fantasma` (campo de distância); `xadrez/05-xeque` (estado imutável) | 4.6, 4.7 |
 | **06-fichas** (IS6) | máquina de estados (dia e maré), **tábua como fichas**, chuva, estoque entre marés | `pacman/06-modos` (estados); `tetris/08-velocidade` (curva como tabela); `shoot-em-up/07-roteiro` | 4.5, 4.8 |
 | **07-dias** (IS7) | dias como dados, dificuldade por eixo, **validação por busca**, `par` | `xenomorph/06-semente` (validação); `reflexo/08-sombras` (BFS em jogo) | 5 |

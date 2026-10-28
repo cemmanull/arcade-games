@@ -1,0 +1,40 @@
+<!--
+  DIQUE — PASSO 3: O PICKING
+
+  Toque ou clique num bloco: o jogo descobre qual é, o topo ou a lateral, descendo um raio pelas colunas.
+  Dois toques na mesma casa: o primeiro marca, o segundo confirma (um pino). Setas movem o cursor.
+  H mostra o raio, a face batida e a conferência com a força bruta.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dique — passo 3</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="regras.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Dique</h1>
+
+    <canvas id="jogo" width="384" height="252">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+
+    <p id="aviso" role="status"></p>
+
+    <pre id="leitura" aria-live="off"></pre>
+
+    <p id="ajuda">Toque: marcar, de novo: confirmar · setas: cursor · Q R: girar · H: mostrar o invisível</p>
+</body>
+</html>

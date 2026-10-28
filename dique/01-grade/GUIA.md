@@ -1,7 +1,7 @@
 # Dique — Passo 1: A grade
 
 **Mudou:** os quatro arquivos (é o primeiro passo): `index.html`, `style.css`, `regras.js`, `script.js`
-**Rode:** abra o `index.html`, passe o mouse (ou o dedo) pela ilha e depois aperte **H**.
+**Rode:** abra o `index.html`, passe o mouse (ou o dedo) pela ilha, use as **setas** e depois aperte **H**.
 
 ---
 
@@ -9,10 +9,11 @@
 
 Uma ilha de 10×10 casas, vista de cima e de lado ao mesmo tempo: cada casa é um **losango**, como numa
 vista isométrica. O mar é azul; a terra vai da areia (altura 0) à relva e à rocha, e o cinza-claro é o pico.
-Nada se mexe sozinho. Um contorno **amarelo** marca a casa sob o mouse ou o dedo.
+Nada se mexe sozinho. Um contorno **amarelo** marca a casa sob o mouse ou o dedo, e as **setas** do teclado
+andam com ele pela tela (a seta para a direita vai para a casa que está à direita na tela, em qualquer giro).
 
 Com **H** (ou o botão **Ver**) aparecem os eixos do mundo (`x` vermelho, `y` azul), o número de altura de cada
-casa e, embaixo, a **matriz** que desenhou tudo, a **inversa** dela, o determinante e o ponto do chão que a
+casa (em branco, com contorno escuro: lê-se sobre qualquer cor de terreno) e, embaixo, a **matriz** que desenhou tudo, a **inversa** dela, o determinante e o ponto do chão que a
 inversa descobriu sob o dedo. É o hábito do curso: mostrar o invisível.
 
 Este passo é plano de propósito: a altura só aparece como cor e como número. O passo 2 levanta os blocos.
@@ -38,7 +39,8 @@ blocos empilhados, e `~` é o mar (altura 0, e é de onde a água virá). A bord
 alaga nunca precisa perguntar se a casa existe.
 
 `TAMANHO` é deduzido do texto (`ALTURAS_EM_TEXTO.length`), nunca escrito à mão. Trocar o mapa por outro
-quadrado muda a ilha e o canvas se ajusta ao `ORIGEM`.
+quadrado muda a ilha, e o canvas se ajusta sozinho: o `script.js` calcula a largura (`TAMANHO × L + 24`) e a altura
+(`ORIGEM.y + TAMANHO × L/2 + 12`) a partir do mapa, e o `ORIGEM` também sai de `TAMANHO`.
 
 ---
 
@@ -134,8 +136,8 @@ function girarPonto(x, y, vezes) {
 
 `rotacao` (0 a 3) diz quantos giros a vista deu. `mundoParaTela` gira e depois projeta; `telaParaMundo`
 inverte a matriz e depois gira **`4 − rotacao`** vezes: quatro giros dão a volta inteira, então esses giros
-extras desfazem os primeiros. Aqui ainda não há botão de girar (ele chega no passo 4), mas o teste põe
-`rotacao` em 0, 1, 2 e 3 e confere a ida e volta nos quatro.
+extras desfazem os primeiros. Aqui ainda não há botão de girar (ele chega no passo 2, onde girar a vista é o que
+torna visível a ordem de pintura), mas o teste põe `rotacao` em 0, 1, 2 e 3 e confere a ida e volta nos quatro.
 
 ---
 
@@ -156,12 +158,16 @@ global, e o `script.js` usa `MATRIZ`, `alturas` e `telaParaMundo`, que o `regras
 O estado vive em variáveis globais simples: `alturas`, `MATRIZ`, `INVERSA`, `rotacao`, `cursor`.
 O mouse e o dedo usam o mesmo caminho (Pointer Events), e `touch-action: none` no CSS impede o dedo de rolar a página.
 
+As **setas** fecham o caminho do teclado: `casaVizinha(x, y, dx, dy)` (no `regras.js`) gira a casa para a vista,
+soma `(dx, dy)` e desgira de volta. Por isso "direita" é sempre a direita **da tela**, e a casa de fora do mapa
+vira `null` (o cursor fica onde está). Teclado e toque chegam à mesma intenção: marcar uma casa.
+
 ---
 
 ## Experimente
 
-1. Troque `LARGURA_DO_BLOCO` para `48`. A ilha cabe em 390 px? Quanto mede agora de ponta a ponta? Escreva
-   a conta com `TAMANHO × L`.
+1. Troque `LARGURA_DO_BLOCO` para `48`. Quanto mede agora o canvas (`tela.width`)? Escreva a conta com `TAMANHO × L`
+   e confira no console. Cabe em 390 px? (O CSS encolhe o desenho, mas o que o `apontar` calcula continua certo? Por quê?)
 2. Mude `MATRIZ` para `[[L/2, −L/2], [L/2, L/2]]` (losangos quadrados, 1:1). Aperte **H**: o que mudou na inversa?
    O mouse ainda acerta a casa amarela?
 3. Zere uma coluna: `[[L/2, 0], [L/4, 0]]`. O determinante cai a zero. O que aparece na tela? Por que não existe
@@ -169,8 +175,11 @@ O mouse e o dedo usam o mesmo caminho (Pointer Events), e `touch-action: none` n
 4. Troque o sinal de um número da `INVERSA` sem mexer na `MATRIZ`. Descreva, antes de rodar, para onde o amarelo vai.
 5. No console, em qualquer giro: `telaParaMundo(...Object.values(mundoParaTela(3.2, 7.9)))` e compare com
    `3.2, 7.9`. Faça com `rotacao = 1`, `2` e `3`.
-6. Escreva um mapa seu de 8×8 (mude o texto) e deduza o `ORIGEM` para centralizá-lo no canvas.
-7. **Quebre de propósito:** em `telaParaMundo`, troque `4 - rotacao` por `rotacao`. No console, ponha `rotacao = 1`
+6. Escreva um mapa seu de 8×8 (mude só o texto, com mar na borda). Calcule antes a largura e a altura do canvas e o
+   `ORIGEM`; depois confira `tela.width`, `tela.height` e `ORIGEM` no console.
+7. Com **H** ligado, ponha o cursor numa casa de relva clara e leia o número dela. Ele está legível? Tire o
+   `strokeText` do `rotular` e compare: o que o contorno escuro resolve?
+8. **Quebre de propósito:** em `telaParaMundo`, troque `4 - rotacao` por `rotacao`. No console, ponha `rotacao = 1`
    e repita o exercício 5. Em quais giros o erro some, e por quê?
 
 ---
