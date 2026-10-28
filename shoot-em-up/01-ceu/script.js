@@ -4,7 +4,7 @@
   Duas ideias, e as duas ficam até o fim:
 
   1. O OBJETO É O CENTRO
-     No Pong e no Dealer? Out!, x e y eram o canto superior esquerdo,
+     No Pong, x e y eram o canto superior esquerdo,
      como o fillRect espera. Aqui passam a ser o CENTRO. Neste jogo quase
      tudo gira em torno do centro: mirar no jogador, espalhar balas em
      círculo, explodir. Guardar o centro poupa um "+ largura / 2" em cada
@@ -21,7 +21,7 @@
 // 1. CONSTANTES
 // ============================================================
 /*
-  A nave como texto, como no Dealer? Out!: cada caractere é um pixel, o
+  A nave como texto (passo 1 do GUIA): cada caractere é um pixel, o
   ponto é transparente, e um dicionário traduz letra em cor.
 */
 const SPRITE_DA_NAVE = [
@@ -82,7 +82,7 @@ const nave = {
 
 /*
   Cada estrela guarda só onde ela estava NO INSTANTE ZERO. Sorteadas
-  uma vez, no estado — nunca no desenho (a lição do Dealer? Out!).
+  uma vez, no estado — nunca no desenho, ou o céu tremeria a cada quadro.
 */
 const estrelas = [];
 

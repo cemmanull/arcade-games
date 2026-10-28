@@ -78,4 +78,4 @@ Antes de mexer numa pasta, faça uma cópia.
 
 ---
 
-**Pré-requisito:** [`../pong`](../pong/) · **Antes:** [`../pong`](../pong/) · **Depois:** [`../dealer-out`](../dealer-out/) · **Índice:** [`../README.md`](../README.md)
+**Pré-requisito:** [`../pong`](../pong/) · **Antes:** [`../pong`](../pong/) · **Depois:** [`../shoot-em-up`](../shoot-em-up/) · **Índice:** [`../README.md`](../README.md)

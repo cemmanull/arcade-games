@@ -22,7 +22,7 @@
 // 1. CONSTANTES
 // ============================================================
 /*
-  A nave como texto, como no Dealer? Out!: cada caractere é um pixel, o
+  A nave como texto (passo 1 do GUIA): cada caractere é um pixel, o
   ponto é transparente, e um dicionário traduz letra em cor.
 */
 const SPRITE_DA_NAVE = [
@@ -72,8 +72,8 @@ const DURACAO_DO_CLARAO = 0.04;      // o brilho na ponta da nave ao atirar
   recebe o inimigo (para saber de onde ele partiu) e o seu tempo de
   vida em segundos, e devolve { x, y }.
 
-  Funções guardadas em objetos, como as reações da tabela do Dealer?
-  Out!. Um tipo novo de inimigo é um item novo aqui — nenhum `if` no
+  Funções guardadas em objetos, num catálogo (passo 4 do GUIA). Um tipo
+  novo de inimigo é um item novo aqui — nenhum `if` no
   resto do programa precisa saber que ele existe.
 */
 const INIMIGOS = {
@@ -381,7 +381,7 @@ const nave = {
 
 /*
   Cada estrela guarda só onde ela estava NO INSTANTE ZERO. Sorteadas
-  uma vez, no estado — nunca no desenho (a lição do Dealer? Out!).
+  uma vez, no estado — nunca no desenho, ou o céu tremeria a cada quadro.
 */
 const estrelas = [];
 
@@ -485,7 +485,7 @@ document.addEventListener("keyup", evento => {
 });
 
 /*
-  A tecla que nunca é solta (Dealer? Out!, passo 2): com alt+tab no meio,
+  A tecla que nunca é solta (Tetris, passo 8): com alt+tab no meio,
   o keyup acontece em outra janela. Ao perder o foco, soltamos tudo.
 */
 window.addEventListener("blur", () => {
@@ -564,7 +564,7 @@ function atualizar(tempo) {
 /*
   A CADÊNCIA.
 
-  O mesmo acumulador do gerador de chuva do Dealer? Out!: desconta o
+  O mesmo acumulador de tempo do Tetris (passo 3): desconta o
   tempo, dispara quando chega a zero, recarrega com += para a sobra não
   se perder. Com uma diferença:
 
@@ -615,7 +615,7 @@ function moverTiros(tempo) {
 }
 
 /*
-  A limpeza do Dealer? Out!: filter monta uma lista nova só com quem
+  A limpeza (passo 3 do GUIA): filter monta uma lista nova só com quem
   ainda está na tela. Sem ela, nada muda na tela — e a lista cresce oito
   itens por segundo, para sempre.
 */
@@ -1157,7 +1157,7 @@ function colidem(a, b) {
   `morto = true`. Por quê?
 
   - remover de uma lista no meio do laço que a percorre pula itens (a
-    lição do splice, do Tetris e do Dealer? Out!);
+    lição do splice, do Tetris, passo 6);
   - e o tiro marcado é PULADO no resto do laço: um tiro acerta um inimigo
     só. Sem isso, um tiro que passasse por dois inimigos sobrepostos
     mataria os dois.
@@ -1200,8 +1200,7 @@ function ferirInimigo(inimigo) {
   A nave contra o mundo: balas e inimigos. Invencível, nada a acerta.
 
   `some` para no PRIMEIRO acerto: uma bala e um inimigo no mesmo quadro
-  custam UMA vida, não duas. (A regra "uma colisão, uma vida", do Dealer?
-  Out!.)
+  custam UMA vida, não duas. (A regra "uma colisão, uma vida": passo 6 do GUIA.)
 */
 function verificarNave() {
     if (invencivel > 0) {
@@ -1262,7 +1261,7 @@ function varrerOsMarcados() {
 // 11. PARTÍCULAS
 // ============================================================
 /*
-  A explosão é o sistema de partículas do Dealer? Out!: pontinhos que
+  A explosão é um sistema de partículas (passo 5 do GUIA): pontinhos que
   nascem juntos, saem em direções sorteadas e morrem com o tempo.
 
   A direção é um ÂNGULO sorteado, transformado em vetor com cosseno e

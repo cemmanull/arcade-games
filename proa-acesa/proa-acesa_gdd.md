@@ -268,10 +268,10 @@ Os mais próximos:
 |---|---|---|---|
 | F1 `01-cena` | import map, ponte `THREE`, cena/câmera/renderer, redimensionar, aviso sem internet | `pong/02-loop` (rAF + dt) | 8 |
 | F2 `02-ilha` | geometrias, materiais, luzes, **grafo de cena** (barca → lanterna → feixe) | estado × desenho (`xadrez/01-tabuleiro`) | 4.2, 6 |
-| F3 `03-mar` | vértices por seno, névoa, `lerp` dia→noite | trajetos por seno (`shoot-em-up/04-inimigos`), `lerp` (`dealer-out/09-dificuldade`) | 4.6, 6 |
+| F3 `03-mar` | vértices por seno, névoa, `lerp` dia→noite | trajetos por seno (`shoot-em-up/04-inimigos`) | 4.6, 6 |
 | F4 `04-feixe` | `SpotLight` + cone filhos, guinada/arfagem, local × mundo, aceleração angular, câmera que segue | `clamp` (`pong/04-raquetes`), entrada como intenção (`jogo-da-cobrinha/05-teclado`) | 3, 4.2 |
-| F5 `05-barcos` | mundo no plano XZ em `regras.js`, buscar/chegar, comboio, listas vivas | rastro (`jogo-da-cobrinha/06-cobra`), alvos como função (`pacman/05-personalidades`), `atan2` (`shoot-em-up/06-contra-ataque`), listas (`dealer-out/03-chuva`) | 4.1, 4.4 |
-| F6 `06-iluminar` | produto escalar (cone), `THREE.Raycaster`, brasa (lembrança) | visão da criatura (`xenomorph/05-criaturas`), DDA (`reflexo/`), temporizadores (`dealer-out/06-atordoamento`) | 4.3 |
-| F7 `07-tempestade` | noites como fichas, chuva instanciada, draw calls medidos, relâmpago, calor | curva como tabela (`tetris/08-velocidade`), roteiro (`shoot-em-up/07-roteiro`), partículas (`dealer-out/03-chuva`) | 4.5–4.8 |
-| F8 `08-depuracao` | `OrbitControls` pela import map, H mostra o invisível, `dispose()`, `renderer.info.memory` | vazamento de listas (`dealer-out`) | 2, 8 |
-| F9 `final` | semente + BFS, menu, pausa, som, recorde, toque, qualidade, reduzir clarões, exercícios | semente (`xenomorph/06-semente`), BFS (`pacman`), `localStorage` (`tetris`), toque (`dealer-out`) | 4.9, 5, 7, 8 |
+| F5 `05-barcos` | mundo no plano XZ em `regras.js`, buscar/chegar, comboio, listas vivas | rastro (`jogo-da-cobrinha/06-cobra`), alvos como função (`pacman/05-personalidades`), `atan2` (`shoot-em-up/06-contra-ataque`), listas (`shoot-em-up/03-tiros`) | 4.1, 4.4 |
+| F6 `06-iluminar` | produto escalar (cone), `THREE.Raycaster`, brasa (lembrança) | visão da criatura (`xenomorph/05-criaturas`), DDA (`reflexo/`), temporizadores (`shoot-em-up`) | 4.3 |
+| F7 `07-tempestade` | noites como fichas, chuva instanciada, draw calls medidos, relâmpago, calor | curva como tabela (`tetris/08-velocidade`), roteiro (`shoot-em-up/07-roteiro`), partículas (`shoot-em-up/05-colisao`) | 4.5–4.8 |
+| F8 `08-depuracao` | `OrbitControls` pela import map, H mostra o invisível, `dispose()`, `renderer.info.memory` | vazamento de listas (`shoot-em-up/03-tiros`) | 2, 8 |
+| F9 `final` | semente + BFS, menu, pausa, som, recorde, toque, qualidade, reduzir clarões, exercícios | semente (`xenomorph/06-semente`), BFS (`pacman`), `localStorage` (`tetris`), toque (`tetris/final`) | 4.9, 5, 7, 8 |

@@ -88,19 +88,27 @@ uma vez.
 
 ---
 
-## Funções no catálogo
+## Um catálogo de tipos
 
 ```js
 const INIMIGOS = {
     drone: { sprite: [...], cores: {...}, trajeto: (inimigo, t) => ({ ... }) },
-    ...
+    onda:  { ... },
+    mergulhador: { ... }
 };
 
 const posicao = INIMIGOS[inimigo.tipo].trajeto(inimigo, inimigo.t);
 ```
 
-O catálogo do Dealer? Out! guardava números e textos; este guarda também **comportamento**.
-Funções são valores em JavaScript: cabem num objeto como qualquer outro.
+Com vários tipos de objeto, o que muda de um para outro mora em **dados**, não em `if`s
+espalhados. Cada inimigo na lista só carrega `tipo: "onda"`; quem precisa do desenho ou do
+trajeto olha o catálogo pela chave. A lista de tipos que o gerador sorteia sai do próprio
+catálogo (`const TIPOS_DE_INIMIGO = Object.keys(INIMIGOS)`), nunca digitada uma segunda vez: dois
+lugares com a mesma informação acabam divergindo.
+
+Este catálogo guarda, além de números e textos, **comportamento**: funções são valores em
+JavaScript e cabem num objeto como qualquer outro (a forma de uma peça do Tetris, passo 2, era
+só dado; aqui o trajeto é uma conta).
 
 O resultado: um tipo novo de inimigo é um item novo no catálogo. `moverInimigos` não tem
 `if (tipo === "onda")` nenhum, e não vai precisar ter.
@@ -122,6 +130,13 @@ chaves como o **corpo** da função — e ela devolveria `undefined`.
 
 `criarInimigo` chama `posicionar` antes de pôr o inimigo na lista. Sem isso, ele passaria um
 quadro em `(0, 0)` — um piscar no canto da tela.
+
+### Quem nasce, e quando
+
+`gerarInimigos` é o acumulador do passo 3 com um intervalo **sorteado** a cada nascimento, e o
+tipo vem de `sortear(TIPOS_DE_INIMIGO)`. Ele nunca para, então aqui acumular crédito não é
+problema. A limpeza (`removerInimigosQueSairam`) é a mesma do passo 3: sem ela a lista só
+cresce.
 
 ---
 

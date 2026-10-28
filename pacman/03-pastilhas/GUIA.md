@@ -93,7 +93,7 @@ if (tempoDeComemoracao > 0) {
 ```
 
 Dois segundos em que o mundo espera e as paredes piscam. Um número que desce, e uma guard
-clause que congela o resto — a técnica do atordoamento do Dealer? Out! e do pisca-pisca das
+clause que congela o resto — a técnica do pisca-pisca das
 linhas do Tetris.
 
 ---

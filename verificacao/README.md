@@ -65,7 +65,6 @@ continua reprovando. Cada entrada tem a página, um padrão que casa com a linha
 | Página | Erro | Motivo |
 |--------|------|--------|
 | `tutorial/01-html/index.html` | `ERR_FILE_NOT_FOUND` de `nao-existe.png` e `tambem-nao-existe.png` | a lição mostra o texto `alt` de uma imagem que não existe, de propósito |
-| `dealer-out/final/index.html` | `manifest.webmanifest` bloqueado por CORS (e o `ERR_FAILED` que o acompanha) | em `file://` o PWA não carrega o manifesto; o jogo abre por duplo clique, mas só instala servido por https (ver `dealer-out/final/GUIA.md`) |
 
 Para acrescentar uma entrada, descreva a linha toda, com o nome do arquivo ou recurso: o executor
 impõe `^…$` a todo padrão, então uma mensagem que apenas *contém* o texto não é aceita.

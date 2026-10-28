@@ -36,10 +36,10 @@ o que o curso ensinou — e cada passo diz de onde veio cada peça:
 |---|---|
 | o mundo é um texto que vira matriz | Pac-Man, Tetris |
 | delta time, caixas, máquina de estados do jogo | Pong |
-| listas que nascem e morrem, fichas de dados, temporizadores, partículas | Dealer? Out! |
+| listas que nascem e morrem, fichas de dados, temporizadores, partículas | Shoot 'em up |
 | mira, leques, chefe com fases, telegrafar | Shoot 'em up |
 | busca em largura, comportamento emergente por alvos | Pac-Man |
-| código em arquivos por assunto, ordem dos scripts | xadrez, Dealer? Out! |
+| código em arquivos por assunto, ordem dos scripts | xadrez |
 | ler o `localStorage` com desconfiança | Tetris |
 
 E acrescenta três coisas que nenhum outro módulo tinha: **física de plataforma** (o soldado tem
@@ -47,13 +47,13 @@ peso, e o jogo esconde perdões), **geração procedural com semente** (aleatór
 conferido antes de jogar) e **progressão entre partidas** (duas memórias com tempos de vida
 diferentes).
 
-**Pré-requisito:** o Pac-Man (e, por ele, o Tetris, o Dealer? Out! e o Pong) e o Shoot 'em up, para o chefe.
+**Pré-requisito:** o Pac-Man (e, por ele, o Tetris e o Pong) e o Shoot 'em up, para o chefe.
 
 ---
 
 ## Do documento ao jogo
 
-Como no Dealer? Out!, cada guia diz qual seção do GDD está sendo atendida, e o guia final traz a
+Cada guia diz qual seção do GDD está sendo atendida, e o guia final traz a
 tabela completa — do pedido ao código. O GDD descreve um jogo enorme (sete biomas, oito armas, dez
 inimigos, cinco chefes) e pede, na seção 14, que se priorize um protótipo de **doze itens**. Os doze
 estão aqui. O guia final também lista, com honestidade, o que ficou de fora e onde cada peça

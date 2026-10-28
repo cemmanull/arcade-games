@@ -4,8 +4,8 @@
   Segure Espaço e a nave atira — oito tiros por segundo, nem mais nem
   menos, por mais que você martele a tecla.
 
-  Os tiros moram numa LISTA que cresce e encolhe, como a chuva do
-  Dealer? Out!: nascem na ponta da nave, sobem, e são jogados fora com
+  Os tiros moram numa LISTA que cresce e encolhe (passo 3 do GUIA):
+  nascem na ponta da nave, sobem, e são jogados fora com
   filter quando saem da tela.
 
   A novidade é a CADÊNCIA: um temporizador de recarga que diz quando a
@@ -18,7 +18,7 @@
 // 1. CONSTANTES
 // ============================================================
 /*
-  A nave como texto, como no Dealer? Out!: cada caractere é um pixel, o
+  A nave como texto (passo 1 do GUIA): cada caractere é um pixel, o
   ponto é transparente, e um dicionário traduz letra em cor.
 */
 const SPRITE_DA_NAVE = [
@@ -88,7 +88,7 @@ const nave = {
 
 /*
   Cada estrela guarda só onde ela estava NO INSTANTE ZERO. Sorteadas
-  uma vez, no estado — nunca no desenho (a lição do Dealer? Out!).
+  uma vez, no estado — nunca no desenho, ou o céu tremeria a cada quadro.
 */
 const estrelas = [];
 
@@ -148,7 +148,7 @@ document.addEventListener("keyup", evento => {
 });
 
 /*
-  A tecla que nunca é solta (Dealer? Out!, passo 2): com alt+tab no meio,
+  A tecla que nunca é solta (Tetris, passo 8): com alt+tab no meio,
   o keyup acontece em outra janela. Ao perder o foco, soltamos tudo.
 */
 window.addEventListener("blur", () => {
@@ -202,7 +202,7 @@ function atualizar(tempo) {
 /*
   A CADÊNCIA.
 
-  O mesmo acumulador do gerador de chuva do Dealer? Out!: desconta o
+  O mesmo acumulador de tempo do Tetris (passo 3): desconta o
   tempo, dispara quando chega a zero, recarrega com += para a sobra não
   se perder. Com uma diferença:
 
@@ -251,7 +251,7 @@ function moverTiros(tempo) {
 }
 
 /*
-  A limpeza do Dealer? Out!: filter monta uma lista nova só com quem
+  A limpeza (passo 3 do GUIA): filter monta uma lista nova só com quem
   ainda está na tela. Sem ela, nada muda na tela — e a lista cresce oito
   itens por segundo, para sempre.
 */

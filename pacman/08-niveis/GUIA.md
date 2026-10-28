@@ -95,7 +95,7 @@ Três ideias que já apareceram no curso, juntas:
 | Ideia | Onde apareceu antes |
 |---|---|
 | um objeto que existe ou é `null` | a peça atual do Tetris |
-| um temporizador que desce até sumir | o atordoamento do Dealer? Out! |
+| um temporizador que desce até sumir | o pisca-pisca das linhas do Tetris |
 | piscar antes de acabar | o fim do susto, no passo 6 |
 
 E `includes` pergunta "este número está na lista?": as duas aparições são dados, não dois `if`.

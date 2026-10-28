@@ -2,8 +2,8 @@
   SHOOT 'EM UP — PASSO 2: A NAVE
 
   A nave obedece. O teclado é o do Pong — um painel de interruptores, com
-  keydown ligando e keyup desligando — e a ideia de INTENÇÃO é a do
-  Dealer? Out!: as teclas não movem a nave, elas dizem para onde ela
+  keydown ligando e keyup desligando — e a ideia de INTENÇÃO (GUIA) é a
+  mesma de sempre: as teclas não movem a nave, elas dizem para onde ela
   QUER ir.
 
   A novidade é um bug que só existe em duas dimensões: na diagonal, sem
@@ -16,7 +16,7 @@
 // 1. CONSTANTES
 // ============================================================
 /*
-  A nave como texto, como no Dealer? Out!: cada caractere é um pixel, o
+  A nave como texto (passo 1 do GUIA): cada caractere é um pixel, o
   ponto é transparente, e um dicionário traduz letra em cor.
 */
 const SPRITE_DA_NAVE = [
@@ -79,7 +79,7 @@ const nave = {
 
 /*
   Cada estrela guarda só onde ela estava NO INSTANTE ZERO. Sorteadas
-  uma vez, no estado — nunca no desenho (a lição do Dealer? Out!).
+  uma vez, no estado — nunca no desenho, ou o céu tremeria a cada quadro.
 */
 const estrelas = [];
 
@@ -126,7 +126,7 @@ document.addEventListener("keyup", evento => {
 });
 
 /*
-  A tecla que nunca é solta (Dealer? Out!, passo 2): com alt+tab no meio,
+  A tecla que nunca é solta (Tetris, passo 8): com alt+tab no meio,
   o keyup acontece em outra janela. Ao perder o foco, soltamos tudo.
 */
 window.addEventListener("blur", () => {

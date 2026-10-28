@@ -17,7 +17,7 @@ devagar; as claras, depressa. Parece que a nave voa para cima — e ela nem se m
 const nave = { x: 60, y: 140 };   // o CENTRO da nave
 ```
 
-No Pong e no Dealer? Out!, `x` e `y` eram o **canto superior esquerdo**, porque é assim que
+No Pong, `x` e `y` eram o **canto superior esquerdo**, porque é assim que
 o `fillRect` pensa. Neste jogo, quase tudo gira em torno do **centro**:
 
 - um inimigo mira **no centro** da nave;
@@ -58,8 +58,8 @@ O `%` (resto da divisão) dobra esse número de volta para dentro da tela:
 A estrela que sai por baixo reaparece em cima, para sempre, sem nenhum `if`.
 
 E há um bônus: o céu é uma **função do tempo**. Pausar o relógio pausa o céu. Dado o mesmo
-`tempoTotal`, o desenho é sempre o mesmo. É a lição do Dealer? Out! — *se pode ser
-calculado, não guarde* — levada ao extremo.
+`tempoTotal`, o desenho é sempre o mesmo. É a regra *se pode ser calculado, não guarde*
+levada ao extremo.
 
 ---
 
@@ -100,7 +100,34 @@ tempoTotal += tempo;
 
 Por que não usar direto o `instanteAtual` que o `requestAnimationFrame` entrega? Porque esse
 relógio **não para**. Com a pausa (no final), o céu precisa congelar — e só congela o que
-depende de um relógio que o jogo controla. **Um jogo, um relógio**, como no Dealer? Out!.
+depende de um relógio que o jogo controla. **Um jogo, um relógio**: tudo o que depende do
+tempo é contado dentro do loop, com o mesmo `tempo`. Um `setInterval` ou `setTimeout` teria
+o relógio próprio, que não sabe de pausa nem de aba em segundo plano — e dois relógios no
+mesmo programa acabam discordando. O céu é o primeiro a obedecer a esse relógio; os
+temporizadores dos próximos passos (recarga, invencibilidade) também.
+
+### A nave é texto
+
+```js
+const SPRITE_DA_NAVE = [ "....#....", "...#c#...", ... ];
+const CORES_DA_NAVE = { "#": "#e8ecff", c: "#00f0ff", f: "#ff9f1c" };
+```
+
+Cada caractere é um pixel; o `.` é transparente; um dicionário traduz letra em cor.
+`desenharSprite` percorre as linhas, procura a cor de cada letra e pinta um `fillRect` de 1×1.
+Nada de arquivo de imagem: o desenho se edita no próprio código, uma letra de cada vez, e
+a largura e a altura da nave saem de graça (`sprite[0].length`, `sprite.length`). Os
+inimigos dos próximos passos usam o mesmo truque.
+
+### Uma tela em pé cabe na altura
+
+```css
+width: min(var(--largura-da-tela), 92vw, calc((100vh - 140px) * 3 / 4));
+```
+
+Este canvas (120×160) é em pé, e limitar só pela largura da janela não basta: num notebook
+ele passaria da altura. O `min` escolhe o menor
+de três limites, e o terceiro converte a **altura** disponível em largura pela proporção 3:4.
 
 ---
 

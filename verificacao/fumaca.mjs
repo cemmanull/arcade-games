@@ -18,11 +18,6 @@ const ERROS_ESPERADOS = [
         padrao: /network: Failed to load resource: net::ERR_FILE_NOT_FOUND \(file:\/\/\/.*\/(nao-existe|tambem-nao-existe)\.png\)/,
         motivo: "a lição mostra o texto alternativo (alt) de uma imagem que não existe, de propósito",
     },
-    {
-        pagina: "dealer-out/final/index.html",
-        padrao: /javascript: Access to manifest at '[^']*\/manifest\.webmanifest' .*|network: Failed to load resource: net::ERR_FAILED \(file:\/\/\/.*\/manifest\.webmanifest\)/,
-        motivo: "o manifesto do PWA é bloqueado por CORS em file://; o jogo abre, mas só instala servido por https (ver dealer-out/final/GUIA.md)",
-    },
 ];
 
 /* `paginas` é uma lista de { caminho, nome }. Devolve 0 se nenhuma página tem erro inesperado, senão 1. */

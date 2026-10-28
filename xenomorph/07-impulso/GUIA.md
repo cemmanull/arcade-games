@@ -126,7 +126,7 @@ const AO_PEGAR = {
 };
 ```
 
-Os efeitos do Dealer? Out!, de novo. A aparência de cada item está em `ITENS` (dados); o que ele faz,
+Dados de um lado, código do outro, como nos catálogos do Shoot 'em up. A aparência de cada item está em `ITENS` (dados); o que ele faz,
 em `AO_PEGAR` (código). Devolver `false` quer dizer "não peguei": a cápsula de vida fica no chão
 quando a vida está cheia — ela vai fazer falta depois.
 

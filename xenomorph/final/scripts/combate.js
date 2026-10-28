@@ -20,7 +20,7 @@ function sobrepoe(a, b) {
 /*
   Tocar uma criatura ou pisar numa poça fere. Uma ferida por vez: depois
   dela vem a invulnerabilidade, e enquanto ela durar nada mais fere — a
-  "janela de invulnerabilidade" do Dealer? Out!, que impede uma criatura
+  "janela de invulnerabilidade" dos jogos de ação, que impede uma criatura
   parada em cima do soldado de tirar toda a vida num segundo.
 */
 function verificarContatos() {

@@ -325,7 +325,7 @@ const sala = criarSala();
 // ============================================================
 /*
   Os campos novos são quase todos TEMPORIZADORES, em segundos — a ideia
-  do atordoamento do Dealer? Out!: um número que desce até zero, e
+  do pisca-pisca das linhas do Tetris: um número que desce até zero, e
   "está valendo" enquanto for maior que zero.
 */
 const soldado = {
@@ -1058,7 +1058,7 @@ function atualizarCasulos(tempo) {
 }
 
 /*
-  AS PARTÍCULAS, como no Dealer? Out!: nascem num ponto com velocidades
+  AS PARTÍCULAS, como no Shoot 'em up: nascem num ponto com velocidades
   sorteadas, caem um pouco, e morrem sozinhas. Não colidem com nada —
   ninguém repara, e custaria caro.
 */

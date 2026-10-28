@@ -182,7 +182,7 @@ const tempoDela = criatura.lenta > 0 ? tempo * RITMO_DA_CRIATURA_LENTA : tempo;
 
 Multiplicar só a velocidade não serviria: o bote do saltador define `vx` **uma vez** e depois o deixa
 em paz. Desacelerando o **tempo da criatura**, tudo o que ela faz — andar, cair, esperar, mirar —
-anda a 40%. A escala do tempo dos poderes do Dealer? Out!, numa criatura só.
+anda a 40%. A escala do tempo, numa criatura só.
 
 ---
 

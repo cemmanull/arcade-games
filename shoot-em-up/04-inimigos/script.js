@@ -1,7 +1,7 @@
 /*
   SHOOT 'EM UP — PASSO 4: OS INIMIGOS
 
-  Três tipos, num catálogo, como os catorze objetos do Dealer? Out!. A
+  Três tipos, num catálogo de dados (veja o GUIA). A
   novidade está no jeito de MOVER.
 
   Até aqui, todo movimento do curso foi assim:
@@ -24,7 +24,7 @@
 // 1. CONSTANTES
 // ============================================================
 /*
-  A nave como texto, como no Dealer? Out!: cada caractere é um pixel, o
+  A nave como texto (passo 1 do GUIA): cada caractere é um pixel, o
   ponto é transparente, e um dicionário traduz letra em cor.
 */
 const SPRITE_DA_NAVE = [
@@ -74,8 +74,8 @@ const DURACAO_DO_CLARAO = 0.04;      // o brilho na ponta da nave ao atirar
   recebe o inimigo (para saber de onde ele partiu) e o seu tempo de
   vida em segundos, e devolve { x, y }.
 
-  Funções guardadas em objetos, como as reações da tabela do Dealer?
-  Out!. Um tipo novo de inimigo é um item novo aqui — nenhum `if` no
+  Funções guardadas em objetos, num catálogo (passo 4 do GUIA). Um tipo
+  novo de inimigo é um item novo aqui — nenhum `if` no
   resto do programa precisa saber que ele existe.
 */
 const INIMIGOS = {
@@ -188,7 +188,7 @@ const nave = {
 
 /*
   Cada estrela guarda só onde ela estava NO INSTANTE ZERO. Sorteadas
-  uma vez, no estado — nunca no desenho (a lição do Dealer? Out!).
+  uma vez, no estado — nunca no desenho, ou o céu tremeria a cada quadro.
 */
 const estrelas = [];
 
@@ -255,7 +255,7 @@ document.addEventListener("keyup", evento => {
 });
 
 /*
-  A tecla que nunca é solta (Dealer? Out!, passo 2): com alt+tab no meio,
+  A tecla que nunca é solta (Tetris, passo 8): com alt+tab no meio,
   o keyup acontece em outra janela. Ao perder o foco, soltamos tudo.
 */
 window.addEventListener("blur", () => {
@@ -313,7 +313,7 @@ function atualizar(tempo) {
 /*
   A CADÊNCIA.
 
-  O mesmo acumulador do gerador de chuva do Dealer? Out!: desconta o
+  O mesmo acumulador de tempo do Tetris (passo 3): desconta o
   tempo, dispara quando chega a zero, recarrega com += para a sobra não
   se perder. Com uma diferença:
 
@@ -362,7 +362,7 @@ function moverTiros(tempo) {
 }
 
 /*
-  A limpeza do Dealer? Out!: filter monta uma lista nova só com quem
+  A limpeza (passo 3 do GUIA): filter monta uma lista nova só com quem
   ainda está na tela. Sem ela, nada muda na tela — e a lista cresce oito
   itens por segundo, para sempre.
 */
@@ -424,7 +424,7 @@ function moverNave(tempo) {
 // 7. INIMIGOS
 // ============================================================
 /*
-  O gerador da chuva do Dealer? Out!, com um intervalo sorteado a cada
+  O gerador de inimigos: o mesmo acumulador, com um intervalo sorteado a cada
   vez. (Ele nunca para, então aqui acumular crédito não é problema.)
 */
 function gerarInimigos(tempo) {

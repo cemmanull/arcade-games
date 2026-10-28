@@ -25,14 +25,23 @@ Nenhuma regra de colisão, de trajeto ou de mira. O acabamento, e quatro mecâni
 
 ---
 
-## Por que este módulo vem depois do Dealer? Out!
+## Por que este módulo vem depois do Tetris
 
-O Dealer? Out! ensinou o essencial de um jogo com muitos objetos: listas que nascem e morrem,
-o acumulador que gera coisas, catálogos de dados, partículas, temporizadores. Este módulo
-**usa** tudo isso sem explicar de novo, e gasta os passos no que é novo:
+O Tetris deu o chão: acumuladores de tempo, dados em tabelas, a máquina de estados, o
+`localStorage`. Mas o mundo dele era uma **matriz**, e a peça que para deixa de ser objeto.
+Este módulo vive de objetos que **nascem e morrem em listas**, e gasta os passos no que é novo:
 
-| | Dealer? Out! | Shoot 'em up |
+| | Tetris | Shoot 'em up |
 |---|---|---|
+| O mundo | **uma matriz** e uma peça | **listas** de objetos que nascem e morrem |
+| Posição | `{coluna, linha}`, casa a casa | **centro** em pixels, contínua |
+| Colisão | "cabe?", perguntar antes de mover | **círculos**, muitos contra muitos |
+| Movimento | a peça cai um passo por intervalo | **trajetos como funções do tempo** |
+| Perigo | a pilha que sobe | **mira em você** (`atan2`, leques, anéis) |
+| De onde vêm os objetos | saco de sete | **roteiro** escrito à mão, com cursor |
+| Estados | do jogo | do jogo **e** de um personagem (o chefe) |
+
+---|---|---|
 | Posição | canto | **centro** |
 | Colisão | AABB, um contra muitos | **círculos**, muitos contra muitos |
 | Movimento dos objetos | cair em linha reta | **trajetos como funções do tempo** |
@@ -86,8 +95,10 @@ if (!atirando) { recarga = Math.max(recarga, 0); return; }
 while (recarga <= 0) { dispararArma(); recarga += INTERVALO_ENTRE_TIROS; }
 ```
 
-O acumulador do Dealer? Out!, com uma trava: parado, a recarga não desce abaixo de zero. Sem
-ela, três segundos sem atirar viram 24 tiros num quadro.
+O acumulador de tempo do Tetris (passo 3), com uma trava: parado, a recarga não desce abaixo
+de zero. Sem ela, três segundos sem atirar viram 24 tiros num quadro. Os outros relógios do
+jogo (clarão, golpe, invencibilidade, aviso) são números que descem a cada quadro, nunca
+`setTimeout`: um jogo, um relógio.
 
 ---
 
@@ -210,13 +221,17 @@ fotossensibilidade.
 nave.x += (ponto.x - toque.x) * SENSIBILIDADE_DO_TOQUE;
 ```
 
-O Dealer? Out! levava o personagem **até** o dedo. Numa nave, o dedo esconderia justamente o
-miolo. Aqui o dedo pode estar em qualquer lugar, e a nave anda **o quanto** o dedo andou, como
+Levar o personagem **até** o dedo seria o jeito simples. Numa nave, o dedo esconderia
+justamente o miolo. Aqui o dedo pode estar em qualquer lugar, e a nave anda **o quanto** o dedo andou, como
 num touchpad. Enquanto o dedo está na tela, a nave atira sozinha — ninguém tem um segundo dedo
 livre para o gatilho.
 
 `setPointerCapture` mantém o arrasto mesmo se o dedo sair do canvas, e `touch-action: none`
-impede a página de rolar.
+impede a página de rolar. O canvas é mostrado em outra escala (3×, ou menos no celular), então
+`pontoNoCanvas` converte o toque de pixels da janela para pixels do jogo:
+`(clientX - retangulo.left) * tela.width / retangulo.width`. Os eventos de ponteiro cobrem
+mouse e dedo pelo mesmo código. Teclado e toque são duas portas para o mesmo jogo, como os
+comandos do Tetris (§9).
 
 ---
 
@@ -252,7 +267,7 @@ ninguém lembraria qual é o quinto.
 6. **Texto flutuante:** "+500" sobe e some onde um blindado explodiu.
 7. **Inimigo que persegue:** um tipo que, em vez de trajeto fixo, vira um pouco na direção da
    nave a cada quadro (some passinhos, com a direção vinda de `atan2`).
-8. **Escudo:** uma cápsula azul que absorve uma bala, como o escudo do Dealer? Out!.
+8. **Escudo:** uma cápsula azul que absorve uma bala e some.
 9. **Tremor de tela:** ao perder uma vida, desloque o desenho inteiro por alguns pixels
    sorteados durante 0,3 s (e respeite `movimentoReduzido`).
 10. **Placar dos cinco melhores**, com iniciais, salvo no `localStorage` como JSON.
@@ -275,7 +290,8 @@ ninguém lembraria qual é o quinto.
 
 ## O que você levou daqui
 
-O centro como representação, rolagem calculada, normalização de vetores, cadência, movimento
+Listas de objetos que nascem e morrem, catálogo de tipos, temporizadores, partículas, o centro
+como representação, sprites como texto, rolagem calculada, normalização de vetores, cadência, movimento
 paramétrico e curvas de suavização, colisão de círculos, marcar e varrer, `atan2` e padrões de
 balas, a fase como roteiro com cursor, máquina de estados dentro de uma entidade, telegrafia,
 recursos escassos como decisão, arrasto relativo, envelope de som e parâmetros nomeados.
@@ -289,4 +305,4 @@ usa mais.
 
 **Anterior:** [`08-chefe`](../08-chefe/) · **Módulo:** [`README.md`](../README.md)
 
-**Pré-requisito:** [`../../dealer-out`](../../dealer-out/) · **Antes:** [`../../dealer-out`](../../dealer-out/) · **Depois:** [`../../pacman`](../../pacman/) · **Índice:** [`../../README.md`](../../README.md)
+**Pré-requisito:** [`../../tetris`](../../tetris/) · **Antes:** [`../../tetris`](../../tetris/) · **Depois:** [`../../pacman`](../../pacman/) · **Índice:** [`../../README.md`](../../README.md)

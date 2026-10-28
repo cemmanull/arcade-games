@@ -42,7 +42,7 @@ const ROTEIRO = [
 ```
 
 Leia de cima para baixo e você **vê** a fase. Para mudá-la, ninguém precisa entender o resto
-do código: é editar números. É o mesmo princípio do catálogo do Dealer? Out!, agora aplicado ao
+do código: é editar números. É o mesmo princípio do catálogo do passo 4, agora aplicado ao
 **tempo**.
 
 E eventos de tipos diferentes convivem na mesma linha do tempo: um aviso e um inimigo são
@@ -149,9 +149,9 @@ A lista `eventos` nunca muda: é só o dedo e o relógio que voltam ao começo. 
 
 ### O aviso é HTML
 
-Texto por cima do canvas, como no Dealer? Out!, com `role="status"` para que um leitor de tela
-anuncie "Blindado!" quando ele aparece. O CSS usa `pointer-events: none`: o aviso nunca bloqueia
-um clique.
+Texto por cima do canvas: um `<p>` do HTML posicionado sobre ele, com `role="status"` para que um
+leitor de tela anuncie "Blindado!" quando ele aparece. O CSS usa `pointer-events: none`: o aviso nunca bloqueia
+um clique. Ele some por um temporizador que desce (`tempoDoAviso`), o molde do passo 3.
 
 ---
 
