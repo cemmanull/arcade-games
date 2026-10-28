@@ -1,6 +1,6 @@
 # Dique — Passo 3: O picking
 
-**Mudou:** `regras.js` (o picking: `telaParaGirado`, `acharCasaPeloRaio`, `facesDaCasa`, `acharCasaPorForcaBruta`, `casaDaTela`), `script.js` (o toque acha a casa pelo raio, **dois toques** marcam e confirmam, pinos, aviso para o leitor de tela, o H mostra o raio e a conferência) e `index.html` (botão Aplicar e o `#aviso`); `style.css` ganha o aviso
+**Mudou:** `regras.js` (o picking: `telaParaGirado`, `acharCasaPeloRaio`, `facesDaCasa`, `acharCasaPorForcaBruta`, `casaDaTela`), `script.js` (o toque acha a casa pelo raio, **dois toques** marcam e confirmam, pinos, aviso para o leitor de tela, o H mostra o raio e a conferência) e `index.html` (botão Aplicar, **quatro botões de seta** e o `#aviso`); `style.css` ganha o aviso, com altura fixa
 **Rode:** abra o `index.html`, toque (ou clique) num bloco **alto**, toque de novo na mesma casa, use as **setas** e **Enter**, e aperte **H**.
 
 ---
@@ -13,8 +13,10 @@ casa (contorno com **borda dupla**), o segundo, na **mesma** casa, **confirma** 
 um terceiro toque o retira). Tocar noutra casa só move a marca.
 
 Teclado: as setas movem o cursor (como no passo 2) e **Enter** ou **Espaço** confirmam direto, sem marcar antes. O botão
-**Aplicar** faz o mesmo. Tudo o que muda é anunciado no `#aviso`, que o leitor de tela lê ("Marcada a casa 4, 3,
-altura 4. Toque de novo na mesma casa para confirmar").
+**Aplicar** faz o mesmo, e **segurar** a tecla confirma **uma vez só** (`evento.repeat` é ignorado). Quatro **botões de seta** (← ↑ ↓ →, 48 px) movem o cursor como as setas do teclado,
+em qualquer giro: é o jeito de chegar a um bloco vizinho num celular, onde o losango tem só 36×18 px. Tudo o que muda é anunciado no `#aviso`, que o leitor
+de tela lê ("Marcada: casa 4, 3, altura 4. Toque de novo para confirmar"). O `#aviso` tem **altura fixa** (três linhas):
+trocar de mensagem nunca empurra os botões sob o dedo.
 
 Com **H**: as colunas que o raio atravessou (losangos brancos no chão, de frente para trás), a **face** que ele
 acertou (contorno grosso amarelo, topo ou lateral) e, embaixo, três linhas: o resultado do **raio**, o da **força
@@ -51,9 +53,12 @@ No Reflexo o raio andava num plano, de casa em casa. Aqui o raio entra por cima 
 (um bloco inteiro, do chão ao topo) por vez. Em cada coluna há duas perguntas, nesta ordem:
 
 ```js
-if (z < altura) return { ..., face: face, z: z };                // entrou por baixo do topo: bateu na lateral
-if (zDeSaida <= altura) return { ..., face: "topo", z: altura }; // desceu até o topo antes de sair da coluna
+if (z < altura - MARGEM_DO_PONTO_FLUTUANTE) return { ..., face: face, z: z };                // entrou por baixo do topo: bateu na lateral
+if (zDeSaida <= altura + MARGEM_DO_PONTO_FLUTUANTE) return { ..., face: "topo", z: altura }; // desceu até o topo antes de sair da coluna
 ```
+
+(`MARGEM_DO_PONTO_FLUTUANTE` é `1e-9`: um pixel exatamente sobre a aresta de um bloco dá `z` e `altura` iguais **na matemática**, mas o
+ponto flutuante erra na 15ª casa; o empate vale como "encostou", e encostar no polígono conta, como na força bruta.)
 
 - Se o raio **já está abaixo do topo** ao entrar na coluna, ele entrou pelo lado: **lateral**. Qual? Depende da
   linha da grade que cruzou: `x'` leva à lateral **direita**, `y'` à **esquerda** (são as duas que a tela vê).
@@ -63,9 +68,17 @@ if (zDeSaida <= altura) return { ..., face: "topo", z: altura }; // desceu até 
 ```js
 const zDeSaida = z - Math.min(faltaX, faltaY) / CASAS_POR_ALTURA;   // z em que ele sai desta coluna
 ...
-if (faltaX <= faltaY) { coluna--; faltaY -= faltaX; faltaX = 1; face = "direita"; }
+if (Math.abs(faltaX - faltaY) < MARGEM_DO_PONTO_FLUTUANTE) { ...o canto... }
+else if (faltaX < faltaY) { coluna--; faltaY -= faltaX; faltaX = 1; face = "direita"; }
 else { linha--; faltaX -= faltaY; faltaY = 1; face = "esquerda"; }
 ```
+
+**O canto.** Quando `faltaX` e `faltaY` são iguais, o raio cruza as duas linhas de uma vez: passa **exatamente pelo
+canto** das quatro colunas. Isso não é raro: todo pixel sobre uma linha da grade (`sx = ORIGEM.x + 18k`) tem a reta do
+raio inteira andando de canto em canto. As duas colunas dos lados não são atravessadas, só **encostadas** em um
+ponto, e a força bruta, que usa polígonos fechados, conta quem encosta. Por isso o DDA, no canto, antes de seguir
+para a coluna da diagonal, pergunta às duas vizinhas (`acharVizinhaNoCanto`) se o raio, naquela altura, está abaixo do
+topo delas. No empate entre as duas, vale a ordem do mapa (a mesma que a força bruta usa).
 
 `faltaX` e `faltaY` são o que o DDA do Reflexo chamava de distância até a próxima linha: quanto falta, andando
 para trás, até `x'` ou `y'` virar um número inteiro. O menor dos dois decide qual linha vem primeiro. O laço
@@ -90,8 +103,9 @@ Um algoritmo esperto precisa de um ingênuo para ser julgado. A força bruta nã
 
 ```js
 function acharCasaPorForcaBruta(sx, sy) {
-    for (let i = listaDeDesenho.length - 1; i >= 0; i--) {          // da mais próxima para a mais longe
-        const casa = listaDeDesenho[i], faces = facesDaCasa(casa.x, casa.y);
+    const maisProximasPrimeiro = listaDeDesenho.slice().sort(function (a, b) { return b.proximidade - a.proximidade; });
+    for (let i = 0; i < maisProximasPrimeiro.length; i++) {         // da mais próxima para a mais longe
+        const casa = maisProximasPrimeiro[i], faces = facesDaCasa(casa.x, casa.y);
         const face = Object.keys(faces).find(function (nome) { return poligonoContem(faces[nome], { x: sx, y: sy }); });
         if (face) return { x: casa.x, y: casa.y, face: face };      // o primeiro que contém o pixel vence
     }
@@ -99,13 +113,14 @@ function acharCasaPorForcaBruta(sx, sy) {
 }
 ```
 
-É a **lista do pintor lida de trás para a frente**: o que foi pintado por último é o que se vê, então o primeiro
-polígono que contém o pixel é a resposta. `poligonoContem` testa um polígono convexo com o produto vetorial (o pixel
+É a **lista do pintor, da frente para trás** (o `sort` é estável: duas casas com a mesma soma `x'+y'` ficam na
+ordem do mapa): o que foi pintado por último é o que se vê, então o primeiro polígono que contém o pixel é a resposta. `poligonoContem` testa um polígono convexo com o produto vetorial (o pixel
 fica do mesmo lado de todas as arestas). São até 300 polígonos por toque, contra poucas colunas do raio: por isso o
 jogo usa o raio, e a força bruta só confere. O H mostra as duas respostas lado a lado.
 
 **A prova está numa página de teste:** para 20 terrenos sorteados com semente, nos 4 giros, em todos os pixels de
-uma grade da tela, o raio e a força bruta dão a mesma casa e a mesma face. Se um dia o DDA errar um sinal, a
+uma grade da tela, o raio e a força bruta dão a mesma casa e a mesma face, **inclusive nos pixels sobre as linhas da grade**
+(o canto). Se um dia o DDA errar um sinal, a
 página mostra o primeiro pixel em que eles discordam.
 
 ---
@@ -130,9 +145,14 @@ não precisa de dois tempos: Enter confirma direto). `aplicar()` é, por enquant
 (`pinos`, um conjunto de `"x,y"`): é o lugar onde o passo 5 vai pôr **Erguer** e **Cavar**. Mouse, toque,
 teclado e botão desembocam nas mesmas duas funções, `tocar` e `aplicar`.
 
-Dois cuidados de teclado, de quem já se queimou: **Enter e Espaço num botão** já acionam o botão, então o ouvinte do
-documento os ignora quando o alvo é um `BUTTON` (senão aplicaria duas vezes); e **Ctrl/Cmd/Alt + tecla** é do
-navegador (Ctrl+R recarrega a página), não gira a vista.
+Três cuidados de entrada, de quem já se queimou: **Enter e Espaço num botão** já acionam o botão, então o ouvinte do
+documento os ignora quando o alvo é um `BUTTON` (senão aplicaria duas vezes); **Ctrl/Cmd/Alt + tecla** é do
+navegador (Ctrl+R recarrega a página), não gira a vista; e uma tecla **segurada** repete o `keydown`: Enter e Espaço
+ignoram `evento.repeat`, ou aplicariam (pôr e tirar o pino) dezenas de vezes por segundo.
+
+No ponteiro, só o **botão principal** marca (`evento.button === 0`; o direito e o do meio não fazem nada) e, enquanto um
+ponteiro está apertado (`dedo` guarda o `pointerId`), um **segundo dedo é ignorado**: o toque é por `pointerdown`, então ele
+nem marca, nem desmarca.
 
 ---
 
@@ -166,13 +186,14 @@ O H continua com `aria-live="off"`. O cursor mantém o que o passo 2 ensinou: pi
    topo já não é acertado? (Dica: o raio começa a descer de onde?)
 4. Em `acharCasaPeloRaio`, troque `z < altura` por `z <= altura`. O H diz IGUAL em todo pixel? Procure pixels na aresta
    entre o topo e uma lateral.
-5. Troque `faltaX <= faltaY` por `faltaX < faltaY`. Algo muda na tela? Em que pixels, e por que quase nunca?
+5. No `acharCasaPeloRaio`, apague o ramo do canto (o `if` do `Math.abs(faltaX - faltaY)`) e volte a decidir só por `faltaX <= faltaY`. O H
+   diz DIFERENTE em algum pixel? Procure os pixels com `sx = 192 + 18 · k` (sobre as linhas da grade) e explique por quê.
 6. Marque uma casa e aperte **R**. A marca continua? Mude `girarVista` para desmarcar e explique por que isso seria
    (ou não) melhor para quem usa o dedo.
 7. Marque uma casa **escondida** atrás do pico com as setas. O que o contorno faz? Toque no pico por cima dela: o
    que é marcado?
-8. **Quebre de propósito:** em `acharCasaPorForcaBruta`, troque o laço para ir de `0` até o fim (da mais longe para a
-   mais perto). O H diz DIFERENTE onde? Por que a ordem do laço é a ordem do pintor ao contrário?
+8. **Quebre de propósito:** em `acharCasaPorForcaBruta`, troque `b.proximidade - a.proximidade` por `a.proximidade - b.proximidade` (da mais longe para a
+   mais perto). O H diz DIFERENTE onde? Por que essa ordem é a ordem do pintor ao contrário?
 
 ---
 

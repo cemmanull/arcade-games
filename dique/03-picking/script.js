@@ -13,6 +13,7 @@ let cursor = { x: 4, y: 4 };                    // a casa do cursor
 let marcada = false;                            // dois toques: o primeiro marca o cursor, o segundo (na mesma casa) confirma
 const pinos = new Set();                        // "x,y" das casas com pino: o que o passo 3 sabe "aplicar" (a enchente e as ferramentas vêm depois)
 let ponteiro = null;                            // o pixel do canvas sob o mouse ou o dedo
+let dedo = null;                                // o pointerId do ponteiro apertado: um segundo dedo é ignorado
 let depuracaoLigada = false;
 let faseDaOnda = 0;
 let instanteDoQuadroAnterior = performance.now();
@@ -39,6 +40,10 @@ const intencoes = {                             // teclado, mouse e toque chamam
     girarDireita: function () { girarVista(1); },
     alternarVer: function () { depuracaoLigada = !depuracaoLigada; },
     aplicar: function () { aplicar(); },
+    cursorParaEsquerda: function () { moverCursor(-1, 0); },     // os botões de seta: o cursor sem teclado
+    cursorParaCima: function () { moverCursor(0, -1); },
+    cursorParaBaixo: function () { moverCursor(0, 1); },
+    cursorParaDireita: function () { moverCursor(1, 0); },
 };
 const INTENCAO_DA_TECLA = { q: "girarEsquerda", r: "girarDireita", h: "alternarVer" };
 
@@ -71,7 +76,7 @@ function tocar(casa) {                          // dois toques: o primeiro marca
     if (marcada && casa.x === cursor.x && casa.y === cursor.y) return aplicar();
     cursor = { x: casa.x, y: casa.y };
     marcada = true;
-    avisar("Marcada a " + descreverCasa(cursor.x, cursor.y) + ". Toque de novo na mesma casa para confirmar");
+    avisar("Marcada: " + descreverCasa(cursor.x, cursor.y) + ". Toque de novo para confirmar");
 }
 
 function pixelDoEvento(evento) {                // do pixel da página para o pixel do canvas (o CSS pode encolhê-lo)
@@ -82,6 +87,7 @@ function pixelDoEvento(evento) {                // do pixel da página para o pi
 document.addEventListener("keydown", function (evento) {
     if (evento.ctrlKey || evento.metaKey || evento.altKey) return;      // Ctrl+R recarrega a página, não gira a vista
     const seta = SETAS[evento.key], teclaDeConfirmar = evento.key === "Enter" || evento.key === " ";
+    if (teclaDeConfirmar && evento.repeat) { evento.preventDefault(); return; }      // segurar a tecla confirma uma vez só
     const intencao = intencoes[INTENCAO_DA_TECLA[evento.key.toLowerCase()]];
     if (seta) { evento.preventDefault(); moverCursor(seta[0], seta[1]); }
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
@@ -91,11 +97,18 @@ document.getElementById("botoes").addEventListener("click", function (evento) {
     const intencao = intencoes[evento.target.dataset.acao];
     if (intencao) intencao();
 });
-tela.addEventListener("pointermove", function (evento) { ponteiro = pixelDoEvento(evento); });
+tela.addEventListener("pointermove", function (evento) {
+    if (dedo === null || evento.pointerId === dedo) ponteiro = pixelDoEvento(evento);
+});
 tela.addEventListener("pointerdown", function (evento) {
+    if (evento.button !== 0 || (dedo !== null && evento.pointerId !== dedo)) return;     // só o botão principal marca; o segundo dedo é ignorado
+    dedo = evento.pointerId;
     ponteiro = pixelDoEvento(evento);
     const acerto = acharCasaPeloRaio(ponteiro.x, ponteiro.y);      // topo ou lateral: as duas são do mesmo bloco
     if (acerto) tocar(acerto);
+});
+["pointerup", "pointercancel"].forEach(function (tipo) {
+    window.addEventListener(tipo, function (evento) { if (evento.pointerId === dedo) dedo = null; });
 });
 
 function tracar(pontos, cor) {                  // contorna o polígono; com cor, também o preenche
@@ -112,6 +125,11 @@ function desenharCaixa(x, y, de, ate, estilo) { // uma caixa da altura `de` à `
     tracar([topo[3], topo[2], base[2], base[3]], estilo.esquerda);
     tracar([topo[2], topo[1], base[1], base[2]], estilo.direita);
     tracar(topo, estilo.topo);
+}
+
+function desenharLeito(casa, estilo) {          // sob a água, só o fundo na altura dela: sem contorno nem laterais, a água lê-se como uma lâmina só
+    pincel.strokeStyle = "transparent";
+    tracar(cantosDoBloco(casa.x, casa.y, NIVEL_DA_AGUA), estilo.topo);
 }
 
 function desenharAgua(casa) {                   // uma superfície plana: sem laterais, e a borda só onde a água termina
@@ -161,8 +179,9 @@ function desenharCasas() {                      // percorre a lista na ordem: ca
     pincel.lineWidth = 1;                       // contorno fino de 1 px em todo bloco
     listaDeDesenho.forEach(function (casa) {
         const mar = ALTURAS_EM_TEXTO[casa.y][casa.x] === "~";
-        desenharCaixa(casa.x, casa.y, 0, casa.altura, mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura]);
-        if (casa.altura < NIVEL_DA_AGUA) desenharAgua(casa);
+        const estilo = mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura];
+        if (casa.altura < NIVEL_DA_AGUA) { desenharLeito(casa, estilo); desenharAgua(casa); }
+        else desenharCaixa(casa.x, casa.y, 0, casa.altura, estilo);
         if (pinos.has(casa.x + "," + casa.y)) desenharPino(casa);
         if (casa.x === cursor.x && casa.y === cursor.y) desenharCursor(casa.x, casa.y, false);     // na sua vez: o que vem depois a cobre
         desenharRotulo(casa);
