@@ -1,16 +1,19 @@
 /*
-  APOIO DO PROA ACESA: as verificações que os passos 5 a 8 repartem (nascimento do comboio, trava de clarões,
-  enquadramento da câmera, Espaço depois do clique, subida do buffer da chuva).
+  APOIO DO PROA ACESA: as verificações que os passos 5 a 8 repartem (nascimento do comboio, trava de clarões e o
+  modo travado por clarão, enquadramento da câmera, Espaço depois do clique, subida do buffer da chuva).
 
   Carregue DEPOIS de ../apoio.js e ANTES dos scripts do jogo. Só declara funções `verif...`: os nomes do jogo (barcaNoMundo,
   recifes, noite, camera...) são lidos quando a função é CHAMADA, nunca ao carregar. Cada função usa `conferir` do apoio.js.
-  Os números do GDD (7 m, 12 giros, 48 tentativas, 1/3 s, 0,97...) estão escritos aqui de propósito: não são lidos do jogo.
+  Os números do GDD (7 m, 12 giros, 73 candidatos, 0,4 s, 0,97...) estão escritos aqui de propósito: não são lidos do jogo.
 */
 
 
 // ============================================================
-// 1. O COMBOIO NASCE EM LUGAR VÁLIDO, GIRANDO E RECUANDO; CERCADO, CAI NA PARTIDA
+// 1. O COMBOIO NASCE NO 1º CANDIDATO APROVADO: 48 GIROS × RECUOS, O ANEL A 10 E 20 m, A PARTIDA; SEM LUGAR VIVO, NÃO NASCE NADA
 // ============================================================
+const VERIF_QUANTOS_CANDIDATOS = 73;   // 48 giros × recuos, 24 do anel e a PARTIDA por último
+const VERIF_INDICE_DA_PARTIDA = 72;
+
 function verifQuantosBarcosNascem() {
     return typeof QUANTIDADE_DE_BARCOS === "number" ? QUANTIDADE_DE_BARCOS : noite.ficha.barcos;
 }
@@ -28,15 +31,28 @@ function verifNascerEm(pose) {
     return barcosDePesca.slice();
 }
 
-/* A tentativa N (0 a 47): gira N × 30° e, a cada 12, recua mais 7 m (0, 7, 14, 21). Os lugares são os dos `quantos` barcos. */
-function verifLugaresDaTentativa(pose, quantos, tentativa) {
-    const rumo = pose.proa + tentativa * Math.PI / 6;
-    const recuo = 7 * Math.floor(tentativa / 12);
-    const lugares = [];
-    for (let i = 1; i <= quantos; i++) {
-        lugares.push({ x: pose.x + Math.sin(rumo) * (recuo + 7 * i), z: pose.z + Math.cos(rumo) * (recuo + 7 * i) });
+/*
+  Os 73 candidatos, na ordem do GDD, escritos aqui sem ler o jogo: os giros de 30° da fila atrás da barca (a cada 12, recua mais 7 m: 0, 7, 14, 21),
+  depois o anel (12 rumos de 30° a 10 m e 12 a 20 m da barca, a fila de través, 90° a mais) e por último a PARTIDA. Cada um traz os lugares dos `quantos` barcos.
+*/
+function verifCandidatosDaPose(pose, quantos) {
+    const giro = Math.PI / 6;
+    const candidatos = [];
+    for (let k = 0; k < 48; k++) {
+        candidatos.push({ origem: { x: pose.x, z: pose.z }, rumo: pose.proa + k * giro, recuo: 7 * Math.floor(k / 12) });
     }
-    return { rumo: rumo, lugares: lugares };
+    for (let k = 0; k < 24; k++) {
+        const raio = 10 * (1 + Math.floor(k / 12));
+        candidatos.push({ origem: { x: pose.x + Math.sin(k * giro) * raio, z: pose.z + Math.cos(k * giro) * raio }, rumo: k * giro + Math.PI / 2, recuo: 0 });
+    }
+    candidatos.push({ origem: { x: PARTIDA.x, z: PARTIDA.z }, rumo: PARTIDA.proa, recuo: 0 });
+    candidatos.forEach(function (candidato) {
+        candidato.lugares = [];
+        for (let i = 1; i <= quantos; i++) {
+            candidato.lugares.push({ x: candidato.origem.x + Math.sin(candidato.rumo) * (candidato.recuo + 7 * i), z: candidato.origem.z + Math.cos(candidato.rumo) * (candidato.recuo + 7 * i) });
+        }
+    });
+    return candidatos;
 }
 
 /* Válido: dentro de ±79 m, a 1 m do porto e a 1 m de folga (além dos 1,2 m do barco) de cada pedra e da ilha. */
@@ -47,19 +63,20 @@ function verifLugaresValidos(lugares, obstaculos) {
     });
 }
 
-/* O ORÁCULO: a 1ª das 48 tentativas válida; senão a fila inteira na PARTIDA (tentativa −1). */
+/* Aprovado: lugares válidos E o 1º barco a menos de 35 m da barca (senão a névoa o engoliria no ato). */
+function verifCandidatoAprovado(candidato, pose, obstaculos) {
+    return verifLugaresValidos(candidato.lugares, obstaculos) && Math.hypot(candidato.lugares[0].x - pose.x, candidato.lugares[0].z - pose.z) < 35;
+}
+
+/* O ORÁCULO: o 1º candidato aprovado (índice 0 a 72); sem nenhum, índice −1 e nenhum lugar: não nasce nada. */
 function verifOndeOComboioDeveNascer(pose, quantos, obstaculos) {
-    for (let tentativa = 0; tentativa < 48; tentativa++) {
-        const candidata = verifLugaresDaTentativa(pose, quantos, tentativa);
-        if (verifLugaresValidos(candidata.lugares, obstaculos)) {
-            return { tentativa: tentativa, rumo: candidata.rumo, lugares: candidata.lugares };
+    const candidatos = verifCandidatosDaPose(pose, quantos);
+    for (let indice = 0; indice < candidatos.length; indice++) {
+        if (verifCandidatoAprovado(candidatos[indice], pose, obstaculos)) {
+            return { candidato: indice, rumo: candidatos[indice].rumo, lugares: candidatos[indice].lugares };
         }
     }
-    const lugares = [];
-    for (let i = 1; i <= quantos; i++) {
-        lugares.push({ x: PARTIDA.x + Math.sin(PARTIDA.proa) * 7 * i, z: PARTIDA.z + Math.cos(PARTIDA.proa) * 7 * i });
-    }
-    return { tentativa: -1, rumo: PARTIDA.proa, lugares: lugares };
+    return { candidato: -1, rumo: 0, lugares: [] };
 }
 
 /* "" se o comboio nasceu onde o oráculo manda (posição e proa de cada barco); senão o primeiro defeito. */
@@ -79,25 +96,28 @@ function verifDiferencaDoComboio(nascidos, esperado) {
     return "";
 }
 
-/* Uma pedra no lugar do 1º barco da tentativa: com raio 0,1 bloqueia ela e só ela (as vizinhas estão a ≥ 3,6 m). */
-function verifBloqueioDaTentativa(pose, quantos, tentativa, raio) {
-    const lugar = verifLugaresDaTentativa(pose, quantos, tentativa).lugares[0];
-    return { x: lugar.x, z: lugar.z, raio: raio, alta: false, brasa: 0, iluminado: false };
+/* Uma pedra no lugar do 1º barco de cada um dos `ate` primeiros candidatos: com raio 0,1 bloqueia o dele e só os que passam a menos de 2,3 m daquele ponto. */
+function verifPedraEmTodosOsCandidatos(pose, quantos, ate, raio) {
+    const candidatos = verifCandidatosDaPose(pose, quantos);
+    recifes.length = 0;
+    for (let indice = 0; indice < ate; indice++) {
+        const lugar = candidatos[indice].lugares[0];
+        recifes.push({ x: lugar.x, z: lugar.z, raio: raio, alta: false, brasa: 0, iluminado: false });
+    }
 }
 
-/* A pose, entre uma grade, de onde mais das 48 tentativas são válidas só pelo mundo, porto e ilha (sem pedras). */
-function verifPoseComMaisTentativasValidas(quantos) {
-    let melhor = { x: 0, z: 0, proa: 0.3 }, melhorContagem = -1;
+/* A pose, numa grade, de onde mais candidatos são aprovados só pelo mundo, porto e ilha (sem pedras). `aceita` filtra as poses. */
+function verifPoseComMaisCandidatosAprovados(quantos, aceita) {
+    let melhor = null, melhorContagem = -1;
     for (let x = -60; x <= 60; x += 5) {
         for (let z = -60; z <= 70; z += 5) {
             const pose = { x: x, z: z, proa: 0.3 };
-            let validas = 0;
-            for (let tentativa = 0; tentativa < 48; tentativa++) {
-                validas += verifLugaresValidos(verifLugaresDaTentativa(pose, quantos, tentativa).lugares, [ilha]) ? 1 : 0;
-            }
-            if (validas > melhorContagem) {
+            const candidatos = verifCandidatosDaPose(pose, quantos);
+            if (!aceita(candidatos[VERIF_INDICE_DA_PARTIDA], pose)) { continue; }
+            const aprovados = candidatos.filter(function (candidato) { return verifCandidatoAprovado(candidato, pose, [ilha]); }).length;
+            if (aprovados > melhorContagem) {
                 melhor = pose;
-                melhorContagem = validas;
+                melhorContagem = aprovados;
             }
         }
     }
@@ -109,8 +129,52 @@ function verifRestaurarRecifes(guardados) {
     guardados.forEach(function (recife) { recifes.push(recife); });
 }
 
-/* Roda os 4 grupos de afirmações do nascimento do comboio. No fim o mundo fica sem fila: a página recomeça o que precisar. */
-function verifNascimentoDoComboio() {
+/* A lista que o jogo monta (`candidatosDoComboio`) contra a escrita aqui: mesma ordem, mesma origem, rumo e recuo. */
+function verifListaDeCandidatosDoJogo(poses) {
+    if (typeof candidatosDoComboio !== "function") { return ["o jogo não tem candidatosDoComboio()"]; }
+    const defeitos = [];
+    poses.forEach(function (pose) {
+        Object.assign(barcaNoMundo, { x: pose.x, z: pose.z, proa: pose.proa });
+        const doJogo = candidatosDoComboio();
+        const esperados = verifCandidatosDaPose(pose, 1);
+        if (doJogo.length !== VERIF_QUANTOS_CANDIDATOS) { defeitos.push("a lista tem " + doJogo.length + " candidatos, esperado " + VERIF_QUANTOS_CANDIDATOS); return; }
+        for (let indice = 0; indice < doJogo.length; indice++) {
+            const jogo = doJogo[indice], esperado = esperados[indice];
+            const diferencaDeRumo = Math.abs(Math.atan2(Math.sin(jogo.rumo - esperado.rumo), Math.cos(jogo.rumo - esperado.rumo)));
+            if (Math.hypot(jogo.origem.x - esperado.origem.x, jogo.origem.z - esperado.origem.z) > 1e-6 || diferencaDeRumo > 1e-6 || Math.abs(jogo.recuo - esperado.recuo) > 1e-9) {
+                defeitos.push("pose (" + pose.x + ", " + pose.z + "), candidato " + indice + ": origem (" + jogo.origem.x.toFixed(2) + ", " + jogo.origem.z.toFixed(2) + "), rumo " + jogo.rumo.toFixed(3) + ", recuo " + jogo.recuo +
+                    "; esperado (" + esperado.origem.x.toFixed(2) + ", " + esperado.origem.z.toFixed(2) + "), " + esperado.rumo.toFixed(3) + ", " + esperado.recuo);
+                break;
+            }
+        }
+    });
+    return defeitos;
+}
+
+/*
+  Sorteia as pedras (em `recifes`) e a pose de um mundo: 0 a 29 esparsos; 30 a 44 quase fechados; 45 a 59 com a barca perto da PARTIDA e um cerco de
+  pedras em volta dela que deixa livre a fila da PARTIDA (é o que faz a PARTIDA ser o último recurso aprovado).
+*/
+function verifSortearMundo(sorteio) {
+    recifes.length = 0;
+    const perto = sorteio >= 45;
+    const pose = perto ? { x: PARTIDA.x + Math.random() * 40 - 20, z: PARTIDA.z + Math.random() * 40 - 20, proa: Math.random() * 2 * Math.PI - Math.PI } :
+        { x: Math.random() * 156 - 78, z: Math.random() * 156 - 78, proa: Math.random() * 2 * Math.PI - Math.PI };
+    const pedras = sorteio < 30 ? Math.floor(Math.random() * 60) : perto ? 90 + Math.floor(Math.random() * 60) : 70 + Math.floor(Math.random() * 120);
+    for (let i = 0; i < pedras; i++) {
+        const pedra = perto ? { x: pose.x + Math.random() * 80 - 40, z: pose.z + Math.random() * 80 - 40, raio: 2 + Math.random() * 3.5 } :
+            { x: Math.random() * 156 - 78, z: Math.random() * 156 - 78, raio: 1.5 + Math.random() * (sorteio < 30 ? 2.5 : 4) };
+        const noCaminhoDaPartida = Math.abs(pedra.x - PARTIDA.x) < pedra.raio + 3.5 && pedra.z > PARTIDA.z + 4 - pedra.raio && pedra.z < PARTIDA.z + 7 * 4 + 4 + pedra.raio;
+        if (!(perto && noCaminhoDaPartida)) { recifes.push(Object.assign(pedra, { alta: false, brasa: 0, iluminado: false })); }
+    }
+    return pose;
+}
+
+/*
+  Roda os grupos de afirmações do nascimento do comboio. `passarUmQuadro` (só 05 e 06, onde o jogo recria o comboio dentro do quadro) é opcional.
+  No fim o mundo fica sem fila: a página recomeça o que precisar.
+*/
+function verifNascimentoDoComboio(passarUmQuadro) {
     const noitesDoJogo = typeof fichas === "undefined" ? 1 : fichas.length;
     const partida = { x: PARTIDA.x, z: PARTIDA.z, proa: PARTIDA.proa };
     const defeitosDaPartida = [];
@@ -121,59 +185,82 @@ function verifNascimentoDoComboio() {
         if (filaLivre(PARTIDA, PARTIDA.proa, 0) !== true) { defeitosDaPartida.push("noite " + (indice + 1) + ": filaLivre(PARTIDA) não é true"); }
         const esperado = verifOndeOComboioDeveNascer(partida, quantos, recifes.concat([ilha]));
         const diferenca = verifDiferencaDoComboio(verifNascerEm(partida), esperado);
-        if (esperado.tentativa !== 0) { defeitosDaPartida.push("noite " + (indice + 1) + ": a PARTIDA não é livre na 1ª tentativa (oráculo " + esperado.tentativa + ")"); }
+        if (esperado.candidato !== 0) { defeitosDaPartida.push("noite " + (indice + 1) + ": a PARTIDA não é livre no 1º candidato (oráculo " + esperado.candidato + ")"); }
         if (diferenca !== "") { defeitosDaPartida.push("noite " + (indice + 1) + ": " + diferenca); }
     }
-    conferir("a PARTIDA é livre em todas as " + noitesDoJogo + " noite(s): filaLivre(PARTIDA) é true e o comboio nasce nela, logo na 1ª tentativa",
+    conferir("a PARTIDA é livre em todas as " + noitesDoJogo + " noite(s): filaLivre(PARTIDA) é true e o comboio nasce nela, logo no 1º candidato",
         defeitosDaPartida.length === 0, defeitosDaPartida.join("; "));
 
     if (typeof comecarNoite === "function") { comecarNoite(0); }
     const guardados = recifes.splice(0);
     const quantos = verifQuantosBarcosNascem();
-    const pose = verifPoseComMaisTentativasValidas(quantos);
+    const pose = verifPoseComMaisCandidatosAprovados(quantos, function (partidaDaPose, poseDaGrade) { return verifCandidatoAprovado(partidaDaPose, poseDaGrade, [ilha]); });
+    const poseLonge = verifPoseComMaisCandidatosAprovados(quantos, function (partidaDaPose, poseDaGrade) {
+        return Math.hypot(partidaDaPose.lugares[0].x - poseDaGrade.x, partidaDaPose.lugares[0].z - poseDaGrade.z) >= 45;
+    });
     try {
+        const poses = [pose, partida, { x: -40, z: 30, proa: 2 }, { x: 55, z: -50, proa: -1.3 }, { x: 0, z: 0, proa: 0 }];
+        const defeitosDaLista = verifListaDeCandidatosDoJogo(poses);
+        conferir("candidatosDoComboio(): 73 candidatos na ordem do GDD (48 giros × recuos 0, 7, 14 e 21 m; 24 do anel a 10 e 20 m, fila de través; a PARTIDA por último) em " + poses.length + " poses",
+            defeitosDaLista.length === 0, defeitosDaLista.slice(0, 2).join("; "));
+
         const defeitosDaOrdem = [];
-        let alcancadas = 0;
-        for (let alvo = 0; alvo < 48; alvo++) {
-            recifes.length = 0;
-            for (let anterior = 0; anterior < alvo; anterior++) { recifes.push(verifBloqueioDaTentativa(pose, quantos, anterior, 0.1)); }
+        const alcancados = { giros: 0, anel: 0, partida: 0 };
+        for (let alvo = 0; alvo < VERIF_QUANTOS_CANDIDATOS; alvo++) {
+            verifPedraEmTodosOsCandidatos(pose, quantos, alvo, 0.1);
             const esperado = verifOndeOComboioDeveNascer(pose, quantos, recifes.concat([ilha]));
             const diferenca = verifDiferencaDoComboio(verifNascerEm(pose), esperado);
-            alcancadas += esperado.tentativa === alvo ? 1 : 0;
-            if (diferenca !== "") { defeitosDaOrdem.push("tentativa " + alvo + ": " + diferenca); }
+            if (esperado.candidato === alvo) { alcancados[alvo < 48 ? "giros" : alvo < VERIF_INDICE_DA_PARTIDA ? "anel" : "partida"]++; }
+            if (diferenca !== "") { defeitosDaOrdem.push("candidato " + alvo + ": " + diferenca); }
         }
-        conferir("a ordem das 48 tentativas (12 giros de 30° × recuos de 0, 7, 14 e 21 m): bloqueadas as N primeiras, o comboio nasce na N+1ª (pose " +
-            pose.x + ", " + pose.z + ")", defeitosDaOrdem.length === 0 && alcancadas === 48, defeitosDaOrdem.slice(0, 3).join("; ") + " (alcançadas " + alcancadas + " de 48)");
+        conferir("a ordem dos 73 candidatos: bloqueados os N primeiros, o comboio nasce no N+1º (giros, depois anel, depois PARTIDA; pose " + pose.x + ", " + pose.z + "); alcançados " +
+            alcancados.giros + " dos giros, " + alcancados.anel + " do anel, " + alcancados.partida + " da PARTIDA",
+            defeitosDaOrdem.length === 0 && alcancados.giros >= 40 && alcancados.anel >= 10 && alcancados.partida === 1, defeitosDaOrdem.slice(0, 3).join("; "));
 
-        recifes.length = 0;
-        for (let tentativa = 0; tentativa < 48; tentativa++) { recifes.push(verifBloqueioDaTentativa(pose, quantos, tentativa, 3)); }
+        // cercada em tudo menos na PARTIDA, que está a menos de 35 m: ela é o último recurso
+        verifPedraEmTodosOsCandidatos(pose, quantos, VERIF_INDICE_DA_PARTIDA, 3);
         const esperadoCercado = verifOndeOComboioDeveNascer(pose, quantos, recifes.concat([ilha]));
         const nascidosCercado = verifNascerEm(pose);
-        conferir("cercado por um anel de pedras em 4 raios (7, 14, 21 e 28 m × 12 rumos): o comboio inteiro nasce na PARTIDA, de proa da PARTIDA",
-            esperadoCercado.tentativa === -1 && verifDiferencaDoComboio(nascidosCercado, esperadoCercado) === "" && nascidosCercado.length === quantos &&
+        conferir("cercado por pedras nos 72 primeiros candidatos (giros e anel) com a PARTIDA a menos de 35 m: o comboio inteiro nasce na PARTIDA, de proa da PARTIDA",
+            esperadoCercado.candidato === VERIF_INDICE_DA_PARTIDA && verifDiferencaDoComboio(nascidosCercado, esperadoCercado) === "" && nascidosCercado.length === quantos &&
             nascidosCercado.every(function (barco, i) { return Math.abs(barco.x - (PARTIDA.x + Math.sin(PARTIDA.proa) * 7 * (i + 1))) < 1e-6 && Math.abs(barco.z - (PARTIDA.z + Math.cos(PARTIDA.proa) * 7 * (i + 1))) < 1e-6; }),
             "nasceram em " + nascidosCercado.map(function (barco) { return "(" + barco.x.toFixed(1) + ", " + barco.z.toFixed(1) + ")"; }).join(" "));
 
+        // cercada e longe da PARTIDA: nenhum comboio perdido; abre espaço e ele chega
+        const primeiroDaPartida = verifCandidatosDaPose(poseLonge, quantos)[VERIF_INDICE_DA_PARTIDA].lugares[0];
+        const distanciaDoPrimeiro = Math.hypot(primeiroDaPartida.x - poseLonge.x, primeiroDaPartida.z - poseLonge.z);
+        verifPedraEmTodosOsCandidatos(poseLonge, quantos, VERIF_INDICE_DA_PARTIDA, 3);
+        const esperadoLonge = verifOndeOComboioDeveNascer(poseLonge, quantos, recifes.concat([ilha]));
+        const nascidosLonge = verifNascerEm(poseLonge);
+        conferir("cercado e longe da PARTIDA (o 1º barco dela a " + distanciaDoPrimeiro.toFixed(0) + " m da barca, em " + poseLonge.x + ", " + poseLonge.z + "): não nasce NADA, nunca um comboio que a névoa engoliria",
+            distanciaDoPrimeiro >= 35 && filaLivre(PARTIDA, PARTIDA.proa, 0) === true && esperadoLonge.candidato === -1 && nascidosLonge.length === 0, "nasceram " + nascidosLonge.length + " barcos");
+        if (typeof passarUmQuadro === "function") {
+            passarUmQuadro();
+            conferir("e o quadro seguinte, ainda cercado, também não cria comboio nenhum", barcosDePesca.length === 0);
+        }
+        recifes.length = 0;
+        const nascidosComEspaco = typeof passarUmQuadro === "function" ? (passarUmQuadro(), barcosDePesca.slice()) : verifNascerEm(poseLonge);
+        const esperadoComEspaco = verifOndeOComboioDeveNascer(poseLonge, quantos, [ilha]);
+        conferir("abrindo espaço (as pedras somem) o comboio nasce no 1º candidato aprovado" + (typeof passarUmQuadro === "function" ? ", no próximo quadro do jogo" : ""),
+            nascidosComEspaco.length === quantos && verifDiferencaDoComboio(nascidosComEspaco, esperadoComEspaco) === "", "nasceram " + nascidosComEspaco.length + " barcos");
+
         semearSorteio(20261027);
         const defeitosAleatorios = [];
-        let mundos = 0, comFallback = 0;
+        let mundos = 0, naPartida = 0, semLugar = 0, noAnel = 0;
         for (let indice = 0; indice < noitesDoJogo; indice++) {
             if (typeof comecarNoite === "function") { comecarNoite(indice); }
             for (let sorteio = 0; sorteio < 60; sorteio++) {
-                recifes.length = 0;
-                const pedras = Math.floor(Math.random() * 60);
-                for (let i = 0; i < pedras; i++) {
-                    recifes.push({ x: Math.random() * 156 - 78, z: Math.random() * 156 - 78, raio: 1.5 + Math.random() * 2.5, alta: false, brasa: 0, iluminado: false });
-                }
-                const poseSorteada = { x: Math.random() * 156 - 78, z: Math.random() * 156 - 78, proa: Math.random() * 2 * Math.PI - Math.PI };
+                const poseSorteada = verifSortearMundo(sorteio);
                 const esperado = verifOndeOComboioDeveNascer(poseSorteada, verifQuantosBarcosNascem(), recifes.concat([ilha]));
                 const diferenca = verifDiferencaDoComboio(verifNascerEm(poseSorteada), esperado);
                 mundos++;
-                comFallback += esperado.tentativa === -1 ? 1 : 0;
+                naPartida += esperado.candidato === VERIF_INDICE_DA_PARTIDA ? 1 : 0;
+                noAnel += esperado.candidato >= 48 && esperado.candidato < VERIF_INDICE_DA_PARTIDA ? 1 : 0;
+                semLugar += esperado.candidato === -1 ? 1 : 0;
                 if (diferenca !== "") { defeitosAleatorios.push("noite " + (indice + 1) + ", mundo " + sorteio + ": " + diferenca); }
             }
         }
-        conferir("o oráculo independente concorda com o jogo em " + mundos + " mundos sorteados (pedras, pose e rumo; " + comFallback + " caíram na PARTIDA)",
+        conferir("o oráculo independente concorda com o jogo em " + mundos + " mundos sorteados (pedras, pose e rumo; " + noAnel + " no anel, " + naPartida + " na PARTIDA, " + semLugar + " sem lugar e sem comboio)",
             defeitosAleatorios.length === 0, defeitosAleatorios.slice(0, 3).join("; "));
     } finally {
         verifRestaurarRecifes(guardados);
@@ -220,7 +307,7 @@ function verifIlhaVemDosDados() {
 function verifSimularClaroes(relampagosPorMinuto, reduzido, passo) {
     const reduzidoAntes = reduzirClaroes;
     const duracao = reduzido ? 1.2 : 0.25;
-    const intervaloMinimo = reduzido ? 1.2 : 1 / 3;
+    const intervaloMinimo = reduzido ? 1.2 : 0.4;
     const brilhoMaximo = reduzido ? 0.25 : 1;
     const violacoes = {};
     const inicios = [];
@@ -282,7 +369,7 @@ function verifTravaDeClaroes() {
         [8, 60, 200, 100000].forEach(function (taxa) {
             const rotulo = (reduzido ? "reduzido" : "normal") + ", " + taxa + " clarões/min";
             const corridas = passos.map(function (passo) { return verifSimularClaroes(taxa, reduzido, passo); });
-            const intervaloMinimo = reduzido ? 1.2 : 1 / 3;
+            const intervaloMinimo = reduzido ? 1.2 : 0.4;
             const defeitos = [];
             corridas.forEach(function (corrida) {
                 Object.keys(corrida.violacoes).forEach(function (categoria) { defeitos.push("passo " + corrida.passo.toFixed(4) + ": " + categoria + " (" + corrida.violacoes[categoria] + ")"); });
@@ -294,8 +381,8 @@ function verifTravaDeClaroes() {
             const maximoFechado = Math.max.apply(null, corridas.map(function (corrida) { return verifMaximoDeIniciosPorSegundo(corrida.inicios, true); }));
             if (!reduzido) { maiorJanelaFechadaNormal = Math.max(maiorJanelaFechadaNormal, maximoFechado); }
             const limite = reduzido ? 1 : 3;
-            conferir(rotulo + ": no máximo " + limite + " início(s) por segundo SEMIABERTO (observado " + maximoSemiaberto + "; em janela FECHADA de 1 s: " + maximoFechado + ")",
-                maximoSemiaberto <= limite);
+            conferir(rotulo + ": no máximo " + limite + " início(s) em QUALQUER janela FECHADA de 1 s, deslizante (observado " + maximoFechado + "; semiaberta: " + maximoSemiaberto + ")",
+                maximoFechado <= limite && maximoSemiaberto <= maximoFechado, "janela fechada " + maximoFechado + ", semiaberta " + maximoSemiaberto);
 
             const demandaPorSegundo = taxa / 60;
             const saturada = demandaPorSegundo > 1 / intervaloMinimo;
@@ -312,7 +399,79 @@ function verifTravaDeClaroes() {
             }
         });
     });
-    conferir("(informação) maior número de clarões numa janela FECHADA de 1 s nos modos normais: " + maiorJanelaFechadaNormal, true);
+    conferirIgual("nos modos normais saturados a trava aperta até o limite sem passar: o maior número de clarões numa janela FECHADA de 1 s", maiorJanelaFechadaNormal, 3);
+}
+
+/*
+  O MODO VALE PARA O CLARÃO INTEIRO: `noite.relampagoReduzido` guarda a opção no começo de cada clarão. Com a opção trocada de várias maneiras (a cada
+  quadro, a cada 3, sempre contra o clarão em andamento, sorteada) numa noite a 100.000 clarões/min, em quadros de 1/60 s, confere por quadro:
+  o modo gravado é o da opção NO QUADRO em que o clarão começou e não muda até o fim; o clarão reduzido nunca passa de 25% nem salta mais que ~0,011
+  por quadro; o normal só vale 0 ou 1; um salto de 0 a 1 só acontece no 1º quadro de um clarão normal; e cada clarão dura o que o seu modo manda.
+*/
+function verifModoTravadoPorClarao() {
+    const passo = 1 / 60;
+    const reduzidoAntes = reduzirClaroes;
+    const estrategias = [
+        ["alterna a cada quadro", function (quadro) { return quadro % 2 === 0; }],
+        ["alterna a cada 3 quadros", function (quadro) { return Math.floor(quadro / 3) % 2 === 0; }],
+        ["sempre contra o clarão em andamento", function () { return !noite.relampagoReduzido; }],
+        ["sorteada a cada quadro", function () { return Math.random() < 0.5; }]
+    ];
+    fichas.push(Object.assign({}, fichas[0], { nome: "Teste do modo por clarão", duracao: 600, relampagosPorMinuto: 100000, barcos: 2, meta: 99 }));
+    const placar = { normais: 0, reduzidos: 0, saltosDeZeroAUm: 0 };
+    const defeitos = [];
+    function registrar(estrategia, texto) {
+        if (defeitos.length < 3) { defeitos.push(estrategia + ": " + texto); }
+    }
+    try {
+        semearSorteio(20261028);
+        estrategias.forEach(function (estrategia) {
+            comecarNoite(fichas.length - 1);
+            barcaNoMundo.segundosEncalhada = 1e9;
+            let quadro = 0, modoDoClarao = null, quadrosDoClarao = 0;
+            while (noite.segundos < 60 && noite.resultado === "") {
+                reduzirClaroes = estrategia[1](quadro++);
+                const opcaoNesteQuadro = reduzirClaroes;
+                const contadorAntes = noite.proximoRelampago, brilhoAntes = brilhoDoRelampago(), andamentoAntes = noite.segundosDoRelampago;
+                atualizarMundo(passo, 0, false);
+                const brilho = brilhoDoRelampago();
+                const comecou = noite.proximoRelampago > contadorAntes;
+                const nome = estrategia[0];
+                if (andamentoAntes >= 0 && modoDoClarao !== null) {   // havia um clarão no ar no começo do quadro: continua ou acaba
+                    const duracao = modoDoClarao ? 1.2 : 0.25;
+                    if (!comecou && noite.segundosDoRelampago >= 0) {
+                        quadrosDoClarao++;
+                        if (noite.relampagoReduzido !== modoDoClarao) { registrar(nome, "o modo do clarão mudou no meio dele, em " + noite.segundos.toFixed(3) + " s"); }
+                        if (Math.abs(brilho - brilhoAntes) > (modoDoClarao ? 0.011 : 1) + 1e-9) { registrar(nome, "salto de " + brilhoAntes.toFixed(4) + " a " + brilho.toFixed(4) + " no meio do clarão " + (modoDoClarao ? "reduzido" : "normal")); }
+                        if (modoDoClarao && brilho > 0.25 + 1e-9) { registrar(nome, "clarão reduzido a " + brilho.toFixed(3) + " (mais de 25%)"); }
+                        if (!modoDoClarao && brilho !== 0 && brilho !== 1) { registrar(nome, "clarão normal com brilho " + brilho); }
+                    } else {
+                        if (andamentoAntes + passo < duracao - 1e-9) { registrar(nome, "um clarão " + (modoDoClarao ? "reduzido" : "normal") + " acabou aos " + (andamentoAntes + passo).toFixed(3) + " s, antes de " + duracao + " s"); }
+                        if (Math.abs(quadrosDoClarao + 1 - duracao / passo) > 2) { registrar(nome, "um clarão " + (modoDoClarao ? "reduzido" : "normal") + " durou " + (quadrosDoClarao + 1) + " quadros, esperado cerca de " + Math.round(duracao / passo)); }
+                        if (modoDoClarao && brilhoAntes > 0.011) { registrar(nome, "um clarão reduzido caiu de " + brilhoAntes.toFixed(3) + " a 0 de uma vez"); }
+                        modoDoClarao = null;
+                    }
+                }
+                if (comecou) {
+                    modoDoClarao = noite.relampagoReduzido;
+                    quadrosDoClarao = 1;
+                    placar[modoDoClarao ? "reduzidos" : "normais"]++;
+                    if (modoDoClarao !== opcaoNesteQuadro) { registrar(nome, "o clarão que começou com a opção " + opcaoNesteQuadro + " gravou " + modoDoClarao + " em " + noite.segundos.toFixed(3) + " s"); }
+                    if (brilho - brilhoAntes > 0.5) {
+                        placar.saltosDeZeroAUm++;
+                        if (modoDoClarao) { registrar(nome, "um clarão REDUZIDO saltou de " + brilhoAntes.toFixed(3) + " a " + brilho.toFixed(3) + " ao começar"); }
+                    }
+                }
+            }
+        });
+    } finally {
+        fichas.pop();
+        reduzirClaroes = reduzidoAntes;
+    }
+    conferir("o modo vale para o clarão inteiro: com a opção trocada a cada quadro, a cada 3, contra o clarão em andamento e sorteada, `relampagoReduzido` é a opção do quadro em que o clarão começou e não muda; reduzido nunca passa de 25% nem salta mais de ~0,011 por quadro; normal só vale 0 ou 1; cada clarão dura o que o seu modo manda",
+        defeitos.length === 0, defeitos.join("; "));
+    conferir("e o teste exercita os dois modos: " + placar.normais + " clarões normais, " + placar.reduzidos + " reduzidos, " + placar.saltosDeZeroAUm + " saltos de 0 a 1 (todos no 1º quadro de um clarão normal)",
+        placar.normais > 50 && placar.reduzidos > 100 && placar.saltosDeZeroAUm <= placar.normais);
 }
 
 
@@ -492,10 +651,19 @@ function verifTextoDasMedidas(medidas) {
 
 
 // ============================================================
-// 5. ESPAÇO DEPOIS DO CLIQUE (07 e 08): o mouse e o dedo não deixam o botão com o foco
+// 5. ESPAÇO DEPOIS DO CLIQUE (07 e 08): só o MOUSE (pointerdown de mouse + click com detail ≥ 1, num botão) tira o foco do botão
 // ============================================================
-function verifTocarComDetalhe(botao, detalhe) {
-    botao.dispatchEvent(new MouseEvent("click", { detail: detalhe, bubbles: true }));
+/* Só o click, sem ponteiro antes: teclado (Enter, Espaço) e leitor de tela mandam detail 0; alguns leitores mandam detail ≥ 1. */
+function verifClicarSemPonteiro(alvo, detalhe) {
+    alvo.dispatchEvent(new MouseEvent("click", { detail: detalhe, bubbles: true }));
+}
+
+/* Um aperto de verdade: pointerdown, pointerup e o click que o navegador manda depois (detail 1). `tipo` é "mouse", "touch" ou "pen". */
+function verifApertarComPonteiro(alvo, tipo, detalhe = 1) {
+    const opcoes = { pointerType: tipo, pointerId: tipo === "mouse" ? 1 : 7, isPrimary: true, button: 0, bubbles: true };
+    alvo.dispatchEvent(new PointerEvent("pointerdown", opcoes));
+    alvo.dispatchEvent(new PointerEvent("pointerup", opcoes));
+    verifClicarSemPonteiro(alvo, detalhe);
 }
 
 /* Um Espaço no elemento com o foco, como o navegador entrega (sobe até a janela). */
@@ -510,29 +678,52 @@ function verifEspacoDepoisDoClique() {
     const focoInicial = lanternaDaBarca.foco;
     const outroFoco = focoInicial === "largo" ? "estreito" : "largo";
     const reducaoInicial = reduzirClaroes;
+    const botaoEsquerda = document.getElementById("botao-esquerda");
 
-    // mouse ou dedo (detail ≥ 1): o botão larga o foco e o Espaço seguinte é da lanterna
+    // mouse (pointerdown de mouse + click com detail 1): o botão larga o foco e o Espaço seguinte é da lanterna
     botaoFoco.focus();
     const tinhaFoco = document.activeElement === botaoFoco;
-    verifTocarComDetalhe(botaoFoco, 1);
-    conferir("clique do mouse no botão Foco: troca o foco da lanterna e o botão LARGA o foco do teclado",
+    verifApertarComPonteiro(botaoFoco, "mouse");
+    conferir("clique do mouse (pointerdown de mouse + click) no botão Foco: troca o foco da lanterna e o botão LARGA o foco do teclado",
         tinhaFoco && lanternaDaBarca.foco === outroFoco && document.activeElement !== botaoFoco, "ativo: " + (document.activeElement && document.activeElement.id));
     const espacoDoMouse = verifApertarEspacoNoFoco();
-    conferir("o Espaço depois do clique troca o foco da lanterna (e o navegador não rola a página)", lanternaDaBarca.foco === focoInicial && espacoDoMouse.defaultPrevented === true);
+    conferir("o Espaço depois do clique do mouse troca o foco da lanterna (e o navegador não rola a página)", lanternaDaBarca.foco === focoInicial && espacoDoMouse.defaultPrevented === true);
 
     botaoClarao.focus();
-    verifTocarComDetalhe(botaoClarao, 1);
+    verifApertarComPonteiro(botaoClarao, "mouse");
     const espacoDepoisDoClarao = verifApertarEspacoNoFoco();
     conferir("clique do mouse em \"Reduzir clarões\": liga a opção, larga o foco e o Espaço seguinte troca o foco da lanterna",
         reduzirClaroes === !reducaoInicial && document.activeElement !== botaoClarao && lanternaDaBarca.foco === outroFoco && espacoDepoisDoClarao.defaultPrevented === true);
-    verifTocarComDetalhe(botaoClarao, 1);
+    botaoClarao.focus();
+    verifApertarComPonteiro(botaoClarao, "mouse");
     verifApertarEspacoNoFoco();
-    conferir("e o segundo clique desliga a opção; o segundo Espaço devolve o foco da lanterna", reduzirClaroes === reducaoInicial && lanternaDaBarca.foco === focoInicial);
+    conferir("e o segundo clique do mouse desliga a opção; o segundo Espaço devolve o foco da lanterna", reduzirClaroes === reducaoInicial && lanternaDaBarca.foco === focoInicial);
 
-    const botaoEsquerda = document.getElementById("botao-esquerda");
     botaoEsquerda.focus();
-    verifTocarComDetalhe(botaoEsquerda, 1);
-    conferir("clique do dedo em ◀ (detail 1) também larga o foco", document.activeElement !== botaoEsquerda);
+    verifApertarComPonteiro(botaoEsquerda, "mouse");
+    conferir("clique do mouse em ◀ (pointerdown de mouse + click detail 1) larga o foco", document.activeElement !== botaoEsquerda);
+
+    // dedo e caneta (pointerdown de touch/pen + click com detail 1): o foco FICA no botão e a ativação conta uma vez
+    ["touch", "pen"].forEach(function (tipo) {
+        botaoFoco.focus();
+        verifApertarComPonteiro(botaoFoco, tipo);
+        const espacoDoBotao = verifApertarEspacoNoFoco();
+        conferir("toque (" + tipo + ") no botão Foco: troca o foco da lanterna UMA vez, o botão MANTÉM o foco e o Espaço seguinte é dele (a janela não troca nem cancela)",
+            lanternaDaBarca.foco === outroFoco && document.activeElement === botaoFoco && espacoDoBotao.defaultPrevented === false, "ativo: " + (document.activeElement && document.activeElement.id) + ", foco " + lanternaDaBarca.foco);
+        verifClicarSemPonteiro(botaoFoco, 0);
+        conferir("e o click de teclado seguinte (detail 0) devolve o foco da lanterna e o botão continua com o foco", lanternaDaBarca.foco === focoInicial && document.activeElement === botaoFoco);
+
+        botaoClarao.focus();
+        verifApertarComPonteiro(botaoClarao, tipo);
+        conferir("toque (" + tipo + ") em \"Reduzir clarões\": liga a opção e o botão mantém o foco", reduzirClaroes === !reducaoInicial && document.activeElement === botaoClarao);
+        verifClicarSemPonteiro(botaoClarao, 0);
+        conferirIgual("e o click de teclado seguinte desliga a opção (" + tipo + ")", reduzirClaroes, reducaoInicial);
+
+        botaoEsquerda.focus();
+        verifApertarComPonteiro(botaoEsquerda, tipo);
+        conferir("toque (" + tipo + ") em ◀: o botão mantém o foco", document.activeElement === botaoEsquerda);
+        window.dispatchEvent(new Event("blur"));   // solta o giro que o pointerdown segurou, se o pointerup não o soltou
+    });
 
     // teclado e leitor de tela (detail 0): o botão fica com o foco e o Espaço é dele
     botaoFoco.focus();
@@ -540,22 +731,67 @@ function verifEspacoDepoisDoClique() {
     botaoFoco.dispatchEvent(espacoNoBotao);
     conferir("Tab até o botão Foco + Espaço: a janela NÃO troca o foco da lanterna (o Espaço é do botão) e não cancela o Espaço dele",
         lanternaDaBarca.foco === focoInicial && espacoNoBotao.defaultPrevented === false && document.activeElement === botaoFoco);
-    botaoFoco.click();   // o que o navegador faz ao soltar Espaço ou ao apertar Enter: um click com detail 0
+    verifClicarSemPonteiro(botaoFoco, 0);   // o que o navegador faz ao soltar Espaço ou ao apertar Enter: um click com detail 0
     conferir("a ativação do botão (click com detail 0, de Espaço ou Enter) troca o foco UMA vez e o botão MANTÉM o foco",
         lanternaDaBarca.foco === outroFoco && document.activeElement === botaoFoco && botaoFoco.textContent === "Foco: " + outroFoco);
     verifApertarEspacoNoFoco();
-    botaoFoco.click();
+    verifClicarSemPonteiro(botaoFoco, 0);
     conferir("de novo: Espaço no botão não mexe na lanterna e a segunda ativação devolve o foco", lanternaDaBarca.foco === focoInicial && document.activeElement === botaoFoco);
 
     botaoClarao.focus();
-    botaoClarao.click();
+    verifClicarSemPonteiro(botaoClarao, 0);
     conferir("Tab + Enter no \"Reduzir clarões\" (click com detail 0): liga e o botão mantém o foco", reduzirClaroes === !reducaoInicial && document.activeElement === botaoClarao);
-    botaoClarao.click();
+    verifClicarSemPonteiro(botaoClarao, 0);
     botaoEsquerda.focus();
-    botaoEsquerda.click();
+    verifClicarSemPonteiro(botaoEsquerda, 0);
     conferir("click com detail 0 em ◀ (leitor de tela) não tira o foco do botão", document.activeElement === botaoEsquerda);
     window.dispatchEvent(new Event("blur"));   // solta o toque curto do leitor de tela (o jogo o soltaria em 250 ms, depois do teste)
     botaoEsquerda.blur();
+
+    // as condições, uma a uma: sem pointerdown de mouse, sem detail ≥ 1 ou fora de um botão, o foco fica
+    botaoFoco.focus();
+    verifClicarSemPonteiro(botaoFoco, 1);
+    conferir("click com detail 1 SEM pointerdown antes (leitor de tela que manda detail ≥ 1: TalkBack, VoiceOver) mantém o foco", document.activeElement === botaoFoco);
+    verifClicarSemPonteiro(botaoFoco, 0);
+
+    botaoFoco.focus();
+    botaoFoco.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse", pointerId: 1, button: 0, bubbles: true }));
+    verifClicarSemPonteiro(botaoFoco, 0);
+    conferir("pointerdown de mouse seguido de click com detail 0 (ativação por teclado) mantém o foco", document.activeElement === botaoFoco);
+    verifClicarSemPonteiro(botaoFoco, 0);
+
+    botaoFoco.focus();
+    verifApertarComPonteiro(botaoFoco, "mouse");
+    botaoFoco.focus();
+    verifClicarSemPonteiro(botaoFoco, 1);
+    conferir("o mouse vale para UM click: um segundo click com detail 1 sem novo pointerdown de mouse mantém o foco", document.activeElement === botaoFoco);
+    verifClicarSemPonteiro(botaoFoco, 0);
+    verifClicarSemPonteiro(botaoFoco, 0);
+
+    botaoFoco.focus();
+    botaoFoco.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse", pointerId: 1, button: 0, bubbles: true }));
+    botaoFoco.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "touch", pointerId: 7, bubbles: true }));
+    verifClicarSemPonteiro(botaoFoco, 1);
+    conferir("vale o ÚLTIMO ponteiro a apertar: mouse e depois dedo mantém o foco", document.activeElement === botaoFoco);
+    verifClicarSemPonteiro(botaoFoco, 0);
+
+    const fora = document.createElement("div");
+    document.body.appendChild(fora);
+    botaoFoco.focus();
+    let excecao = "";
+    try { verifApertarComPonteiro(fora, "mouse"); } catch (erro) { excecao = String(erro); }
+    conferir("clique do mouse fora de um botão não dá erro e não tira o foco do botão que o tinha", excecao === "" && document.activeElement === botaoFoco, excecao);
+    fora.remove();
+
+    const dentro = document.createElement("span");
+    botaoEsquerda.appendChild(dentro);
+    botaoEsquerda.focus();
+    verifApertarComPonteiro(dentro, "mouse");
+    conferir("clique do mouse num filho do botão ◀ (o clique sobe até o botão) também larga o foco do botão", document.activeElement !== botaoEsquerda);
+    dentro.remove();
+    window.dispatchEvent(new Event("blur"));
+    conferirIgual("(controle) a lanterna está no foco de partida e o Espaço no corpo da página a troca", [lanternaDaBarca.foco === focoInicial, verifApertarEspacoNoFoco().defaultPrevented].join(","), "true,true");
+    verifApertarEspacoNoFoco();   // devolve o foco da lanterna ao de partida
 }
 
 
@@ -635,4 +871,24 @@ function verifSubidaDoBufferDaChuva(passar) {
     conferir("modo avulsa: o buffer das instâncias NÃO sobe (escondida, a malha instanciada nem usa) e as malhas avulsas continuam caindo", avulsa === 0 && avulsaSeMexeu, "subidas " + avulsa + ", avulsa se mexeu " + avulsaSeMexeu);
     conferir("modo nenhuma: o buffer não sobe e a chuva fica parada", nenhuma === 0 && nenhumaParada, "subidas " + nenhuma);
     conferirIgual("e a tecla C voltou ao modo instanciada", chuva.modo, "instanciada");
+}
+
+
+// ============================================================
+// 7. O MAR E A NÉVOA (05 e 06): 130 m de mar e névoa 0,03 de tarde e de noite (a câmera afastada até ×3 mostraria a borda)
+// ============================================================
+function verifMarENevoaDoEntardecer(passar) {
+    const densidades = [cena.fog.density];
+    const quadros = Math.ceil((DURACAO_DO_ENTARDECER + 2) * 1000 / 50);
+    let corDaNevoaSegueOFundo = cena.fog.color.equals(cena.background);
+    for (let quadro = 0; quadro < quadros; quadro++) {
+        passar(50);
+        densidades.push(cena.fog.density);
+        corDaNevoaSegueOFundo = corDaNevoaSegueOFundo && cena.fog.color.equals(cena.background);
+    }
+    conferir("o mar tem 130 m (a câmera se afasta até ×3 e a borda não pode aparecer): TAMANHO_DO_MAR " + TAMANHO_DO_MAR + ", malha " + mar.geometry.parameters.width + " × " + mar.geometry.parameters.height,
+        TAMANHO_DO_MAR === 130 && mar.geometry.parameters.width === 130 && mar.geometry.parameters.height === 130);
+    conferir("a névoa é 0,03 desde o começo da tarde e em todo o entardecer até a noite fechada (" + densidades.length + " quadros; menor " + Math.min.apply(null, densidades) + ", maior " + Math.max.apply(null, densidades) + ")",
+        densidades.every(function (densidade) { return Math.abs(densidade - 0.03) < 1e-12; }));
+    conferir("e a cor da névoa continua a do fundo em todos os quadros", corDaNevoaSegueOFundo);
 }

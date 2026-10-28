@@ -485,8 +485,68 @@
                 irParaNoite(0);
             });
 
-            testar("a trava de clarões (WCAG 2.3.1) nas regras do passo 8: 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido", function () {
+            testar("haCaminhoAtePorto(listaDeRecifes = recifes) só LÊ: recifesDaFicha(ficha) monta os recifes de uma noite como dados e fichas.every(f => haCaminhoAtePorto(recifesDaFicha(f))) deixa o jogo byte a byte igual", function () {
+                function semMalhas(chave, valor) {   // o jogo guarda a malha do three.js em barcos e recifes: fora da fotografia
+                    return valor !== null && typeof valor === "object" && (valor.isObject3D || valor.isMaterial || valor.isBufferGeometry) ? undefined : valor;
+                }
+                function camposDoRecife(recife) {
+                    return [recife.x, recife.z, recife.raio, recife.alta, recife.brasa, recife.iluminado].join(",");
+                }
+                function fotografarOJogo() {
+                    return JSON.stringify({
+                        recifes: recifes, fila: barcosDePesca, afundando: barcosAfundando, removidos: barcosRemovidos, barca: barcaNoMundo, noite: noite, lanterna: lanternaDaBarca,
+                        placar: [salvos, naufragios, proximoIdDeBarco], reducao: reduzirClaroes, ilha: ilha, porto: porto, partida: PARTIDA
+                    }, semMalhas);
+                }
+                irParaNoite(2);
+                passarSegundos(3);
+                const antes = fotografarOJogo();
+                const recifesAntes = recifes.slice();
+                const todasTemCaminho = fichas.every(function (ficha) { return haCaminhoAtePorto(recifesDaFicha(ficha)); });
+                conferir("a checagem documentada, fichas.every(f => haCaminhoAtePorto(recifesDaFicha(f))), é true para as " + fichas.length + " noites", fichas.length === 5 && todasTemCaminho === true);
+                conferir("e o jogo ficou byte a byte igual (recifes, fila, barca, noite, lanterna, placar, ids): nenhuma noite foi montada", fotografarOJogo() === antes && recifes.length === recifesAntes.length && recifes.every(function (recife, i) { return recife === recifesAntes[i]; }));
+
+                const diferencas = [];
+                fichas.forEach(function (ficha, indice) {
+                    const dados = recifesDaFicha(ficha);
+                    const dadosDeNovo = recifesDaFicha(ficha);
+                    comecarNoite(indice);
+                    if (dados.map(camposDoRecife).join(";") !== recifes.map(camposDoRecife).join(";")) { diferencas.push("noite " + (indice + 1) + ": recifesDaFicha difere dos recifes que comecarNoite monta"); }
+                    if (dados.length !== ficha.recifes || dados.filter(function (recife) { return recife.alta; }).length !== ficha.colunas) { diferencas.push("noite " + (indice + 1) + ": " + dados.length + " recifes, " + dados.filter(function (recife) { return recife.alta; }).length + " altos"); }
+                    if (dados.some(function (recife, i) { return recife === dadosDeNovo[i] || recife === recifes[i]; })) { diferencas.push("noite " + (indice + 1) + ": os recifes devolvidos são os mesmos objetos (não são cópias)"); }
+                    dados[0].raio = 999;
+                    dados[0].brasa = 5;
+                    if (recifesDaFicha(ficha).map(camposDoRecife).join(";") !== dadosDeNovo.map(camposDoRecife).join(";")) { diferencas.push("noite " + (indice + 1) + ": mexer no resultado mexeu nos dados das noites"); }
+                });
+                conferir("recifesDaFicha(ficha) devolve cópias novas, iguais aos recifes que comecarNoite monta (em número, altos e campos), e mexer nelas não suja os dados das cinco noites",
+                    diferencas.length === 0, diferencas.slice(0, 3).join("; "));
+
+                irParaNoite(4);
+                const noiteCinco = recifesDaFicha(fichas[4]);
+                const fechado = noiteCinco.concat([{ x: porto.x, z: porto.z, raio: 15, alta: false, brasa: 0, iluminado: false }]);
+                const abertoNoJogo = recifes.slice();
+                conferirIgual("com a lista do argumento fechando o porto, devolve false mesmo com os recifes do jogo abertos", haCaminhoAtePorto(fechado), false);
+                conferirIgual("e sem argumento lê os recifes do jogo (abertos): true", haCaminhoAtePorto(), true);
+                recifes.push({ x: porto.x, z: porto.z, raio: 15, alta: false, brasa: 0, iluminado: false });
+                conferirIgual("com o porto fechado só nos recifes do jogo, sem argumento é false", haCaminhoAtePorto(), false);
+                conferirIgual("e uma lista aberta no argumento vence os recifes fechados do jogo: true", haCaminhoAtePorto(noiteCinco), true);
+                conferirIgual("a lista vazia deixa o caminho livre: true", haCaminhoAtePorto([]), true);
+                recifes.length = abertoNoJogo.length;
+                conferir("os recifes do jogo voltaram ao que eram", recifes.every(function (recife, i) { return recife === abertoNoJogo[i]; }));
+                const pedraDeTeste = { x: 40, z: 40, raio: 2, alta: false, brasa: 0, iluminado: false };
+                conferir("recifeTocadoPor(coisa, folga, lista) olha a lista dada: acha a pedra dela e não vê as do jogo",
+                    recifeTocadoPor({ x: 40, z: 40 }, 0, [pedraDeTeste]) === pedraDeTeste && recifeTocadoPor({ x: recifes[0].x, z: recifes[0].z }, 0, []) === null && recifeTocadoPor({ x: recifes[0].x, z: recifes[0].z }) === recifes[0]);
+                irParaNoite(0);
+            });
+
+            testar("a trava de clarões (WCAG 2.3.1) nas regras do passo 8: 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 começos em QUALQUER janela fechada de 1 s (intervalo mínimo 0,4 s)", function () {
                 verifTravaDeClaroes();
+                irParaNoite(0);
+                ligarReducao(false);
+            });
+
+            testar("o modo vale para o clarão inteiro (`noite.relampagoReduzido` grava a opção no começo de cada clarão): opção trocada a cada quadro durante os clarões, nunca um salto de 0 a 1 num clarão reduzido", function () {
+                verifModoTravadoPorClarao();
                 irParaNoite(0);
                 ligarReducao(false);
             });
@@ -514,7 +574,7 @@
                 irParaNoite(0);
             });
 
-            testar("o comboio nasce em lugar válido: 12 giros × recuos de 0, 7, 14 e 21 m e, cercado, na PARTIDA (filaLivre(PARTIDA) é true nas cinco noites)", function () {
+            testar("o comboio nasce no 1º candidato aprovado: 48 giros × recuos, o anel a 10 e 20 m e a PARTIDA por último; sem lugar vivo, não nasce nada (filaLivre(PARTIDA) é true nas cinco noites)", function () {
                 verifNascimentoDoComboio();
                 irParaNoite(0);
             });

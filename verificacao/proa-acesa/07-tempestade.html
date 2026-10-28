@@ -430,6 +430,17 @@
                 ligarReducao(false);
             });
 
+            testar("o modo vale para o clarão inteiro (`noite.relampagoReduzido` grava a opção no começo de cada clarão): opção trocada a cada quadro durante os clarões, nunca um salto de 0 a 1 num clarão reduzido", function () {
+                verifModoTravadoPorClarao();
+                irParaNoite(0);
+                ligarReducao(false);
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre nas cinco noites", function () {
+                verifNascimentoDoComboio();
+                irParaNoite(0);
+            });
+
             testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
                 irParaNoite(4);
                 verifCameraNoPontoDaFormula();

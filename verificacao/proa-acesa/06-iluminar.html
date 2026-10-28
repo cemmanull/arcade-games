@@ -298,6 +298,10 @@
             // ============================================================
             // Casos
             // ============================================================
+            testar("o mar tem 130 m e a névoa é 0,03 de tarde e de noite (constante em todo o entardecer)", function () {
+                verifMarENevoaDoEntardecer(passar);
+            });
+
             testar("o mundo da luz: 13 recifes (3 colunas altas), colunas são as pedras dos altos, o cone desenhado é o cone da regra", function () {
                 conferir("o three.js carregou e não há aviso", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
                 conferirIgual("13 recifes", recifes.length, QUANTIDADE_DE_RECIFES);
@@ -785,8 +789,8 @@
                 conferir("e a ilha de verdade continua onde a regra a pôs (−5, −12)", ilha.x === -5 && ilha.z === -12 && cena.children.some(function (filho) { return filho.position.x === -5 && filho.position.z === -12 && filho.children.length === 4; }));
             });
 
-            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre", function () {
-                verifNascimentoDoComboio();
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio(function () { atualizarMundo(0, 0, false); });   // o quadro do jogo tenta de novo, com a barca onde está
                 posicionarBarcaQuieta(8, 14, 0);
                 verifNascerEm({ x: 8, z: 14, proa: 0 });
                 passar(50);

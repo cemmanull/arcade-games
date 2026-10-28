@@ -52,7 +52,7 @@
             const DISTANCIA_DO_COMBOIO = 7;
             const BARCOS_POR_COMBOIO = 4;
             const METADE_DO_MUNDO = 80;
-            const PASSO_DA_GRADE = 90 / 64;
+            const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // o mar do passo 5 tem 130 m (era 90); lido do passo, não escrito aqui
             const VELOCIDADE_MAXIMA_DA_MIRA = 2.5;
             const FILHOS_FIXOS_DA_CENA = 6;      // luz do céu, mar, ilha, barca, recifes, porto
             const RECIFE_DO_MEIO = { x: 9, z: -4, raio: 2 };
@@ -343,6 +343,10 @@
                 conferirSemViolacoes("estado inicial");
             });
 
+            testar("o mar tem 130 m e a névoa é 0,03 de tarde e de noite (constante em todo o entardecer)", function () {
+                verifMarENevoaDoEntardecer(passar);
+            });
+
             testar("exercício 8: cada entrada solta só a SUA (A + ←, soltar só a seta, mantém o leme)", function () {
                 acalmar();
                 apertar("a");
@@ -614,8 +618,8 @@
                 conferir("e a ilha de verdade, a do jogo, continua onde a regra a pôs (−5, −12)", ilha.x === -5 && ilha.z === -12 && cena.children.some(function (filho) { return filho.position.x === -5 && filho.position.z === -12 && filho.children.length === 4; }));
             });
 
-            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre", function () {
-                verifNascimentoDoComboio();
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio(function () { atualizarMundo(0, 0, false); });   // o quadro do jogo tenta de novo, com a barca onde está
                 passar(50);   // o quadro apaga as malhas dos barcos que o teste tirou da fila
                 recomecarMundo(8, 14, 0, false);
                 passar(50);

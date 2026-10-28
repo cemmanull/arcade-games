@@ -511,13 +511,20 @@
                 comecarNoite(0);
             });
 
-            testar("a trava de clarões (WCAG 2.3.1): 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 por segundo, nunca com o anterior no ar", function () {
+            testar("a trava de clarões (WCAG 2.3.1): 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 começos em QUALQUER janela fechada de 1 s (intervalo mínimo 0,4 s), nunca com o anterior no ar", function () {
                 verifTravaDeClaroes();
                 comecarNoite(0);
                 barcosRemovidos.length = 0;
             });
 
-            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre nas cinco noites", function () {
+            testar("o modo vale para o clarão inteiro (`noite.relampagoReduzido` grava a opção no começo de cada clarão): opção trocada a cada quadro durante os clarões, nunca um salto de 0 a 1 num clarão reduzido", function () {
+                verifModoTravadoPorClarao();
+                reduzirClaroes = false;
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre nas cinco noites", function () {
                 verifNascimentoDoComboio();
                 comecarNoite(0);
                 barcosRemovidos.length = 0;

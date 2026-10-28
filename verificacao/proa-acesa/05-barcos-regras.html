@@ -576,8 +576,8 @@
                 conferirIgual("quando ele some, o comboio chega", barcosDePesca.length, BARCOS_POR_COMBOIO);
             });
 
-            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre", function () {
-                verifNascimentoDoComboio();
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio(function () { atualizarMundo(0, 0, false); });   // o quadro do jogo tenta de novo, com a barca onde está
                 limparMundo();
                 colocarBarca(8, 14, 0);
                 criarComboio();

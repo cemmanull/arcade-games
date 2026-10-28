@@ -144,6 +144,8 @@ Copie `tetris/03-queda.html`. Três truques fazem tudo funcionar por `file://`:
 3. **Leia o estado do jogo pelo nome.** Os `let`/`const` do topo de um script clássico são
    visíveis para os scripts seguintes da mesma página (`poco`, `pecaAtual`, `cabe(...)`).
 
+O Proa Acesa reparte as verificações dos passos 5 a 8 em `proa-acesa/apoio-proa.js` (nascimento do comboio, trava e modo dos clarões, enquadramento da câmera, Espaço depois do clique, chuva, mar e névoa): funções com prefixo `verif…` que usam o `conferir` do `apoio.js`; carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo.
+
 Se o jogo desenha num `<canvas>`, o teste de `tetris/03-queda.html` troca `getContext` por um
 contexto que ignora o desenho (o teste confere regras, não pixels): o robô de 30.000 quadros caiu
 de cerca de 17 s para 3 s. Em loops que esperam o jogo, confira o retorno de `avancarQuadro` e
