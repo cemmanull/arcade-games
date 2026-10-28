@@ -64,8 +64,8 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
 - `localStorage` é sempre lido com `try/catch` e saneado campo a campo.
 - A interface cabe numa tela de celular de 390×750 sem rolar; teclado e toque viram a mesma
   intenção.
-- Som sintetizado com Web Audio. Sprites e texturas como texto dentro do código; arquivos de imagem
-  só no `final` (o Dealer? Out! é o exemplo).
+- Som sintetizado com Web Audio. Sprites e texturas como texto dentro do código; arquivos de imagem,
+  se um dia forem necessários, só no `final`.
 - Antes de acrescentar qualquer dependência, ferramenta ou arquivo de infraestrutura: o curso promete
   "nenhuma instalação".
 
@@ -76,8 +76,9 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
   `typeof THREE === "undefined"` e mostra um aviso (sem internet ou sem WebGL).
 - A versão fixada do three.js se repete em cada `index.html` do módulo 3D, porque import maps são
   inline e os passos são independentes. Para trocar de versão, buscar e substituir em todos.
-- Chaves e certificados nunca entram no repo (`.gitignore`). A pasta `https-local/` do Dealer? Out!
-  original ficou de fora de propósito.
+- Chaves e certificados nunca entram no repo (`.gitignore`).
+- Código de outros projetos não entra neste repo: um módulo que pertence a outro projeto foi retirado
+  da trilha e da história em 2026-10-27 (decisão do usuário; ver `HANDOFF.md`). Não reimportar.
 - Fins de linha: `.gitattributes` força LF. Não converter à mão.
 - O repo fica dentro do OneDrive. Se o git reclamar de `index.lock` ou aparecerem cópias "-PC",
   pausar a sincronização. Prefira agentes em paralelo na mesma cópia, com arquivos disjuntos, a
