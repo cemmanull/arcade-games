@@ -78,7 +78,7 @@ canto** das quatro colunas. Isso não é raro: todo pixel sobre uma linha da gra
 raio inteira andando de canto em canto. As duas colunas dos lados não são atravessadas, só **encostadas** em um
 ponto, e a força bruta, que usa polígonos fechados, conta quem encosta. Por isso o DDA, no canto, antes de seguir
 para a coluna da diagonal, pergunta às duas vizinhas (`acharVizinhaNoCanto`) se o raio, naquela altura, está abaixo do
-topo delas. No empate entre as duas, vale a ordem do mapa (a mesma que a força bruta usa).
+topo delas. No empate entre as duas, vence a que o **pintor pinta por último** (`posicaoNoPintor`, o índice na lista do desenho): é a que a força bruta acha, porque ela lê a lista de trás para a frente.
 
 `faltaX` e `faltaY` são o que o DDA do Reflexo chamava de distância até a próxima linha: quanto falta, andando
 para trás, até `x'` ou `y'` virar um número inteiro. O menor dos dois decide qual linha vem primeiro. O laço
@@ -103,18 +103,19 @@ Um algoritmo esperto precisa de um ingênuo para ser julgado. A força bruta nã
 
 ```js
 function acharCasaPorForcaBruta(sx, sy) {
-    const maisProximasPrimeiro = listaDeDesenho.slice().sort(function (a, b) { return b.proximidade - a.proximidade; });
-    for (let i = 0; i < maisProximasPrimeiro.length; i++) {         // da mais próxima para a mais longe
-        const casa = maisProximasPrimeiro[i], faces = facesDaCasa(casa.x, casa.y);
+    for (let i = listaDeDesenho.length - 1; i >= 0; i--) {         // a lista do pintor, de trás para a frente
+        const casa = listaDeDesenho[i], faces = facesDaCasa(casa.x, casa.y);
         const face = Object.keys(faces).find(function (nome) { return poligonoContem(faces[nome], { x: sx, y: sy }); });
-        if (face) return { x: casa.x, y: casa.y, face: face };      // o primeiro que contém o pixel vence
+        if (face) return { x: casa.x, y: casa.y, face: face };      // o primeiro que contém o pixel vence: a última casa pintada
     }
     return null;
 }
 ```
 
-É a **lista do pintor, da frente para trás** (o `sort` é estável: duas casas com a mesma soma `x'+y'` ficam na
-ordem do mapa): o que foi pintado por último é o que se vê, então o primeiro polígono que contém o pixel é a resposta. `poligonoContem` testa um polígono convexo com o produto vetorial (o pixel
+É a **lista do pintor lida de trás para a frente**: o que foi pintado por último é o que se vê, então o primeiro
+polígono que contém o pixel é a resposta. Duas casas com a mesma soma `x'+y'` não se sobrepõem, mas dividem uma aresta;
+num pixel dessa aresta vale a que o pintor pinta depois (o `sort` é estável: a de maior índice no mapa), e é essa regra
+que o DDA copia no canto. `poligonoContem` testa um polígono convexo com o produto vetorial (o pixel
 fica do mesmo lado de todas as arestas). São até 300 polígonos por toque, contra poucas colunas do raio: por isso o
 jogo usa o raio, e a força bruta só confere. O H mostra as duas respostas lado a lado.
 
@@ -145,7 +146,8 @@ não precisa de dois tempos: Enter confirma direto). `aplicar()` é, por enquant
 (`pinos`, um conjunto de `"x,y"`): é o lugar onde o passo 5 vai pôr **Erguer** e **Cavar**. Mouse, toque,
 teclado e botão desembocam nas mesmas duas funções, `tocar` e `aplicar`.
 
-Três cuidados de entrada, de quem já se queimou: **Enter e Espaço num botão** já acionam o botão, então o ouvinte do
+Quatro cuidados de entrada, de quem já se queimou: **Todo botão `[data-acao]`** (os de ação e os de seta) é atendido por **um** ouvinte de `click` no
+`document`, que sobe do alvo com `closest("[data-acao]")`: não é preciso um ouvinte por grupo de botões. **Enter e Espaço num botão** já acionam o botão, então o ouvinte do
 documento os ignora quando o alvo é um `BUTTON` (senão aplicaria duas vezes); **Ctrl/Cmd/Alt + tecla** é do
 navegador (Ctrl+R recarrega a página), não gira a vista; e uma tecla **segurada** repete o `keydown`: Enter e Espaço
 ignoram `evento.repeat`, ou aplicariam (pôr e tirar o pino) dezenas de vezes por segundo.
@@ -192,8 +194,9 @@ O H continua com `aria-live="off"`. O cursor mantém o que o passo 2 ensinou: pi
    (ou não) melhor para quem usa o dedo.
 7. Marque uma casa **escondida** atrás do pico com as setas. O que o contorno faz? Toque no pico por cima dela: o
    que é marcado?
-8. **Quebre de propósito:** em `acharCasaPorForcaBruta`, troque `b.proximidade - a.proximidade` por `a.proximidade - b.proximidade` (da mais longe para a
-   mais perto). O H diz DIFERENTE onde? Por que essa ordem é a ordem do pintor ao contrário?
+8. **Quebre de propósito:** em `acharCasaPorForcaBruta`, troque `for (let i = listaDeDesenho.length - 1; i >= 0; i--)` por um laço de `0` até o fim (a lista do
+   pintor lida de frente para trás). O H diz DIFERENTE onde? Por que essa ordem é a do pintor ao contrário? E se você só
+   inverter o `sort` de `acharVizinhaNoCanto` (`posicaoNoPintor(a.casa) - posicaoNoPintor(b.casa)`), em que pixels a discordância aparece?
 
 ---
 

@@ -128,8 +128,11 @@ function silhuetaCobre(casa, ponto) {           // a caixa da casa (o losango do
 
 function quemEsconde(x, y) {                    // a casa pintada DEPOIS (mais à frente) que cobre o centro do topo de (x, y), ou undefined
     const topo = mundoParaTela(x + 0.5, y + 0.5, alturaVisivel(alturas[y][x]));
-    const posicao = listaDeDesenho.findIndex(function (casa) { return casa.x === x && casa.y === y; });
-    return listaDeDesenho.slice(posicao + 1).find(function (casa) { return silhuetaCobre(casa, topo); });
+    return listaDeDesenho.slice(posicaoNoPintor({ x: x, y: y }) + 1).find(function (casa) { return silhuetaCobre(casa, topo); });
+}
+
+function posicaoNoPintor(casa) {               // o índice da casa na lista do pintor: quanto maior, mais tarde é pintada
+    return listaDeDesenho.findIndex(function (pintada) { return pintada.x === casa.x && pintada.y === casa.y; });
 }
 
 function acharVizinhaNoCanto(coluna, linha, z) {    // o raio passa exatamente pelo canto das quatro colunas: as duas laterais só o encostam, e o polígono fechado da força bruta as conta
@@ -137,7 +140,7 @@ function acharVizinhaNoCanto(coluna, linha, z) {    // o raio passa exatamente p
         return dentroDoMapa(vizinha[0], vizinha[1]);
     }).map(function (vizinha) {
         return { casa: casaDaTela(vizinha[0], vizinha[1]), face: vizinha[2] };
-    }).sort(function (a, b) { return a.casa.y - b.casa.y || a.casa.x - b.casa.x; });      // empate entre as duas: vale a ordem do mapa, a mesma da força bruta
+    }).sort(function (a, b) { return posicaoNoPintor(b.casa) - posicaoNoPintor(a.casa); });      // empate entre as duas: vence a pintada por último, a mesma que a força bruta acha lendo a lista de trás para a frente
     const encostada = z < -MARGEM_DO_PONTO_FLUTUANTE ? null : encostadas.find(function (candidata) { return z <= alturaVisivel(alturas[candidata.casa.y][candidata.casa.x]) + MARGEM_DO_PONTO_FLUTUANTE; });
     if (!encostada) return null;
     const altura = alturaVisivel(alturas[encostada.casa.y][encostada.casa.x]);
@@ -183,10 +186,9 @@ function poligonoContem(poligono, ponto) {      // convexo: o ponto fica do mesm
     return lados.every(function (lado) { return lado >= 0; }) || lados.every(function (lado) { return lado <= 0; });
 }
 
-function acharCasaPorForcaBruta(sx, sy) {       // a referência: o polígono de cada casa, da mais próxima à mais longe; o primeiro que contém o pixel vence
-    const maisProximasPrimeiro = listaDeDesenho.slice().sort(function (a, b) { return b.proximidade - a.proximidade; });     // sort estável: no empate vale a ordem do mapa
-    for (let i = 0; i < maisProximasPrimeiro.length; i++) {
-        const casa = maisProximasPrimeiro[i], faces = facesDaCasa(casa.x, casa.y);
+function acharCasaPorForcaBruta(sx, sy) {       // a referência: a lista do pintor lida de trás para a frente; a última pintada que contém o pixel vence
+    for (let i = listaDeDesenho.length - 1; i >= 0; i--) {         // a última pintada cobre as outras: no empate de uma aresta comum, ela vence
+        const casa = listaDeDesenho[i], faces = facesDaCasa(casa.x, casa.y);
         const face = Object.keys(faces).find(function (nome) { return poligonoContem(faces[nome], { x: sx, y: sy }); });
         if (face) return { x: casa.x, y: casa.y, face: face };
     }

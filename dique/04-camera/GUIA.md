@@ -72,8 +72,10 @@ GDD: um arrasto de mais de **8 px** rola; menos que isso, ao soltar, é um **toq
 `pointerup` e `pointercancel` ficam na `window`, não no canvas, para o arrasto continuar quando o dedo sai dele; guarda-se o
 `pointerId` do dedo que arrasta e os outros ponteiros são ignorados: um **segundo dedo** que encosta não rouba o arrasto,
 não rola nada e, ao se levantar, não é um toque (`if (dedo && evento.pointerId !== dedo.id) return;`, no `pointerdown`, no `pointermove`
-e no `pointerup`). Só o **botão principal** (`evento.button === 0`) marca; o direito e o do meio não fazem nada. E
-**soltar fora da janela nunca marca**: no `pointerup`, o pixel passa por `pixelDentroDoCanvas` antes de virar toque. O CSS `touch-action: none` no canvas impede o
+e no `pointerup`). Só o **botão principal** (`evento.button === 0`) começa o gesto, e só a soltura **dele**, sem arrasto, é um toque. Soltar **qualquer**
+botão do ponteiro que o jogo segue encerra o gesto (`dedo = null` antes de qualquer outra decisão): com dois botões do mouse
+apertados, soltar o principal primeiro e o outro depois faria o `pointerup` final chegar com `button` de outro botão, e um
+`return` antes de zerar `dedo` deixaria o arrasto grudado no mouse. E **soltar fora da janela nunca marca**: no `pointerup`, o pixel passa por `pixelDentroDoCanvas` antes de virar toque. O CSS `touch-action: none` no canvas impede o
 navegador de rolar a página ou puxá-la para atualizar. *Reusa `tetris/04-controles` (a entrada vira intenção: tocar,
 rolar, aproximar são funções, e o mouse, o dedo e as teclas só as chamam).*
 
@@ -97,9 +99,11 @@ degraus (nada de zoom contínuo: tudo continua na grade de pixels do passo 1).
 
 **A roda soma antes de aproximar.** Um mouse manda `deltaY = ±100` por clique, mas um trackpad manda dezenas de eventos de
 poucos pixels por gesto: se cada um desse um degrau, um só deslize iria do Longe ao Perto. Por isso a roda **acumula**
-`deltaY` e só dá um degrau quando a soma passa de `LIMIAR_DA_RODA` (100), zerando-a depois. `deltaY === 0` (deslize
-horizontal, Shift + roda) não faz nada; `preventDefault` continua, para a página não rolar. (O Firefox conta em linhas, `deltaMode === 1`:
-multiplicamos por 33.) A mensagem do zoom diz onde ele está e, se já estava no limite, que **parou** ("Zoom: perto (limite)").
+`deltaY` e só dá um degrau quando a soma passa de `LIMIAR_DA_RODA` (100), zerando-a depois. A soma também **recomeça do zero**
+quando o sentido **inverte** (meio degrau para cima não ajuda o degrau para baixo) e depois de uma **pausa** de 300 ms sem eventos
+(`PAUSA_DA_RODA`; um gesto velho não completa o seguinte). `deltaY === 0` (deslize
+horizontal, Shift + roda) não faz nada; `preventDefault` continua, para a página não rolar. O `deltaMode` diz a unidade: pixels (×1), linhas
+(o Firefox, ×40: três linhas por clique valem mais que um degrau) ou páginas (×`LIMIAR_DA_RODA`: uma página vale um degrau) — `PIXELS_POR_DELTA_DA_RODA`. A mensagem do zoom diz onde ele está e, se já estava no limite, que **parou** ("Zoom: perto (limite)").
 
 ---
 

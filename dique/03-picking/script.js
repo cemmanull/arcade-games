@@ -93,8 +93,9 @@ document.addEventListener("keydown", function (evento) {
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
     else if (intencao) intencao();
 });
-document.getElementById("botoes").addEventListener("click", function (evento) {
-    const intencao = intencoes[evento.target.dataset.acao];
+document.addEventListener("click", function (evento) {      // um ouvinte só para todo botão [data-acao]: os botões, as ferramentas e as setas
+    const botao = evento.target.closest("[data-acao]");
+    const intencao = botao && intencoes[botao.dataset.acao];
     if (intencao) intencao();
 });
 tela.addEventListener("pointermove", function (evento) {

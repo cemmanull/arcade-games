@@ -13,13 +13,16 @@ const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
 const PASSO_DA_ROLAGEM = 24;                    // pixels da janela por toque de tecla
 const LIMITE_DO_TOQUE = 8;                      // um arrasto maior que isto (pixels) rola o mapa; menor é um toque
 const LIMIAR_DA_RODA = 100;                     // deltaY acumulado que vale um degrau de zoom: um trackpad manda dezenas de eventos pequenos
+const PIXELS_POR_DELTA_DA_RODA = [1, 40, LIMIAR_DA_RODA];     // por deltaMode: pixels; linhas (o Firefox); páginas (uma página vale um degrau)
+const PAUSA_DA_RODA = 300;                      // milissegundos sem roda: o acúmulo recomeça do zero
 const NOME_DO_ZOOM = ["longe", "no meio", "perto"];     // um por degrau de ZOOMS
 let cursor = { x: 4, y: 4 };                    // a casa do cursor
 let marcada = false;                            // dois toques: o primeiro marca o cursor, o segundo (na mesma casa) confirma
 const pinos = new Set();                        // "x,y" das casas com pino: o que se sabe "aplicar" até o passo 5
 let ponteiro = null;                            // o pixel da janela sob o mouse ou o dedo
 let dedo = null;                                // o ponteiro apertado: { id, inicio, ultimo, arrastando }
-let giroDaRoda = 0;                             // deltaY somado desde o último degrau de zoom
+let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
+let instanteDaRoda = 0;                         // quando veio o último evento da roda
 let depuracaoLigada = false;
 let faseDaOnda = 0;
 let instanteDoQuadroAnterior = performance.now();
@@ -134,14 +137,18 @@ document.addEventListener("keydown", function (evento) {
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
     else if (intencao) intencao();
 });
-document.getElementById("botoes").addEventListener("click", function (evento) {
-    const intencao = intencoes[evento.target.dataset.acao];
+document.addEventListener("click", function (evento) {      // um ouvinte só para todo botão [data-acao]: os botões, as ferramentas e as setas
+    const botao = evento.target.closest("[data-acao]");
+    const intencao = botao && intencoes[botao.dataset.acao];
     if (intencao) intencao();
 });
 tela.addEventListener("wheel", function (evento) {
     evento.preventDefault();                    // a roda aproxima o mapa, não rola a página
     if (evento.deltaY === 0) return;            // deslize horizontal ou Shift + roda
-    giroDaRoda += evento.deltaMode === 1 ? evento.deltaY * 33 : evento.deltaY;     // deltaMode 1: o Firefox conta em linhas
+    const depoisDeUmaPausa = evento.timeStamp - instanteDaRoda > PAUSA_DA_RODA;
+    if (depoisDeUmaPausa || Math.sign(evento.deltaY) !== Math.sign(giroDaRoda)) giroDaRoda = 0;     // pausa ou sentido invertido: o que sobrou não vale
+    instanteDaRoda = evento.timeStamp;
+    giroDaRoda += evento.deltaY * PIXELS_POR_DELTA_DA_RODA[evento.deltaMode];
     if (Math.abs(giroDaRoda) < LIMIAR_DA_RODA) return;
     mudarZoom(giroDaRoda < 0 ? 1 : -1, pixelDoEvento(evento));
     giroDaRoda = 0;
@@ -160,10 +167,10 @@ window.addEventListener("pointermove", function (evento) {      // na janela, n�
     dedo.ultimo = ponteiro;
 });
 window.addEventListener("pointerup", function (evento) {
-    if (!dedo || evento.pointerId !== dedo.id || evento.button !== 0) return;
-    const pixel = pixelDoEvento(evento), arrastou = dedo.arrastando;
+    if (!dedo || evento.pointerId !== dedo.id) return;     // qualquer botão solto encerra o gesto: senão, com dois botões apertados, o arrasto grudava
+    const pixel = pixelDoEvento(evento), foiToque = evento.button === 0 && !dedo.arrastando;
     dedo = null;
-    if (arrastou) return;
+    if (!foiToque) return;
     const acerto = pixelDentroDoCanvas(pixel) && casaSobOPixel(pixel);       // soltar sem arrastar é um toque, e soltar fora da janela não marca nada
     if (acerto) tocar(acerto);
 });
