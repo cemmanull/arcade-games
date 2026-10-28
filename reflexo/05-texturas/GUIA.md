@@ -29,7 +29,7 @@ quadro de duas técnicas de desenho (A e B) e o tempo do quadro de agora.
 
 ## 1. Textura como texto
 
-*Reusa os sprites em texto do curso (`dealer-out/01-tela`: cada letra é uma cor).*
+*Reusa os sprites em texto do curso (`shoot-em-up/01-ceu`: cada letra é uma cor).*
 
 Uma textura é uma grade 16×16 de cores. Em vez de um arquivo de imagem (o curso promete abrir com
 duplo clique, e arquivos de imagem só entram no `final`), cada textura é **16 linhas de 16 letras**, e

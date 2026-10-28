@@ -30,7 +30,7 @@ Com **H**: a grade e os números do zelador, agora mudando a cada quadro.
 
 ## 1. Teclado e toque viram a mesma intenção
 
-*Reusa `dealer-out/02-movimento` (entrada → intenção).*
+*Reusa `tetris/final` (teclado e toque pela mesma porta: entrada → intenção).*
 
 ```js
 const entradasAtivas = new Map();   // "tecla:w", "ponteiro:3:frente" → "frente"

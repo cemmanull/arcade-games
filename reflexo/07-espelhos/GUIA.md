@@ -13,7 +13,7 @@ parede: a porta abre. **R** reinicia a sala. **H** mostra o caminho do feixe.
 
 ## O que você vê
 
-Na sala há um **emissor** (`E`, na parede de baixo à esquerda), três **espelhos** prateados em pé no chão, um
+Na sala há um **emissor** (`E`, na parede da esquerda, na altura da linha 5), três **espelhos** prateados em pé no chão, um
 **receptor** (`R`, um anel roxo na parede) e uma **porta** (`D`) ao lado dele. O emissor lança um **feixe** ciano de
 pulsos claros e escuros. Ele quica nos espelhos e, no começo, vai parar numa parede: a porta está fechada.
 
@@ -155,9 +155,22 @@ pixel nenhum (GDD, seção 3).
 ## 6. Teclado e toque, a mesma intenção
 
 `acionarEspelho`, `alternarPlanta` e `reiniciarSala` são **intenções**, chamadas pela tecla (E ou Espaço, H, R) e pelo
-botão (`data-comando`). Os botões têm texto e `aria-pressed` (Planta). Espaço num botão focado já o aperta, então o
-teclado ignora o Espaço quando o foco está num botão. Os avisos ("Porta aberta", "Espelho girado", "Sala reiniciada")
-vão para uma região `aria-live` que só o leitor de tela vê.
+botão (`data-comando`). Os botões têm texto e `aria-pressed` (Planta).
+
+**O Espaço e o foco.** Espaço num botão que você alcançou com **Tab** é o jogador usando o teclado: o botão é apertado, como
+em qualquer página. Mas depois de um **clique** (mouse ou dedo) o botão também fica com o foco, e ninguém o escolheu: aí o
+Espaço tem de girar o espelho. A regra é `focoVeioDoTeclado`: começa ligado (sem clique nenhum, só o teclado põe o foco num botão), o Tab o liga, qualquer `pointerdown` o desliga, e
+`espacoGiraOEspelho` só deixa o botão ficar com o Espaço quando ele está ligado. (Quando o jogo trata o Espaço, também
+cancela o `keyup` dele, porque é ao soltar que o botão focado "clica".)
+
+**Avisos para o leitor de tela.** "Porta aberta", "Espelho girado", "Sala reiniciada" vão para uma região `aria-live` que só o
+leitor vê. Dois avisos no mesmo instante, ou o mesmo aviso duas vezes, o leitor leria como um só (ou nenhum). Por isso
+`avisar` usa uma **fila**: um aviso por vez, um segundo de intervalo, e a região fica vazia entre eles. Se a fila passa de 4,
+os mais velhos caem.
+
+**A conferência** está em [`verificacao/reflexo/07-espelhos.html`](../../verificacao/reflexo/07-espelhos.html): a página
+carrega o `script.js` de verdade e confere o feixe contra a especificação, a sala imutável, as portas, os avisos e a
+ausência de rolagem em 390×750, 360×640 e 1280×800.
 
 ---
 

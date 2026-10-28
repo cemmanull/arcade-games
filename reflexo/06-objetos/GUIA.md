@@ -27,9 +27,9 @@ cor); **cheio** é o objeto que está na frente do olho, **vazado** é o que fic
 
 ## 1. Objetos são dados
 
-*Reusa `dealer-out/04-catalogo` (o catálogo de tipos) e `shoot-em-up` (uma lista de muitos objetos).*
+*Reusa `shoot-em-up/03-tiros`, `04-inimigos` e `05-colisao` (listas de objetos que nascem e morrem, dados em catálogo).*
 
-No Dealer? Out!, o catálogo diz como cada alimento **é** e a lista diz **onde** está cada um. Aqui:
+No Shoot'em up, o catálogo diz como cada inimigo **é** e a lista diz **onde** está cada um. Aqui:
 
 ```js
 const CATALOGO_DE_SPRITES = { sombra: { tamanho: 0.8, elevacao: 0, cor: "#b07cf0", arte: [ ...16 linhas... ] },

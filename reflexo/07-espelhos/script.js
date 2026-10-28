@@ -234,6 +234,7 @@ let raiosDaTela = [];
 let zBuffer = new Float64Array(0);
 let espelhoNaColuna = [];                 // coluna → o espelho que aparece nela (ou null)
 let uDoEspelho = new Float64Array(0);     // coluna → onde, ao longo do espelho, o raio bateu
+let profundidadeDoSprite = new Float64Array(0);   // coluna → profundidade do sprite que cobre a altura dos olhos (Infinity = nenhum)
 let uDoPlano = 0;                         // segundo resultado de distanciaAoPlano
 let spritesDaTela = [];                   // sprites na frente do olho, do mais longe ao mais perto
 
@@ -387,6 +388,7 @@ function desenharVisao() {
     pixels.set(fundo);
     raiosDaTela.forEach(desenharColuna);
     espelhoNaColuna.forEach((espelho, coluna) => espelho !== null && desenharEspelhoNaColuna(espelho, coluna));
+    profundidadeDoSprite.fill(Infinity);
     spritesDaTela.forEach(desenharSprite);
     luz.segmentos.forEach(desenharFeixe);
     pincelVisao.putImageData(imagem, 0, 0);
@@ -444,6 +446,7 @@ function desenharSprite(sprite) {
     const lado = sprite.base - sprite.topo;
     const primeiraLinha = Math.max(0, Math.ceil(sprite.topo - 0.5));
     const fimDasLinhas = Math.min(alturaDaVisao, Math.ceil(sprite.base - 0.5));
+    const olhos = linhaDosOlhos();
 
     sprite.colunas.forEach(coluna => {
         const colunaDaArte = Math.min(TAMANHO_DA_TEXTURA - 1, Math.floor((coluna + 0.5 - sprite.esquerda) / lado * TAMANHO_DA_TEXTURA));
@@ -452,9 +455,16 @@ function desenharSprite(sprite) {
             const pixel = arte[linhaDaArte * TAMANHO_DA_TEXTURA + colunaDaArte];
             if (pixel !== TRANSPARENTE) {
                 pixels[linha * larguraDaVisao + coluna] = pixel;
+                if (linha === olhos) {
+                    profundidadeDoSprite[coluna] = sprite.profundidade;   // do mais longe ao mais perto: o último é o da frente
+                }
             }
         }
     });
+}
+
+function linhaDosOlhos() {
+    return Math.round(alturaDaVisao / 2);
 }
 
 /*
@@ -522,14 +532,14 @@ function desenharEspelhoNaColuna(espelho, coluna) {
 }
 
 // Uma faixa fina na altura dos olhos, em pulsos claros e escuros ao longo do comprimento. Só aparece onde está
-// mais perto que a parede e o espelho (z-buffer); não entra no z-buffer, é luz.
+// mais perto que a parede, o espelho e o sprite dessa coluna (z-buffer); não entra no z-buffer, é luz.
 function desenharFeixe(segmento) {
     const fase = SEM_ANIMACAO ? 0 : instanteDoQuadro / 1000 * VELOCIDADE_DOS_PULSOS;
-    const olhos = Math.round(alturaDaVisao / 2);
+    const olhos = linhaDosOlhos();
 
     for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
         const distancia = distanciaAoPlano(segmento, raiosDaTela[coluna]);
-        if (distancia >= zBuffer[coluna]) {
+        if (distancia >= zBuffer[coluna] || distancia >= profundidadeDoSprite[coluna]) {
             continue;
         }
         const metade = Math.max(1, Math.round(ESPESSURA_DO_FEIXE * pixelsPorCasa(distancia) / 2));
@@ -641,11 +651,38 @@ function montarLeitura() {
         + `agora: ${msAoVivo.toFixed(2)} ms de 16.7 (${larguraDaVisao}×${alturaDaVisao})`;
 }
 
-// Avisos para o leitor de tela (aria-live): "Porta aberta", "Espelho girado".
+// Avisos para o leitor de tela (aria-live): "Porta aberta", "Espelho girado". Dois avisos no mesmo instante fariam o
+// leitor ler só o último, e o mesmo texto de novo não muda nada para ele. Então os avisos entram numa FILA: um por
+// vez, com um intervalo entre eles, e o painel fica vazio no intervalo (assim um texto repetido é um aviso novo).
+const MS_ENTRE_AVISOS = 1000;
+const MAXIMO_NA_FILA_DE_AVISOS = 4;   // E apertado sem parar não enche a fila de recados velhos
+const filaDeAvisos = [];
+let avisoEmLeitura = false;
+
 function avisar(texto) {
-    if (aviso !== null) {
-        aviso.textContent = texto;
+    if (aviso === null) {
+        return;
     }
+    if (avisoEmLeitura) {
+        filaDeAvisos.push(texto);
+        filaDeAvisos.splice(0, filaDeAvisos.length - MAXIMO_NA_FILA_DE_AVISOS);
+        return;
+    }
+    avisoEmLeitura = true;
+    aviso.textContent = texto;
+    setTimeout(liberarOAviso, MS_ENTRE_AVISOS);
+}
+
+function liberarOAviso() {
+    aviso.textContent = "";
+    if (filaDeAvisos.length === 0) {
+        avisoEmLeitura = false;
+        return;
+    }
+    setTimeout(() => {   // o vazio precisa chegar ao leitor antes do próximo texto
+        avisoEmLeitura = false;
+        avisar(filaDeAvisos.shift());
+    }, 50);
 }
 
 // ---- 7. OBJETOS NO ESPAÇO DA CÂMERA ------------------------
@@ -833,10 +870,24 @@ function mudarEntrada(entrada, acao) {   // acao indefinida = soltou
     botoesDeAcao.forEach(botao => botao.classList.toggle("segurado", acoesAtivas.has(botao.dataset.acao)));
 }
 
+/*
+  O Espaço gira o espelho, MENOS num botão que o jogador alcançou com a tecla Tab: aí ele aperta o botão, como em
+  qualquer página. Depois de um clique (mouse ou dedo) o botão fica com o foco, mas ninguém o escolheu pelo teclado:
+  o Espaço volta a girar o espelho. `focoVeioDoTeclado` começa ligado (sem clique nenhum, só o teclado põe o foco num botão), o Tab o liga e qualquer ponteiro o desliga.
+*/
+let focoVeioDoTeclado = true;   // sem nenhum clique ainda, só o teclado põe o foco num botão
+document.addEventListener("pointerdown", () => { focoVeioDoTeclado = false; }, true);
+
+function espacoGiraOEspelho(evento) {
+    return evento.key === " " && !(evento.target.tagName === "BUTTON" && focoVeioDoTeclado);
+}
+
 document.addEventListener("keydown", evento => {
     const tecla = evento.key.toLowerCase();
-    const emBotao = evento.target.tagName === "BUTTON";   // Espaço num botão já o aperta: não conta duas vezes
-    const ehEspaco = tecla === " " && !emBotao;
+    if (tecla === "tab") {
+        focoVeioDoTeclado = true;
+    }
+    const ehEspaco = espacoGiraOEspelho(evento);
     if (!evento.repeat) {
         if (tecla === "h") {
             alternarPlanta();
@@ -853,7 +904,12 @@ document.addEventListener("keydown", evento => {
         evento.preventDefault();   // o Espaço não rola a página
     }
 });
-document.addEventListener("keyup", evento => mudarEntrada("tecla:" + evento.key.toLowerCase()));
+document.addEventListener("keyup", evento => {
+    if (espacoGiraOEspelho(evento)) {
+        evento.preventDefault();   // o botão focado pelo mouse apertaria ao SOLTAR o Espaço
+    }
+    mudarEntrada("tecla:" + evento.key.toLowerCase());
+});
 // Soltou a tecla fora da janela: o keyup nunca chega, então o blur solta tudo.
 window.addEventListener("blur", () => entradasAtivas.forEach((_, entrada) => mudarEntrada(entrada)));
 
@@ -1097,6 +1153,7 @@ function ajustarVisao() {
     zBuffer = new Float64Array(larguraDaVisao);
     espelhoNaColuna = new Array(larguraDaVisao).fill(null);
     uDoEspelho = new Float64Array(larguraDaVisao);
+    profundidadeDoSprite = new Float64Array(larguraDaVisao);
 
     // Cabe sem rolar: a imagem usa o que sobra depois das outras partes da página. A planta (H) tem o
     // mesmo limite, e o palco reserva a MAIOR das duas: alternar o H não mexe em nada.

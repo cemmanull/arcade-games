@@ -4,8 +4,8 @@
 > achou um jogo chamado exatamente "Reflexo" no itch.io (narrativo, sem relação) e títulos parecidos; o
 > usuário manteve o nome.
 
-Módulo 9 do curso: o primeiro jogo em **2.5D**, um raycaster feito à mão, sem biblioteca. É a ponte
-entre o canvas 2D de todos os jogos anteriores e o three.js de *Proa Acesa* (módulo 11, depois do isométrico).
+Módulo 8 do curso (depois do Xenomorph): o primeiro jogo em **2.5D**, um raycaster feito à mão, sem biblioteca. É a ponte
+entre o canvas 2D de todos os jogos anteriores, o isométrico *Dique* (módulo 9) e o three.js de *Proa Acesa* (módulo 10).
 
 ## 1. Conceito
 
@@ -109,6 +109,11 @@ casa e **não** bloqueia o jogador (ele passa pela borda do espelho; o plano fin
 - **Reaparecem** a cada 12 s numa fenda `S`, até o máximo da fase.
 - **Contato:** tira uma vida e dá 1,5 s de invulnerabilidade, com a sombra recuando.
 - O feixe **não machuca** o jogador. A luz só atinge sombras.
+- **O corpo faz sombra:** o feixe que queima é cortado na frente do zelador (quem está dentro da luz), o que vem depois dele na cadeia de espelhos
+  está no escuro, e a menos de 1 casa dele nada queima. Ficar no feixe nunca é abrigo (seção 11); o feixe continua
+  acendendo receptores inteiro.
+- A primeira sombra de uma sala nasce numa fenda que o campo alcança; com o máximo atingido, o relógio de nascimento
+  não corre (a reposição vem 12 s depois da baixa).
 
 ### 4.8 Sala, vidas, pontuação
 Pontos por receptor aceso (100), sombra desfeita (50) e tempo restante (só bônus). Recorde por fase em `localStorage`, lido com `try/catch` e saneado campo a campo.

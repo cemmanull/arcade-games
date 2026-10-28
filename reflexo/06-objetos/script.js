@@ -150,7 +150,7 @@ const TEXTURAS_EM_TEXTO = {
     ]
 };
 
-// O catálogo de tipos de sprite e a lista de objetos são DADOS (como o catálogo do Dealer? Out!):
+// O catálogo de tipos de sprite e a lista de objetos são DADOS (como os inimigos do Shoot'em up):
 // acrescentar um objeto ao jogo é acrescentar uma linha, sem mexer em função nenhuma.
 // `tamanho` é o lado em casas (1 = a altura de uma parede); `elevacao` é a altura do chão até a base.
 const CATALOGO_DE_SPRITES = {
@@ -522,7 +522,7 @@ function montarLeitura() {
     const { x, y, angulo, dx, dy } = jogador;
     const { coluna, linha, lado, distancia, cruzamentos } = raio;
     const aparecem = spritesDaTela.filter(sprite => sprite.colunas.length > 0).length;
-    const foraDoCampo = spritesDaTela.filter(sprite => sprite.direita <= 0 || sprite.esquerda >= larguraDaVisao).length;
+    const foraDoCampo = spritesDaTela.filter(sprite => semColunasNaImagem(sprite)).length;
     const tapados = spritesDaTela.length - aparecem - foraDoCampo;   // dentro do campo, mas atrás de parede
     return `casa (${Math.floor(x)}, ${Math.floor(y)})  pos (${x.toFixed(2)}, ${y.toFixed(2)})\n`
         + `${(angulo * 180 / Math.PI).toFixed(0)}° = ${angulo.toFixed(3)} rad  dir (${dx.toFixed(2)}, ${dy.toFixed(2)})\n`
@@ -566,11 +566,21 @@ function projetarObjeto(objeto) {
     return sprite;
 }
 
+// As colunas da imagem cujo CENTRO cai dentro do sprite: [primeira, fim). Vazio = nenhum pixel dele na imagem.
+function colunasDoSprite(sprite) {
+    return { primeira: Math.max(0, Math.ceil(sprite.esquerda - 0.5)), fim: Math.min(larguraDaVisao, Math.ceil(sprite.direita - 0.5)) };
+}
+
+function semColunasNaImagem(sprite) {
+    const { primeira, fim } = colunasDoSprite(sprite);
+    return primeira >= fim;
+}
+
 // O z-buffer em ação: a coluna só entra se o sprite está mais perto que a parede dela.
 function colunasNaFrenteDaParede(sprite) {
     const colunas = [];
-    const fim = Math.min(larguraDaVisao, Math.ceil(sprite.direita - 0.5));
-    for (let coluna = Math.max(0, Math.ceil(sprite.esquerda - 0.5)); coluna < fim; coluna++) {
+    const { primeira, fim } = colunasDoSprite(sprite);
+    for (let coluna = primeira; coluna < fim; coluna++) {
         if (sprite.profundidade < zBuffer[coluna]) {
             colunas.push(coluna);
         }

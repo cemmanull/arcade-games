@@ -1,6 +1,6 @@
 /*
   REFLEXO — PASSO 2: ANDAR
-  Andar é RELATIVO à direção. Teclado e toque viram a mesma INTENÇÃO (dealer-out/02);
+  Andar é RELATIVO à direção. Teclado e toque viram a mesma INTENÇÃO (tetris/final);
   a colisão confere o corpo contra a grade um eixo por vez (pong/05), para deslizar.
 */
 
