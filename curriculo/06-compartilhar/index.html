@@ -1,0 +1,94 @@
+<!--
+  CURRÍCULO — PASSO 6: COMPARTILHAR
+
+  O corpo da página é o do passo 5. O que muda é o <head>: título, descrição, cartão de pré-visualização
+  (Open Graph), ícone embutido e cor da barra do navegador. Os endereços https://SEU-USUARIO... são
+  MARCADORES: só viram reais depois de publicar (passo 7). Todos os dados são fictícios.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alex Exemplo — Programação web e game design</title>
+    <meta name="description" content="Alex Exemplo: currículo online de programação web e game design, com jogos feitos do zero em HTML, CSS e JavaScript.">
+    <meta name="theme-color" content="#f7f7fb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#12121a" media="(prefers-color-scheme: dark)">
+
+    <!-- O cartão que WhatsApp, LinkedIn e Discord mostram ao receber o link. Só aparece depois de publicar. -->
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="pt_BR">
+    <meta property="og:title" content="Alex Exemplo — Programação web e game design">
+    <meta property="og:description" content="Jogos feitos do zero em HTML, CSS e JavaScript, com o código à mostra.">
+    <!-- MARCADORES: troque pelos endereços absolutos (https://...) depois de publicar. Caminho relativo não funciona aqui. -->
+    <meta property="og:url" content="https://SEU-USUARIO.github.io/SEU-REPOSITORIO/">
+    <meta property="og:image" content="https://SEU-USUARIO.github.io/SEU-REPOSITORIO/cartao.png">
+    <meta property="og:image:alt" content="Cartão do currículo de Alex Exemplo: nome e a frase Programação web e game design.">
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%233b3bb3'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='white' font-family='sans-serif'%3EA%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="style.css">
+    <script src="projetos.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <a class="pular" href="#principal">Pular para o conteúdo</a>
+
+    <header>
+        <h1>Alex Exemplo</h1>
+        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.</p>
+
+        <nav aria-label="Seções do currículo">
+            <ul>
+                <li><a href="#sobre">Sobre mim</a></li>
+                <li><a href="#habilidades">Habilidades</a></li>
+                <li><a href="#projetos">Projetos</a></li>
+                <li><a href="#contato">Contato</a></li>
+                <li><button id="botao-tema" type="button" aria-pressed="false">Tema escuro</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="principal">
+        <section id="sobre" aria-labelledby="titulo-sobre">
+            <h2 id="titulo-sobre">Sobre mim</h2>
+            <p>Comecei a programar neste curso e já fiz quatro jogos completos. Gosto de regras claras, de dados bem
+                organizados e de interfaces que qualquer pessoa consegue usar, inclusive só com o teclado.</p>
+        </section>
+
+        <section id="habilidades" aria-labelledby="titulo-habilidades">
+            <h2 id="titulo-habilidades">Habilidades</h2>
+            <p>Cada habilidade vem com a prova: um projeto que a usa.</p>
+            <ul class="habilidades">
+                <li><strong>HTML semântico, CSS responsivo e acessibilidade.</strong> Prova: esta própria página.</li>
+                <li><strong>Canvas e laço de jogo.</strong> Prova: <a href="#projeto-cobrinha">Jogo da Cobrinha</a>.</li>
+                <li><strong>Matrizes e rotação de peças.</strong> Prova: <a href="#projeto-tetris">Tetris</a>.</li>
+                <li><strong>Regras e algoritmos de busca.</strong> Prova: <a href="#projeto-xadrez">Xadrez</a>.</li>
+                <li><strong>Dados separados do código.</strong> Prova: <a href="#projeto-xenomorph">Xenomorph</a>.</li>
+            </ul>
+        </section>
+
+        <section id="projetos" aria-labelledby="titulo-projetos">
+            <h2 id="titulo-projetos">Projetos</h2>
+
+            <div id="avisos" role="alert"></div>
+            <div id="lista-projetos" class="projetos"></div>
+        </section>
+
+        <section id="contato" aria-labelledby="titulo-contato">
+            <h2 id="titulo-contato">Contato</h2>
+            <p>E-mail: <a href="mailto:alex@exemplo.invalid">alex@exemplo.invalid</a></p>
+            <p>Perfil profissional: <a href="https://exemplo.invalid/alex">exemplo.invalid/alex</a></p>
+            <p>Cidade Exemplo, UF</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>Feito seguindo o curso <a href="../../README.md">Do zero ao jogo</a>. Dados fictícios.</p>
+        <button id="botao-ver" type="button" aria-pressed="false">Ver estrutura (H)</button>
+        <p id="aviso-estrutura" role="status"></p>
+    </footer>
+</body>
+
+</html>

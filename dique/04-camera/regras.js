@@ -30,6 +30,7 @@ const alturas = ALTURAS_EM_TEXTO.map(function (linha) {
 const LARGURA_DO_BLOCO = 36;                    // L: o losango tem L de largura e L/2 de altura
 const ALTURA_DO_DEGRAU = 12;                    // pixels que um degrau de altura sobe na tela
 const ALTURA_MAXIMA = 4;                        // o bloco mais alto: o raio começa a descer daqui
+const MARGEM_DO_PONTO_FLUTUANTE = 1e-9;         // pixel sobre uma linha da grade dá empate exato; o ponto flutuante erra na 15ª casa decimal
 const NIVEL_DA_AGUA = 1;                        // a água cobre todo bloco mais baixo que isto (a maré dinâmica é do passo 5)
 const MATRIZ = [[LARGURA_DO_BLOCO / 2, -LARGURA_DO_BLOCO / 2], [LARGURA_DO_BLOCO / 4, LARGURA_DO_BLOCO / 4]];
 const DETERMINANTE = MATRIZ[0][0] * MATRIZ[1][1] - MATRIZ[0][1] * MATRIZ[1][0];   // L²/4: nunca zero
@@ -101,10 +102,14 @@ function casaDaTela(coluna, linha) {            // a casa do mapa que a coluna e
     return { x: Math.floor(centro.x), y: Math.floor(centro.y) };
 }
 
+function dentroDoMapa(coluna, linha) {
+    return coluna >= 0 && linha >= 0 && coluna < TAMANHO && linha < TAMANHO;
+}
+
 function casaVizinha(x, y, dx, dy) {            // a vizinha na direção da TELA (dx, dy), em qualquer giro; null se cair fora do mapa
     const centro = girarPonto(x + 0.5, y + 0.5, rotacao);
     const coluna = Math.floor(centro.x) + dx, linha = Math.floor(centro.y) + dy;
-    return coluna >= 0 && linha >= 0 && coluna < TAMANHO && linha < TAMANHO ? casaDaTela(coluna, linha) : null;
+    return dentroDoMapa(coluna, linha) ? casaDaTela(coluna, linha) : null;
 }
 
 function montarListaDeDesenho() {               // algoritmo do pintor: x'+y' cresce para a frente
@@ -118,18 +123,33 @@ function montarListaDeDesenho() {               // algoritmo do pintor: x'+y' cr
     return lista.sort(function (a, b) { return a.proximidade - b.proximidade; });
 }
 
-function silhuetaCobre(casa, ponto) {           // a caixa da casa (o losango do chão varrido para cima até a altura) cobre este pixel?
+function silhuetaCobre(casa, ponto) {           // a caixa da casa (o losango do chão varrido para cima até a altura) cobre este pixel? Encostar na borda não é cobrir
     const chao = mundoParaTela(casa.x + 0.5, casa.y + 0.5, 0);
     const afastamento = Math.abs(ponto.x - chao.x);
-    if (afastamento > LARGURA_DO_BLOCO / 2) return false;
+    if (afastamento >= LARGURA_DO_BLOCO / 2) return false;
     const meiaAltura = LARGURA_DO_BLOCO / 4 * (1 - afastamento / (LARGURA_DO_BLOCO / 2));    // meia altura do losango nesta coluna
-    return ponto.y + casa.altura * ALTURA_DO_DEGRAU >= chao.y - meiaAltura && ponto.y <= chao.y + meiaAltura;
+    return ponto.y + casa.altura * ALTURA_DO_DEGRAU > chao.y - meiaAltura && ponto.y < chao.y + meiaAltura;
 }
 
 function quemEsconde(x, y) {                    // a casa pintada DEPOIS (mais à frente) que cobre o centro do topo de (x, y), ou undefined
     const topo = mundoParaTela(x + 0.5, y + 0.5, alturaVisivel(alturas[y][x]));
-    const posicao = listaDeDesenho.findIndex(function (casa) { return casa.x === x && casa.y === y; });
-    return listaDeDesenho.slice(posicao + 1).find(function (casa) { return silhuetaCobre(casa, topo); });
+    return listaDeDesenho.slice(posicaoNoPintor({ x: x, y: y }) + 1).find(function (casa) { return silhuetaCobre(casa, topo); });
+}
+
+function posicaoNoPintor(casa) {               // o índice da casa na lista do pintor: quanto maior, mais tarde é pintada
+    return listaDeDesenho.findIndex(function (pintada) { return pintada.x === casa.x && pintada.y === casa.y; });
+}
+
+function acharVizinhaNoCanto(coluna, linha, z) {    // o raio passa exatamente pelo canto das quatro colunas: as duas laterais só o encostam, e o polígono fechado da força bruta as conta
+    const encostadas = [[coluna - 1, linha, "direita"], [coluna, linha - 1, "esquerda"]].filter(function (vizinha) {
+        return dentroDoMapa(vizinha[0], vizinha[1]);
+    }).map(function (vizinha) {
+        return { casa: casaDaTela(vizinha[0], vizinha[1]), face: vizinha[2] };
+    }).sort(function (a, b) { return posicaoNoPintor(b.casa) - posicaoNoPintor(a.casa); });      // empate entre as duas: vence a pintada por último, a mesma que a força bruta acha lendo a lista de trás para a frente
+    const encostada = z < -MARGEM_DO_PONTO_FLUTUANTE ? null : encostadas.find(function (candidata) { return z <= alturaVisivel(alturas[candidata.casa.y][candidata.casa.x]) + MARGEM_DO_PONTO_FLUTUANTE; });
+    if (!encostada) return null;
+    const altura = alturaVisivel(alturas[encostada.casa.y][encostada.casa.x]);
+    return z >= altura - MARGEM_DO_PONTO_FLUTUANTE ? { casa: encostada.casa, face: "topo", z: altura } : { casa: encostada.casa, face: encostada.face, z: z };     // na quina do topo, o polígono do topo vem primeiro
 }
 
 function acharCasaPeloRaio(sx, sy) {            // o raio do pixel desce pelas colunas, da frente para trás: o DDA do reflexo/03-um-raio, na diagonal
@@ -141,14 +161,18 @@ function acharCasaPeloRaio(sx, sy) {            // o raio do pixel desce pelas c
     const visitadas = [];
     while (coluna >= 0 && linha >= 0 && z >= 0) {                        // andar para trás até sair do mapa pelos fundos ou chegar ao chão fora dele
         const zDeSaida = z - Math.min(faltaX, faltaY) / CASAS_POR_ALTURA;
-        if (coluna < TAMANHO && linha < TAMANHO) {
+        if (dentroDoMapa(coluna, linha)) {
             const casa = casaDaTela(coluna, linha), altura = alturaVisivel(alturas[casa.y][casa.x]);
             visitadas.push(casa);
-            if (z < altura) return { x: casa.x, y: casa.y, face: face, z: z, visitadas: visitadas };               // entrou por baixo do topo: bateu na lateral
-            if (zDeSaida <= altura) return { x: casa.x, y: casa.y, face: "topo", z: altura, visitadas: visitadas };  // desceu até o topo dentro da coluna
+            if (z < altura - MARGEM_DO_PONTO_FLUTUANTE) return { x: casa.x, y: casa.y, face: face, z: z, visitadas: visitadas };               // entrou por baixo do topo: bateu na lateral
+            if (zDeSaida <= altura + MARGEM_DO_PONTO_FLUTUANTE) return { x: casa.x, y: casa.y, face: "topo", z: altura, visitadas: visitadas };  // desceu até o topo dentro da coluna
         }
-        if (faltaX <= faltaY) { coluna--; faltaY -= faltaX; faltaX = 1; face = "direita"; }   // cruzou uma linha de x': entra pela lateral direita
-        else { linha--; faltaX -= faltaY; faltaY = 1; face = "esquerda"; }                     // cruzou uma linha de y': entra pela lateral esquerda
+        if (Math.abs(faltaX - faltaY) < MARGEM_DO_PONTO_FLUTUANTE) {                    // cruzou x' e y' juntos: passa pelo canto, direto para a coluna da diagonal
+            const encostada = acharVizinhaNoCanto(coluna, linha, zDeSaida);
+            if (encostada) return { x: encostada.casa.x, y: encostada.casa.y, face: encostada.face, z: encostada.z, visitadas: visitadas.concat([encostada.casa]) };
+            coluna--; linha--; faltaX = faltaY = 1; face = "esquerda";   // entra pela quina de baixo, onde a força bruta confere a lateral esquerda primeiro
+        } else if (faltaX < faltaY) { coluna--; faltaY -= faltaX; faltaX = 1; face = "direita"; }   // cruzou uma linha de x': entra pela lateral direita
+        else { linha--; faltaX -= faltaY; faltaY = 1; face = "esquerda"; }                          // cruzou uma linha de y': entra pela lateral esquerda
         z = zDeSaida;
     }
     return null;
@@ -167,8 +191,8 @@ function poligonoContem(poligono, ponto) {      // convexo: o ponto fica do mesm
     return lados.every(function (lado) { return lado >= 0; }) || lados.every(function (lado) { return lado <= 0; });
 }
 
-function acharCasaPorForcaBruta(sx, sy) {       // a referência: o polígono de cada casa, da mais próxima à mais longe; o primeiro que contém o pixel vence
-    for (let i = listaDeDesenho.length - 1; i >= 0; i--) {
+function acharCasaPorForcaBruta(sx, sy) {       // a referência: a lista do pintor lida de trás para a frente; a última pintada que contém o pixel vence
+    for (let i = listaDeDesenho.length - 1; i >= 0; i--) {         // a última pintada cobre as outras: no empate de uma aresta comum, ela vence
         const casa = listaDeDesenho[i], faces = facesDaCasa(casa.x, casa.y);
         const face = Object.keys(faces).find(function (nome) { return poligonoContem(faces[nome], { x: sx, y: sy }); });
         if (face) return { x: casa.x, y: casa.y, face: face };

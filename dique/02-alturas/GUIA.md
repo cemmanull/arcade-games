@@ -133,15 +133,20 @@ A água não é uma caixa: é **um plano** na altura `NIVEL_DA_AGUA`. Cada casa 
 dele (um losango, sem laterais), pintado logo **depois do bloco** da mesma casa:
 
 ```js
-desenharCaixa(casa.x, casa.y, 0, casa.altura, mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura]);
-if (casa.altura < NIVEL_DA_AGUA) desenharAgua(casa);
+const estilo = mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura];
+if (casa.altura < NIVEL_DA_AGUA) { desenharLeito(casa, estilo); desenharAgua(casa); }
+else desenharCaixa(casa.x, casa.y, 0, casa.altura, estilo);
 ```
+
+Sob a água não há caixa: `desenharLeito` pinta só o **fundo**, na altura da água, **sem contorno e sem laterais**
+(um bloco de altura 0 não tem lateral: seriam polígonos achatados, só riscos). Se o fundo fosse uma caixa comum, o
+contorno de cada casa apareceria através do azul translúcido e a água viraria uma grade.
 
 `desenharAgua` preenche o losango **sem contorno** (por isso duas águas vizinhas não deixam linha entre si, nem
 faixa mais escura: nada se sobrepõe) e risca a linha branca só nas arestas que **separam água de não-água**, as
 `ARESTAS_DO_LOSANGO` cujo vizinho (`casaVizinha`) é terra ou está fora do mapa. O resultado é uma folha única
 de água com borda só no contorno. Uma primeira versão pintava uma caixa inteira por casa, com laterais e contorno
-próprios: as laterais de uma tapavam o topo da vizinha e o contorno virava grade.
+próprios: as laterais de uma tapavam o topo da vizinha e o contorno virava grade; o fundo sem contorno resolve o resto.
 
 Como ela segue a ordem do pintor, um bloco **à frente** cobre a água de trás, e a água à frente **deixa
 ver** o bloco de trás, porque é translúcida (`rgba` com alfa 0,55). Por isso as valas rasas da ilha parecem

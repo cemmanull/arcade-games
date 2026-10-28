@@ -1,4 +1,4 @@
-/* DIQUE — PASSO 3: estilo. O canvas tem o tamanho do mapa (script.js): 384x252 aqui. O aviso reserva uma linha: anunciar não empurra a página. */
+/* DIQUE — PASSO 3: estilo. O canvas tem o tamanho do mapa (script.js): 384x252 aqui. O aviso tem altura fixa: anunciar não empurra a página. */
 
 body {
     display: flex;
@@ -29,8 +29,9 @@ canvas {
     touch-action: none;                      /* o dedo aponta, a página não rola */
 }
 
-#botoes {
+#botoes, #setas {
     display: flex;
+    justify-content: center;
     gap: 8px;
 }
 
@@ -63,8 +64,9 @@ p, pre {
 }
 
 #aviso {
-    min-height: 2.6em;                       /* reserva o lugar: o texto do aviso muda a cada toque */
+    height: 3.9em;                           /* três linhas de 1,3: altura fixa, o texto do aviso muda a cada toque e os botões não pulam */
     max-width: 384px;
+    line-height: 1.3;
     text-align: center;
     font-size: 13px;
     color: #eaf0ff;

@@ -1,0 +1,79 @@
+<!--
+  CURRÍCULO — PASSO 5: ACABAMENTO
+
+  Tema claro e escuro (segue o sistema; o botão grava a sua escolha), folha de impressão (Ctrl+P), seção
+  "Sobre mim" e contato. Aperte H (ou o botão "Ver estrutura") para ver os marcos e a ordem dos títulos.
+  Todos os dados são fictícios. Antes de publicar, leia o aviso de privacidade do GUIA.md.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alex Exemplo — Programação web e game design</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="projetos.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <a class="pular" href="#principal">Pular para o conteúdo</a>
+
+    <header>
+        <h1>Alex Exemplo</h1>
+        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.</p>
+
+        <nav aria-label="Seções do currículo">
+            <ul>
+                <li><a href="#sobre">Sobre mim</a></li>
+                <li><a href="#habilidades">Habilidades</a></li>
+                <li><a href="#projetos">Projetos</a></li>
+                <li><a href="#contato">Contato</a></li>
+                <li><button id="botao-tema" type="button" aria-pressed="false">Tema escuro</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="principal">
+        <section id="sobre" aria-labelledby="titulo-sobre">
+            <h2 id="titulo-sobre">Sobre mim</h2>
+            <p>Comecei a programar neste curso e já fiz quatro jogos completos. Gosto de regras claras, de dados bem
+                organizados e de interfaces que qualquer pessoa consegue usar, inclusive só com o teclado.</p>
+        </section>
+
+        <section id="habilidades" aria-labelledby="titulo-habilidades">
+            <h2 id="titulo-habilidades">Habilidades</h2>
+            <p>Cada habilidade vem com a prova: um projeto que a usa.</p>
+            <ul class="habilidades">
+                <li><strong>HTML semântico, CSS responsivo e acessibilidade.</strong> Prova: esta própria página.</li>
+                <li><strong>Canvas e laço de jogo.</strong> Prova: <a href="#projeto-cobrinha">Jogo da Cobrinha</a>.</li>
+                <li><strong>Matrizes e rotação de peças.</strong> Prova: <a href="#projeto-tetris">Tetris</a>.</li>
+                <li><strong>Regras e algoritmos de busca.</strong> Prova: <a href="#projeto-xadrez">Xadrez</a>.</li>
+                <li><strong>Dados separados do código.</strong> Prova: <a href="#projeto-xenomorph">Xenomorph</a>.</li>
+            </ul>
+        </section>
+
+        <section id="projetos" aria-labelledby="titulo-projetos">
+            <h2 id="titulo-projetos">Projetos</h2>
+
+            <div id="avisos" role="alert"></div>
+            <div id="lista-projetos" class="projetos"></div>
+        </section>
+
+        <section id="contato" aria-labelledby="titulo-contato">
+            <h2 id="titulo-contato">Contato</h2>
+            <p>E-mail: <a href="mailto:alex@exemplo.invalid">alex@exemplo.invalid</a></p>
+            <p>Perfil profissional: <a href="https://exemplo.invalid/alex">exemplo.invalid/alex</a></p>
+            <p>Cidade Exemplo, UF</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>Feito seguindo o curso <a href="../../README.md">Do zero ao jogo</a>. Dados fictícios.</p>
+        <button id="botao-ver" type="button" aria-pressed="false">Ver estrutura (H)</button>
+        <p id="aviso-estrutura" role="status"></p>
+    </footer>
+</body>
+
+</html>

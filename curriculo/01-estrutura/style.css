@@ -1,0 +1,45 @@
+/*
+  PASSO 1: só o necessário para ler a página. O layout de verdade vem no passo 2.
+*/
+body {
+    font-family: system-ui, sans-serif;
+    font-size: 1.125rem;
+    line-height: 1.5;
+    max-width: 45rem;
+    margin: 0 auto;
+    padding: 1rem;
+    color: #1b1b26;
+    background: #ffffff;
+}
+
+a {
+    color: #3b3bb3;
+}
+
+/* Todo link e botão ganha um contorno grosso e escuro ao receber o foco do teclado. */
+a:focus-visible {
+    outline: 3px solid #b34700;
+    outline-offset: 2px;
+}
+
+/* O link "Pular para o conteúdo" fica fora da tela até receber o foco (Tab). */
+.pular {
+    position: absolute;
+    left: 0.5rem;
+    top: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #ffffff;
+    transform: translateY(-200%);
+}
+
+.pular:focus {
+    transform: none;
+}
+
+nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0;
+    list-style: none;
+}

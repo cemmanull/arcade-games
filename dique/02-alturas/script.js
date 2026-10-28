@@ -80,6 +80,11 @@ function desenharCaixa(x, y, de, ate, estilo) { // uma caixa da altura `de` à `
     tracar(topo, estilo.topo);
 }
 
+function desenharLeito(casa, estilo) {          // sob a água, só o fundo na altura dela: sem contorno nem laterais, a água lê-se como uma lâmina só
+    pincel.strokeStyle = "transparent";
+    tracar(cantosDoBloco(casa.x, casa.y, NIVEL_DA_AGUA), estilo.topo);
+}
+
 function desenharAgua(casa) {                   // uma superfície plana: sem laterais, e a borda só onde a água termina
     const estilo = estiloDaAgua(casa), topo = cantosDoBloco(casa.x, casa.y, NIVEL_DA_AGUA);
     pincel.strokeStyle = "transparent";         // sem contorno: duas águas vizinhas não deixam linha entre si
@@ -114,8 +119,9 @@ function desenharCasas() {                      // percorre a lista na ordem: ca
     pincel.lineWidth = 1;                       // contorno fino de 1 px em todo bloco
     listaDeDesenho.forEach(function (casa) {
         const mar = ALTURAS_EM_TEXTO[casa.y][casa.x] === "~";
-        desenharCaixa(casa.x, casa.y, 0, casa.altura, mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura]);
-        if (casa.altura < NIVEL_DA_AGUA) desenharAgua(casa);
+        const estilo = mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura];
+        if (casa.altura < NIVEL_DA_AGUA) { desenharLeito(casa, estilo); desenharAgua(casa); }
+        else desenharCaixa(casa.x, casa.y, 0, casa.altura, estilo);
         if (casa.x === cursor.x && casa.y === cursor.y) desenharCursor(casa.x, casa.y, false);     // na sua vez: o que vem depois a cobre
         desenharRotulo(casa);
     });

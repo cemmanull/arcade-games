@@ -1,4 +1,4 @@
-/* DIQUE — PASSO 4: estilo. O canvas é a janela da câmera (384x300). Aviso e leitura reservam o lugar: anunciar e ligar o H não empurram a página. */
+/* DIQUE — PASSO 4: estilo. O canvas é a janela da câmera (384x300). Aviso (altura fixa) e leitura reservam o lugar: anunciar e ligar o H não empurram a página. */
 
 body {
     display: flex;
@@ -29,7 +29,7 @@ canvas {
     touch-action: none;                      /* o dedo aponta, a página não rola */
 }
 
-#botoes {
+#botoes, #setas {
     display: flex;
     flex-wrap: wrap;                         /* seis botões não cabem numa linha de 390 px */
     justify-content: center;
@@ -65,8 +65,9 @@ p, pre {
 }
 
 #aviso {
-    min-height: 2.6em;                       /* reserva o lugar: o texto do aviso muda a cada toque */
+    height: 3.9em;                           /* três linhas de 1,3: altura fixa, o texto do aviso muda a cada toque e os botões não pulam */
     max-width: 384px;
+    line-height: 1.3;
     text-align: center;
     font-size: 13px;
     color: #eaf0ff;

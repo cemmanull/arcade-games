@@ -460,8 +460,8 @@
                 NOITES.forEach(function (esperada, indice) {
                     comecarNoite(indice);
                     const obstaculos = recifes.concat([ilha]);
-                    for (let x = -79; x <= 79; x += 2) {
-                        for (let z = -79; z <= 79; z += 2) {
+                    for (let x = -79 + indice * 0.7; x <= 79; x += 3) {   // 3 m (era 2 m) com a grade deslocada a cada noite: 5 grades diferentes, 100.000 poses, um terço mais barato
+                        for (let z = -79 + indice * 0.7; z <= 79; z += 3) {
                             if (obstaculos.some(function (obstaculo) { return distancia({ x: x, z: z }, obstaculo) < obstaculo.raio + RAIO_DO_BARCO; })) {
                                 continue;
                             }

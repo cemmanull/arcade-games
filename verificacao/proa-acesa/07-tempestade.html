@@ -457,7 +457,9 @@
                     const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
                     barcaNoMundo.segundosEncalhada = 0;
                     semearSorteio(20261028);
+                    chuva.modo = "nenhuma";   // o enquadramento não depende da chuva; mover 2.000 gotas por quadro era 85% do tempo deste grupo
                     const medidas = verifPilotarMedindoOEnquadramento(passar, 3400, 50);
+                    chuva.modo = "instanciada";
                     verifRestaurarRecifes(pedras);
                     conferir(tamanho[0] + "×" + tamanho[1] + ": nenhum quadro com algum dos 5 pontos fora (" + verifTextoDasMedidas(medidas) + ")",
                         medidas.algum === 0 && medidas.quadros === 3400);

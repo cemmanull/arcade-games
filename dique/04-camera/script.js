@@ -12,11 +12,17 @@ const ARESTAS_DO_LOSANGO = [[0, -1], [1, 0], [0, 1], [-1, 0]];      // a vizinha
 const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
 const PASSO_DA_ROLAGEM = 24;                    // pixels da janela por toque de tecla
 const LIMITE_DO_TOQUE = 8;                      // um arrasto maior que isto (pixels) rola o mapa; menor é um toque
+const LIMIAR_DA_RODA = 100;                     // deltaY acumulado que vale um degrau de zoom: um trackpad manda dezenas de eventos pequenos
+const PIXELS_POR_DELTA_DA_RODA = [1, 40, LIMIAR_DA_RODA];     // por deltaMode: pixels; linhas (o Firefox); páginas (uma página vale um degrau)
+const PAUSA_DA_RODA = 300;                      // milissegundos sem roda: o acúmulo recomeça do zero
+const NOME_DO_ZOOM = ["longe", "no meio", "perto"];     // um por degrau de ZOOMS
 let cursor = { x: 4, y: 4 };                    // a casa do cursor
 let marcada = false;                            // dois toques: o primeiro marca o cursor, o segundo (na mesma casa) confirma
 const pinos = new Set();                        // "x,y" das casas com pino: o que se sabe "aplicar" até o passo 5
 let ponteiro = null;                            // o pixel da janela sob o mouse ou o dedo
 let dedo = null;                                // o ponteiro apertado: { id, inicio, ultimo, arrastando }
+let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
+let instanteDaRoda = 0;                         // quando veio o último evento da roda
 let depuracaoLigada = false;
 let faseDaOnda = 0;
 let instanteDoQuadroAnterior = performance.now();
@@ -43,12 +49,16 @@ const intencoes = {                             // teclado, mouse e toque chamam
     girarDireita: function () { girarVista(1); },
     alternarVer: function () { depuracaoLigada = !depuracaoLigada; },
     aplicar: function () { aplicar(); },
-    aproximar: function () { aproximar(1, CENTRO_DA_VISTA); },
-    afastar: function () { aproximar(-1, CENTRO_DA_VISTA); },
-    rolarParaCima: function () { rolar(0, PASSO_DA_ROLAGEM); },     // a janela sobe: o mapa desce
-    rolarParaBaixo: function () { rolar(0, -PASSO_DA_ROLAGEM); },
-    rolarParaEsquerda: function () { rolar(PASSO_DA_ROLAGEM, 0); },
-    rolarParaDireita: function () { rolar(-PASSO_DA_ROLAGEM, 0); },
+    aproximar: function () { mudarZoom(1, CENTRO_DA_VISTA); },
+    afastar: function () { mudarZoom(-1, CENTRO_DA_VISTA); },
+    rolarParaCima: function () { rolarComAviso(0, PASSO_DA_ROLAGEM, "cima"); },     // a janela sobe: o mapa desce
+    rolarParaBaixo: function () { rolarComAviso(0, -PASSO_DA_ROLAGEM, "baixo"); },
+    rolarParaEsquerda: function () { rolarComAviso(PASSO_DA_ROLAGEM, 0, "a esquerda"); },
+    rolarParaDireita: function () { rolarComAviso(-PASSO_DA_ROLAGEM, 0, "a direita"); },
+    cursorParaEsquerda: function () { moverCursor(-1, 0); },     // os botões de seta: o cursor sem teclado
+    cursorParaCima: function () { moverCursor(0, -1); },
+    cursorParaBaixo: function () { moverCursor(0, 1); },
+    cursorParaDireita: function () { moverCursor(1, 0); },
 };
 const INTENCAO_DA_TECLA = {
     q: "girarEsquerda", r: "girarDireita", h: "alternarVer", "+": "aproximar", "=": "aproximar", "-": "afastar",
@@ -59,6 +69,18 @@ function avisar(texto) { aviso.textContent = texto; }       // o leitor de tela 
 
 function descreverCasa(x, y) {
     return "casa " + x + ", " + y + ", altura " + alturas[y][x] + (quemEsconde(x, y) ? ", escondida atrás de um bloco" : "");
+}
+
+function mudarZoom(passo, foco) {
+    const zoomAnterior = camera.zoom;
+    aproximar(passo, foco);
+    avisar("Zoom: " + NOME_DO_ZOOM[ZOOMS.indexOf(camera.zoom)] + (camera.zoom === zoomAnterior ? " (limite)" : ""));
+}
+
+function rolarComAviso(dx, dy, direcao) {       // a tecla de rolagem anuncia para onde o mapa andou, ou que ele acabou
+    const antes = camera.desvioX + "," + camera.desvioY;
+    rolar(dx, dy);
+    avisar(antes === camera.desvioX + "," + camera.desvioY ? "Sem mais mapa para " + direcao : "Mapa rolado para " + direcao);
 }
 
 function mostrarCursor() {                      // rola o mínimo para o cursor aparecer: com zoom, o teclado alcança a ilha toda
@@ -94,7 +116,11 @@ function tocar(casa) {                          // dois toques: o primeiro marca
     if (marcada && casa.x === cursor.x && casa.y === cursor.y) return aplicar();
     cursor = { x: casa.x, y: casa.y };
     marcada = true;
-    avisar("Marcada a " + descreverCasa(cursor.x, cursor.y) + ". Toque de novo na mesma casa para confirmar");
+    avisar("Marcada: " + descreverCasa(cursor.x, cursor.y) + ". Toque de novo para confirmar");
+}
+
+function pixelDentroDoCanvas(pixel) {
+    return pixel.x >= 0 && pixel.y >= 0 && pixel.x < tela.width && pixel.y < tela.height;
 }
 
 function pixelDoEvento(evento) {                // do pixel da página para o pixel da janela (o CSS pode encolhê-la)
@@ -105,34 +131,47 @@ function pixelDoEvento(evento) {                // do pixel da página para o pi
 document.addEventListener("keydown", function (evento) {
     if (evento.ctrlKey || evento.metaKey || evento.altKey) return;      // Ctrl+R recarrega a página, não gira a vista
     const seta = SETAS[evento.key], teclaDeConfirmar = evento.key === "Enter" || evento.key === " ";
+    if (teclaDeConfirmar && evento.repeat) { evento.preventDefault(); return; }      // segurar a tecla confirma uma vez só
     const intencao = intencoes[INTENCAO_DA_TECLA[evento.key.toLowerCase()]];
     if (seta) { evento.preventDefault(); moverCursor(seta[0], seta[1]); }
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
     else if (intencao) intencao();
 });
-document.getElementById("botoes").addEventListener("click", function (evento) {
-    const intencao = intencoes[evento.target.dataset.acao];
+document.addEventListener("click", function (evento) {      // um ouvinte só para todo botão [data-acao]: os botões, as ferramentas e as setas
+    const botao = evento.target.closest("[data-acao]");
+    const intencao = botao && intencoes[botao.dataset.acao];
     if (intencao) intencao();
 });
 tela.addEventListener("wheel", function (evento) {
     evento.preventDefault();                    // a roda aproxima o mapa, não rola a página
-    aproximar(evento.deltaY < 0 ? 1 : -1, pixelDoEvento(evento));
+    if (evento.deltaY === 0) return;            // deslize horizontal ou Shift + roda
+    const depoisDeUmaPausa = evento.timeStamp - instanteDaRoda > PAUSA_DA_RODA;
+    if (depoisDeUmaPausa || Math.sign(evento.deltaY) !== Math.sign(giroDaRoda)) giroDaRoda = 0;     // pausa ou sentido invertido: o que sobrou não vale
+    instanteDaRoda = evento.timeStamp;
+    giroDaRoda += evento.deltaY * PIXELS_POR_DELTA_DA_RODA[evento.deltaMode];
+    if (Math.abs(giroDaRoda) < LIMIAR_DA_RODA) return;
+    mudarZoom(giroDaRoda < 0 ? 1 : -1, pixelDoEvento(evento));
+    giroDaRoda = 0;
 }, { passive: false });
 tela.addEventListener("pointerdown", function (evento) {
+    if (evento.button !== 0 || (dedo && evento.pointerId !== dedo.id)) return;     // só o botão principal marca; um segundo dedo é ignorado
     ponteiro = pixelDoEvento(evento);
     dedo = { id: evento.pointerId, inicio: ponteiro, ultimo: ponteiro, arrastando: false };
 });
 window.addEventListener("pointermove", function (evento) {      // na janela, não no canvas: o arrasto continua se o dedo sair dele
+    if (dedo && evento.pointerId !== dedo.id) return;
     ponteiro = pixelDoEvento(evento);
-    if (!dedo || evento.pointerId !== dedo.id) return;
+    if (!dedo) return;
     if (Math.hypot(ponteiro.x - dedo.inicio.x, ponteiro.y - dedo.inicio.y) > LIMITE_DO_TOQUE) dedo.arrastando = true;
     if (dedo.arrastando) rolar(ponteiro.x - dedo.ultimo.x, ponteiro.y - dedo.ultimo.y);
     dedo.ultimo = ponteiro;
 });
 window.addEventListener("pointerup", function (evento) {
-    if (!dedo || evento.pointerId !== dedo.id) return;
-    const acerto = !dedo.arrastando && casaSobOPixel(pixelDoEvento(evento));       // soltar sem arrastar é um toque
+    if (!dedo || evento.pointerId !== dedo.id) return;     // qualquer botão solto encerra o gesto: senão, com dois botões apertados, o arrasto grudava
+    const pixel = pixelDoEvento(evento), foiToque = evento.button === 0 && !dedo.arrastando;
     dedo = null;
+    if (!foiToque) return;
+    const acerto = pixelDentroDoCanvas(pixel) && casaSobOPixel(pixel);       // soltar sem arrastar é um toque, e soltar fora da janela não marca nada
     if (acerto) tocar(acerto);
 });
 window.addEventListener("pointercancel", function () { dedo = null; });
@@ -151,6 +190,11 @@ function desenharCaixa(x, y, de, ate, estilo) { // uma caixa da altura `de` à `
     tracar([topo[3], topo[2], base[2], base[3]], estilo.esquerda);
     tracar([topo[2], topo[1], base[1], base[2]], estilo.direita);
     tracar(topo, estilo.topo);
+}
+
+function desenharLeito(casa, estilo) {          // sob a água, só o fundo na altura dela: sem contorno nem laterais, a água lê-se como uma lâmina só
+    pincel.strokeStyle = "transparent";
+    tracar(cantosDoBloco(casa.x, casa.y, NIVEL_DA_AGUA), estilo.topo);
 }
 
 function desenharAgua(casa) {                   // uma superfície plana: sem laterais, e a borda só onde a água termina
@@ -200,8 +244,9 @@ function desenharCasas() {                      // percorre a lista na ordem: ca
     pincel.lineWidth = 1 / camera.zoom;         // contorno fino de 1 px na janela, qualquer que seja o zoom
     listaDeDesenho.forEach(function (casa) {
         const mar = ALTURAS_EM_TEXTO[casa.y][casa.x] === "~";
-        desenharCaixa(casa.x, casa.y, 0, casa.altura, mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura]);
-        if (casa.altura < NIVEL_DA_AGUA) desenharAgua(casa);
+        const estilo = mar ? ESTILO_DO_MAR : ESTILO_DA_ALTURA[casa.altura];
+        if (casa.altura < NIVEL_DA_AGUA) { desenharLeito(casa, estilo); desenharAgua(casa); }
+        else desenharCaixa(casa.x, casa.y, 0, casa.altura, estilo);
         if (pinos.has(casa.x + "," + casa.y)) desenharPino(casa);
         if (casa.x === cursor.x && casa.y === cursor.y) desenharCursor(casa.x, casa.y, false);     // na sua vez: o que vem depois a cobre
         desenharRotulo(casa);
