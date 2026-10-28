@@ -93,7 +93,8 @@ function lerp(inicio, fim, t) {
 }
 ```
 
-É a função do `dealer-out/09-dificuldade`, que ali ia do "fácil" ao "difícil". `t = 0` devolve o
+É a ideia da curva de dificuldade do `tetris/08-velocidade` (lá, uma tabela de níveis; aqui, uma reta entre dois
+extremos). `t = 0` devolve o
 início, `t = 1` o fim, `t = 0,5` o meio do caminho. Aqui `t` é `tempoTotal / 40` (parado em 1
 depois de 40 s) e o que vai de um extremo ao outro é:
 

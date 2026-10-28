@@ -30,7 +30,7 @@ let intencao = { leme: 0, guinadaAlvo: 0, arfagemAlvo: REPOUSO_DA_ARFAGEM };
 ```
 
 É a ideia do `jogo-da-cobrinha/05-teclado` (a tecla vira uma direção desejada) e do
-`dealer-out/02-movimento` (teclas **seguradas** movem enquanto durarem).
+`shoot-em-up/02-nave` (teclas **seguradas** movem enquanto durarem, e duas ao mesmo tempo valem).
 
 - Teclado e botões ligam **ações** (`esquerda`, `miraDireita`...) em `acoes`; a tabela `TECLAS` diz
   qual tecla liga qual ação. Os botões ◀ ▶ são `<button>`: o dedo (`pointerdown`) e também

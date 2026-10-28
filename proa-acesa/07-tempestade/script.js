@@ -1,7 +1,7 @@
 /*
   PASSO 7: A TEMPESTADE (script.js)
 
-  A noite vem da ficha (regras.js). Aqui: a chuva (um InstancedMesh, 2.000 gotas, 1 draw call), o relâmpago e o amanhecer,
+  A noite vem da ficha (regras.js). Aqui: a chuva (um InstancedMesh, até 2.000 gotas, 1 draw call), o relâmpago e o amanhecer,
   os dois focos da lanterna e o HUD. H mostra os draw calls; C troca o jeito de desenhar a chuva; R recomeça a noite.
 */
 
@@ -13,7 +13,7 @@ const COR_DO_RECIFE = 0xe8e3d4, COR_DO_RECIFE_LEMBRADO = 0x7f8a94;   // recife V
 const COR_DO_PERIGO = 0xff8a4d;       // o disco de colisão que a tecla H mostra
 const CAMPO_DE_VISAO = 75, CAMPO_DE_VISAO_EM_PE = 80;   // graus, na vertical; o celular em pé é mais aberto
 const ALTURA_DA_CAMERA = 18, RECUO_DA_CAMERA = 22;      // câmera 3/4: cabe a barca, o mar à frente e a cauda do comboio
-const PARTE_DO_COMBOIO_NA_MIRA = 0.63; // o olhar vai da barca (0) até o meio da fila (1)
+const METROS_A_FRENTE = 14, ALCANCE_PARA_TRAS = 15, ALCANCE_LATERAL = 20, ALCANCE_DA_PERSPECTIVA = 37, ESCALA_MAXIMA_DA_CAMERA = 3;   // o que a câmera enquadra, em metros (ver escalaParaCaber)
 const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const TAMANHO_DO_MAR = 130, DIVISOES_DO_MAR = 64, AMPLITUDE_DA_ONDA = 0.5;   // metros; 64 × 64 quadradinhos = 4.225 vértices; 130 m para a borda sumir na névoa
 const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // um quadradinho do mar, em metros
@@ -79,6 +79,7 @@ function iniciar() {
     window.addEventListener("keydown", aoApertarTecla);
     window.addEventListener("keyup", aoSoltarTecla);
     window.addEventListener("blur", function () { acoes = {}; miraDoPonteiro = null; });   // aba perdeu o foco: solta tudo
+    document.addEventListener("click", function (evento) { if (evento.detail > 0) { evento.target.blur(); } });   // mouse e dedo (detail ≥ 1) não deixam o botão com o foco: o Espaço seguinte é da lanterna
     ["esquerda", "direita", "devagar"].forEach(function (acao) { ligarBotao(document.getElementById("botao-" + acao), acao); });
     botaoFoco.addEventListener("click", trocarFoco);   // `click` serve ao dedo, ao mouse, ao Enter e ao Espaço
     botaoClarao.addEventListener("click", function () { reduzirClaroes = !reduzirClaroes; mostrarOpcoes(); });
@@ -89,22 +90,16 @@ function iniciar() {
     requestAnimationFrame(quadroAQuadro);
 }
 
-function mostrarAviso(texto) {
-    aviso.textContent = texto;
-    aviso.hidden = false;
-}
+function mostrarAviso(texto) { aviso.textContent = texto; aviso.hidden = false; }
 
-/* Os dois botões de opção dizem o seu estado por `aria-pressed` e por texto, nunca só por cor. */
+/* O botão Foco diz o foco de agora no texto; o "Reduzir clarões" é um interruptor: `aria-pressed` e ✓. Nunca só cor. */
 function mostrarOpcoes() {
-    botaoFoco.setAttribute("aria-pressed", String(lanternaDaBarca.foco === "estreito"));
+    botaoFoco.textContent = "Foco: " + lanternaDaBarca.foco;
     botaoClarao.setAttribute("aria-pressed", String(reduzirClaroes));
-    botaoClarao.textContent = reduzirClaroes ? "Clarões ✓" : "Clarões";
+    botaoClarao.textContent = reduzirClaroes ? "Reduzir clarões ✓" : "Reduzir clarões";
 }
 
-function trocarFoco() {
-    alternarFoco();
-    mostrarOpcoes();
-}
+function trocarFoco() { alternarFoco(); mostrarOpcoes(); }
 
 // ---- ENTRADA: várias fontes, uma intenção ----
 /* Cada ação lembra QUAIS entradas a seguram ("tecla:a", "dedo:1"...): soltar uma só tira a dela. */
@@ -117,9 +112,7 @@ function segurar(acao, entrada) {
     acoes[acao].push(entrada);
 }
 
-function seguradaAgora(acao) {
-    return (acoes[acao] || []).length > 0;
-}
+function seguradaAgora(acao) { return (acoes[acao] || []).length > 0; }
 
 function aoApertarTecla(evento) {
     const combinada = evento.ctrlKey || evento.metaKey || evento.altKey;   // Ctrl+H é do navegador
@@ -225,16 +218,14 @@ function lerIntencao(tempo) {
     intencao.arfagemAlvo = aproximar(intencao.arfagemAlvo, destinoDaArfagem, TAXA_DO_ALVO_DA_MIRA * tempo);
 }
 
-function sentido(acaoPositiva, acaoNegativa) {
-    return (seguradaAgora(acaoPositiva) ? 1 : 0) - (seguradaAgora(acaoNegativa) ? 1 : 0);
-}
+function sentido(acaoPositiva, acaoNegativa) { return (seguradaAgora(acaoPositiva) ? 1 : 0) - (seguradaAgora(acaoNegativa) ? 1 : 0); }
 
 // ---- A CENA ----
 function montarCena() {
     cena = new THREE.Scene();
     cena.background = new THREE.Color(COR_DO_FUNDO);
     cena.fog = new THREE.FogExp2(COR_DO_FUNDO, 0.01);   // a cor da névoa tem de ser a do fundo; `aplicarCeu` a acerta a cada quadro
-    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
+    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 200);
     rascunho = { cor: new THREE.Color(), ponto: new THREE.Vector3(), alvo: new THREE.Vector3(), mira: new THREE.Vector3(), matriz: new THREE.Matrix4() };
     raycaster = new THREE.Raycaster();
     partes = {
@@ -247,6 +238,7 @@ function montarCena() {
     luzDoCeu = new THREE.HemisphereLight(0x6f8fb0, COR_DO_FUNDO, LUZ_DO_CEU);
     cena.add(luzDoCeu, criarMar(), criarIlhaComFarol(), criarBarca(), criarPorto(), criarChuva());
     construirRecifes();
+    aplicarModoDaChuva();
     copiarMundoParaAsMalhas();
     seguirComACamera(1);   // fração 1 = sem suavização: a câmera já nasce no lugar
 }
@@ -369,9 +361,9 @@ function criarBarcoDePesca(barco) {
 }
 
 // ---- A CHUVA ----
-/* 2.000 gotas IGUAIS: uma geometria, um material. Num InstancedMesh viram UMA chamada de desenho; como 2.000 malhas avulsas (tecla C),
-   2.000 (GDD §9: 35 contra 2.034 draw calls). Cada gota são 3 números em [0, 1), a posição numa caixa de chuva que segue a barca. A
-   lista é RECICLADA (a gota que cai volta ao topo), como no dealer-out/03-chuva. */
+/* Até 2.000 gotas IGUAIS: uma geometria, um material. Num InstancedMesh viram UMA chamada de desenho; como malhas avulsas (tecla C),
+   uma por gota (GDD §9: 35 contra 2.034 draw calls). Cada gota são 3 números em [0, 1), a posição numa caixa de chuva que segue a
+   barca. A lista é RECICLADA (a gota que cai volta ao topo, não sai e entra como os tiros do shoot-em-up/03-tiros). Quantas caem: a `chuva` da ficha. */
 function criarChuva() {
     const gotas = new Float32Array(GOTAS * 3);
     for (let i = 0; i < gotas.length; i++) {
@@ -386,18 +378,21 @@ function criarChuva() {
     return chuva.grupo;
 }
 
+/* Liga o modo escolhido e põe a contagem da noite: nas instâncias é `count`; nas avulsas, quem passa dela fica invisível. */
 function aplicarModoDaChuva() {
     if (chuva.modo === "avulsa" && chuva.avulsas === null) {   // as 2.000 malhas só nascem quando alguém quer ver o custo delas
         chuva.avulsas = new THREE.Group();
         for (let i = 0; i < GOTAS; i++) {
             chuva.avulsas.add(new THREE.Mesh(chuva.geometria, chuva.material));
-            chuva.avulsas.children[i].frustumCulled = false;   // como no spike do GDD: sem corte, as 2.000 contam
+            chuva.avulsas.children[i].frustumCulled = false;   // como no spike do GDD: sem corte, todas contam
         }
         chuva.grupo.add(chuva.avulsas);
     }
+    chuva.instanciada.count = noite.ficha.chuva;
     chuva.instanciada.visible = chuva.modo === "instanciada";
     if (chuva.avulsas !== null) {
         chuva.avulsas.visible = chuva.modo === "avulsa";
+        chuva.avulsas.children.forEach(function (gota, i) { gota.visible = i < noite.ficha.chuva; });
     }
 }
 
@@ -407,7 +402,7 @@ function moverChuva(tempo) {
     }
     const gotas = chuva.gotas;
     const parteDoTopo = VELOCIDADE_DA_CHUVA * tempo / ALTURA_DA_CHUVA;
-    for (let i = 0; i < GOTAS; i++) {
+    for (let i = 0; i < noite.ficha.chuva; i++) {
         const k = i * 3;
         gotas[k + 1] = (gotas[k + 1] - parteDoTopo + 1) % 1;   // cai; passou do chão, volta ao topo
         const x = barcaNoMundo.x + (fracao(gotas[k] - barcaNoMundo.x / LADO_DA_CHUVA) - 0.5) * LADO_DA_CHUVA;   // a caixa segue a barca;
@@ -418,12 +413,12 @@ function moverChuva(tempo) {
             chuva.avulsas.children[i].position.set(x, gotas[k + 1] * ALTURA_DA_CHUVA, z);
         }
     }
-    chuva.instanciada.instanceMatrix.needsUpdate = true;
+    if (chuva.modo === "instanciada") {
+        chuva.instanciada.instanceMatrix.needsUpdate = true;   // escondida (modo avulsa), a malha instanciada nem sobe o buffer
+    }
 }
 
-function fracao(valor) {
-    return valor - Math.floor(valor);
-}
+function fracao(valor) { return valor - Math.floor(valor); }
 
 function ajustarTamanho() {
     const largura = palco.clientWidth;
@@ -461,6 +456,7 @@ function atualizar(tempo) {
     const noiteNova = noiteDesenhada !== noite.geracao;
     if (noiteNova) {
         construirRecifes();
+        aplicarModoDaChuva();   // cada ficha tem a sua chuva
     }
     guinada.angulo -= barcaNoMundo.giro * tempo;   // a lanterna não gira junto com a proa: fica no rumo e a mira a puxa de volta
     seguirAlvo(guinada, intencao.guinadaAlvo, tempo);
@@ -577,9 +573,7 @@ function mostrarDepuracao() {
 }
 
 /* Múltiplo do passo da grade mais próximo: os vértices do mar ficam sempre nos mesmos pontos do mundo. */
-function naGrade(metros) {
-    return Math.round(metros / PASSO_DA_GRADE) * PASSO_DA_GRADE;
-}
+function naGrade(metros) { return Math.round(metros / PASSO_DA_GRADE) * PASSO_DA_GRADE; }
 
 /* Quanto mais longe do `alvo` (radianos), mais rápido o eixo quer ir, até o teto; a aceleração limita a mudança. */
 function seguirAlvo(eixo, alvo, tempo) {
@@ -588,23 +582,30 @@ function seguirAlvo(eixo, alvo, tempo) {
     eixo.angulo = limitar(eixo.angulo + eixo.velocidade * tempo, eixo.minimo, eixo.maximo);
 }
 
-/* O ponto (0, 18, 22) é LOCAL à barca (atrás e acima); `localToWorld` o leva ao mundo, já com a proa. O olhar vai para um ponto
-   entre a barca e o meio da fila (e é suavizado como a câmera): a barca, o mar à frente e ao menos 3 barcos cabem na tela. */
+/* A câmera mostra o que importa: a barca, 14 m à frente dela (a tempo de desviar de um recife) e os 3 primeiros barcos. Ela olha para o
+   meio entre a frente e o 3º barco, de um ponto (0, 18, 22) LOCAL à proa. A fila se estica (o 1º barco é 5% mais lento): o ponto se
+   afasta, até ×3, na proporção do que não cabe na tela. */
 function seguirComACamera(fracaoDoCaminho) {
-    camera.position.lerp(barca.localToWorld(rascunho.ponto.set(0, ALTURA_DA_CAMERA, RECUO_DA_CAMERA)), fracaoDoCaminho);
-    rascunho.mira.lerp(pontoDeMira(rascunho.alvo), fracaoDoCaminho);
+    const frente = { x: barcaNoMundo.x - Math.sin(barcaNoMundo.proa) * METROS_A_FRENTE, z: barcaNoMundo.z - Math.cos(barcaNoMundo.proa) * METROS_A_FRENTE };
+    const barcos = barcosDePesca.slice(0, 3);
+    const terceiro = barcos.length > 0 ? barcos[barcos.length - 1] : barcaNoMundo;
+    const meio = { x: (frente.x + terceiro.x) / 2, z: (frente.z + terceiro.z) / 2 };
+    let escala = 1;
+    barcos.concat(barcaNoMundo, frente).forEach(function (ponto) { escala = Math.max(escala, escalaParaCaber(ponto, meio)); });
+    escala = Math.min(escala, ESCALA_MAXIMA_DA_CAMERA);
+    rascunho.ponto.set(meio.x + Math.sin(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala, ALTURA_DA_CAMERA * escala, meio.z + Math.cos(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala);
+    camera.position.lerp(rascunho.ponto, fracaoDoCaminho);
+    rascunho.mira.lerp(rascunho.alvo.set(meio.x, 0, meio.z), fracaoDoCaminho);
     camera.lookAt(rascunho.mira);
 }
 
-function pontoDeMira(destino) {
-    let somaX = 0, somaZ = 0;
-    for (let i = 0; i < barcosDePesca.length; i++) {
-        somaX += barcosDePesca[i].x;
-        somaZ += barcosDePesca[i].z;
-    }
-    const meioX = barcosDePesca.length > 0 ? somaX / barcosDePesca.length : barcaNoMundo.x;   // sem fila, olha para a barca
-    const meioZ = barcosDePesca.length > 0 ? somaZ / barcosDePesca.length : barcaNoMundo.z;
-    return destino.set(lerp(barcaNoMundo.x, meioX, PARTE_DO_COMBOIO_NA_MIRA), 0, lerp(barcaNoMundo.z, meioZ, PARTE_DO_COMBOIO_NA_MIRA));
+/* Quantas vezes a vista padrão precisa crescer para o ponto caber. Medido por projeção: atrás do meio o ponto fica perto da câmera e
+   a tela é estreita ali; quanto mais estreita a tela (celular em pé), menos largura cabe. */
+function escalaParaCaber(ponto, meio) {
+    const dx = ponto.x - meio.x, dz = ponto.z - meio.z;
+    const atras = dx * Math.sin(barcaNoMundo.proa) + dz * Math.cos(barcaNoMundo.proa);   // positivo: atrás do meio, do lado da câmera
+    const lado = Math.abs(dx * Math.cos(barcaNoMundo.proa) - dz * Math.sin(barcaNoMundo.proa));
+    return Math.max(atras / ALCANCE_PARA_TRAS, lado / (ALCANCE_LATERAL * camera.aspect) + Math.max(atras, 0) / ALCANCE_DA_PERSPECTIVA);
 }
 
 /* ONDAS. sen(x · frequência + tempo · velocidade): o `x` muda a fase de vértice em vértice (vira onda) e o `tempo` a faz andar. */

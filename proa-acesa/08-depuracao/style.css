@@ -63,9 +63,10 @@ button {
 }
 
 #botao-esquerda, #botao-direita { font-size: 1.5rem; }
-#botao-devagar, #botao-clarao { width: 96px; border-radius: 2rem; }
+#botao-devagar, #botao-foco { width: 96px; border-radius: 2rem; }
+#botao-clarao { width: auto; padding: 0 1rem; border-radius: 2rem; }
 
-/* Ligado = fundo cheio e, no Clarões, um ✓ no texto: o estado nunca é só cor. */
+/* Ligado = fundo cheio e um ✓ no texto do "Reduzir clarões"; o Foco diz o foco no texto. O estado nunca é só cor. */
 button[aria-pressed="true"] { background: var(--cor-texto); color: var(--cor-fundo); }
 button:focus-visible { outline: 3px solid var(--cor-perigo); outline-offset: 2px; }
 

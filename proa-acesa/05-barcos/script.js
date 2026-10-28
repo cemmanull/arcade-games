@@ -11,7 +11,9 @@ const COR_DO_MAR = 0x14344f;          // mar à noite
 const COR_DO_CEU_DE_TARDE = 0xf3c98b, COR_DO_MAR_DE_TARDE = 0x3d7ea6;
 const COR_DA_LUZ = 0xfff1c8;
 const COR_DO_RECIFE = 0xe8e3d4;
-const CAMPO_DE_VISAO = 60, CAMPO_DE_VISAO_EM_PE = 80;   // graus, na vertical; o celular em pé é mais aberto
+const CAMPO_DE_VISAO = 75, CAMPO_DE_VISAO_EM_PE = 80;   // graus, na vertical; o celular em pé é mais aberto
+const ALTURA_DA_CAMERA = 18, RECUO_DA_CAMERA = 22;      // câmera 3/4: cabe a barca, o mar à frente e a cauda do comboio
+const METROS_A_FRENTE = 14, ALCANCE_PARA_TRAS = 15, ALCANCE_LATERAL = 20, ALCANCE_DA_PERSPECTIVA = 37, ESCALA_MAXIMA_DA_CAMERA = 3;   // o que a câmera enquadra, em metros (ver escalaParaCaber)
 const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const ALCANCE_DO_FEIXE = 12;          // metros
 const RAIO_DO_FEIXE = 3;              // metros, na ponta
@@ -78,19 +80,14 @@ function iniciar() {
     window.addEventListener("keyup", aoSoltarTecla);
     window.addEventListener("blur", function () { acoes = {}; miraDoPonteiro = null; });   // aba perdeu o foco: solta tudo
     ["esquerda", "direita", "devagar"].forEach(function (acao) { ligarBotao(document.getElementById("botao-" + acao), acao); });
-    palco.addEventListener("pointerdown", aoMirarComPonteiro);
-    palco.addEventListener("pointermove", aoMirarComPonteiro);
-    palco.addEventListener("pointercancel", soltarMira);
-    palco.addEventListener("pointerleave", soltarMira);
+    ["pointerdown", "pointermove"].forEach(function (nome) { palco.addEventListener(nome, aoMirarComPonteiro); });
+    ["pointercancel", "pointerleave"].forEach(function (nome) { palco.addEventListener(nome, soltarMira); });
     palco.addEventListener("contextmenu", impedirMenuDeContexto);
     instanteDoQuadroAnterior = performance.now();
     requestAnimationFrame(quadroAQuadro);
 }
 
-function mostrarAviso(texto) {
-    aviso.textContent = texto;
-    aviso.hidden = false;
-}
+function mostrarAviso(texto) { aviso.textContent = texto; aviso.hidden = false; }
 
 // ---- ENTRADA: várias fontes, uma intenção ----
 /*
@@ -106,9 +103,7 @@ function segurar(acao, entrada) {
     acoes[acao].push(entrada);
 }
 
-function seguradaAgora(acao) {
-    return (acoes[acao] || []).length > 0;
-}
+function seguradaAgora(acao) { return (acoes[acao] || []).length > 0; }
 
 function aoApertarTecla(evento) {
     const combinada = evento.ctrlKey || evento.metaKey || evento.altKey;   // Ctrl+H é do navegador
@@ -203,17 +198,15 @@ function lerIntencao(tempo) {
     intencao.arfagemAlvo = aproximar(intencao.arfagemAlvo, destinoDaArfagem, TAXA_DO_ALVO_DA_MIRA * tempo);
 }
 
-function sentido(acaoPositiva, acaoNegativa) {
-    return (seguradaAgora(acaoPositiva) ? 1 : 0) - (seguradaAgora(acaoNegativa) ? 1 : 0);
-}
+function sentido(acaoPositiva, acaoNegativa) { return (seguradaAgora(acaoPositiva) ? 1 : 0) - (seguradaAgora(acaoNegativa) ? 1 : 0); }
 
 // ---- A CENA ----
 function montarCena() {
     cena = new THREE.Scene();
     cena.background = new THREE.Color(COR_DO_CEU_DE_TARDE);
     cena.fog = new THREE.FogExp2(COR_DO_CEU_DE_TARDE, NEVOA_DE_TARDE);   // a cor da névoa tem de ser a do fundo
-    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
-    rascunho = { cor: new THREE.Color(), ponto: new THREE.Vector3(), alvo: new THREE.Vector3() };
+    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 200);
+    rascunho = { cor: new THREE.Color(), ponto: new THREE.Vector3(), alvo: new THREE.Vector3(), mira: new THREE.Vector3() };
     partes = {
         casco: new THREE.BoxGeometry(1.2, 0.4, 2.4), mastro: new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), luz: new THREE.SphereGeometry(0.15, 8, 6),
         bandeiras: [new THREE.ConeGeometry(0.25, 0.5, 3), new THREE.BoxGeometry(0.4, 0.4, 0.05), new THREE.SphereGeometry(0.2, 8, 6)],
@@ -227,9 +220,7 @@ function montarCena() {
     seguirComACamera(1);   // fração 1 = sem suavização: a câmera já nasce no lugar
 }
 
-function criarMalha(geometria, cor) {
-    return new THREE.Mesh(geometria, new THREE.MeshStandardMaterial({ color: cor, flatShading: true }));
-}
+function criarMalha(geometria, cor) { return new THREE.Mesh(geometria, new THREE.MeshStandardMaterial({ color: cor, flatShading: true })); }
 
 function criarMar() {
     const geometria = new THREE.PlaneGeometry(TAMANHO_DO_MAR, TAMANHO_DO_MAR, DIVISOES_DO_MAR, DIVISOES_DO_MAR);
@@ -238,8 +229,8 @@ function criarMar() {
 }
 
 function criarIlhaComFarol() {
-    const ilha = new THREE.Group();
-    ilha.position.set(-5, 0, -12);
+    const ilhaComFarol = new THREE.Group();
+    ilhaComFarol.position.set(ilha.x, 0, ilha.z);
     const chao = criarMalha(new THREE.CylinderGeometry(4, 5.5, 1.2, 12), 0x2b3a2f);
     const torre = criarMalha(new THREE.CylinderGeometry(0.9, 1.4, 9, 10), 0x4a5563);
     const salaDaLampada = criarMalha(new THREE.CylinderGeometry(1.1, 1.1, 1, 10), 0x1c232b);
@@ -248,8 +239,8 @@ function criarIlhaComFarol() {
     torre.position.y = 5.3;
     salaDaLampada.position.y = 10.3;   // apagada: sem emissivo
     telhado.position.y = 11.45;
-    ilha.add(chao, torre, salaDaLampada, telhado);
-    return ilha;
+    ilhaComFarol.add(chao, torre, salaDaLampada, telhado);
+    return ilhaComFarol;
 }
 
 function criarBarca() {
@@ -401,9 +392,7 @@ function mostrarPlacar() {
 }
 
 /* Múltiplo do passo da grade mais próximo: os vértices do mar ficam sempre nos mesmos pontos do mundo. */
-function naGrade(metros) {
-    return Math.round(metros / PASSO_DA_GRADE) * PASSO_DA_GRADE;
-}
+function naGrade(metros) { return Math.round(metros / PASSO_DA_GRADE) * PASSO_DA_GRADE; }
 
 /* Quanto mais longe do `alvo` (radianos), mais rápido o eixo quer ir, até o teto; a aceleração limita a mudança. */
 function seguirAlvo(eixo, alvo, tempo) {
@@ -412,11 +401,30 @@ function seguirAlvo(eixo, alvo, tempo) {
     eixo.angulo = limitar(eixo.angulo + eixo.velocidade * tempo, eixo.minimo, eixo.maximo);
 }
 
-/* O ponto (0, 10, 14) é LOCAL à barca (atrás e acima); `localToWorld` o leva ao mundo, já com a proa. Mais alta e
-   mais atrás que no passo 4 (0, 5, 8): o comboio vem ATRÁS da barca e ficaria fora da tela. */
-function seguirComACamera(fracao) {
-    camera.position.lerp(barca.localToWorld(rascunho.ponto.set(0, 10, 14)), fracao);
-    camera.lookAt(barca.localToWorld(rascunho.alvo.set(0, 0, -1)));   // olha para a água, quase embaixo da proa: o comboio entra na tela
+/* A câmera mostra o que importa: a barca, 14 m à frente dela (a tempo de desviar de um recife) e os 3 primeiros barcos. Ela olha para o
+   meio entre a frente e o 3º barco, de um ponto (0, 18, 22) LOCAL à proa. A fila se estica (o 1º barco é 5% mais lento): o ponto se
+   afasta, até ×3, na proporção do que não cabe na tela. */
+function seguirComACamera(fracaoDoCaminho) {
+    const frente = { x: barcaNoMundo.x - Math.sin(barcaNoMundo.proa) * METROS_A_FRENTE, z: barcaNoMundo.z - Math.cos(barcaNoMundo.proa) * METROS_A_FRENTE };
+    const barcos = barcosDePesca.slice(0, 3);
+    const terceiro = barcos.length > 0 ? barcos[barcos.length - 1] : barcaNoMundo;
+    const meio = { x: (frente.x + terceiro.x) / 2, z: (frente.z + terceiro.z) / 2 };
+    let escala = 1;
+    barcos.concat(barcaNoMundo, frente).forEach(function (ponto) { escala = Math.max(escala, escalaParaCaber(ponto, meio)); });
+    escala = Math.min(escala, ESCALA_MAXIMA_DA_CAMERA);
+    rascunho.ponto.set(meio.x + Math.sin(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala, ALTURA_DA_CAMERA * escala, meio.z + Math.cos(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala);
+    camera.position.lerp(rascunho.ponto, fracaoDoCaminho);
+    rascunho.mira.lerp(rascunho.alvo.set(meio.x, 0, meio.z), fracaoDoCaminho);
+    camera.lookAt(rascunho.mira);
+}
+
+/* Quantas vezes a vista padrão precisa crescer para o ponto caber. Medido por projeção: atrás do meio o ponto fica perto da câmera e
+   a tela é estreita ali; quanto mais estreita a tela (celular em pé), menos largura cabe. */
+function escalaParaCaber(ponto, meio) {
+    const dx = ponto.x - meio.x, dz = ponto.z - meio.z;
+    const atras = dx * Math.sin(barcaNoMundo.proa) + dz * Math.cos(barcaNoMundo.proa);   // positivo: atrás do meio, do lado da câmera
+    const lado = Math.abs(dx * Math.cos(barcaNoMundo.proa) - dz * Math.sin(barcaNoMundo.proa));
+    return Math.max(atras / ALCANCE_PARA_TRAS, lado / (ALCANCE_LATERAL * camera.aspect) + Math.max(atras, 0) / ALCANCE_DA_PERSPECTIVA);
 }
 
 /* ONDAS. sen(x · frequência + tempo · velocidade): o `x` muda a fase de vértice em vértice (vira onda) e o `tempo` a faz andar. */

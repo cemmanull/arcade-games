@@ -3,8 +3,8 @@
 **Mudou:** `regras.js` ganha a **luz** (o teste do cone e a brasa de cada recife, matemática pura).
 `script.js` ganha o que precisa do three.js: o `Raycaster` do que tapa a luz e o desenho dos recifes
 (escondidos, vistos ou lembrados). A partida passa a **começar na noite**, o cone desenhado passa a ter o
-tamanho e a direção do cone da regra (16°, 24 m, na horizontal) e a **câmera enquadra a cauda do comboio**.
-A ilha passa a **tapar a luz** e o comboio nasce em lugar válido (o passo 5 já traz o mesmo `criarComboio`).
+tamanho e a direção do cone da regra (16°, 24 m, na horizontal). A ilha passa a **tapar a luz** e é desenhada
+a partir dos dados da regra; o comboio nasce em lugar válido e a câmera enquadra a cauda (ambos já vêm do passo 5).
 **Rode:** abra o `index.html`; os controles são os do passo 5. **H** mostra os eixos e, em **todos** os recifes
 (até os esquecidos), o disco onde o barco bate.
 
@@ -93,8 +93,8 @@ o three.js devolve o primeiro acerto de uma vez, em malhas de qualquer forma. Du
 (`visible = false`), por isso as colunas esquecidas ainda tapam a luz.
 
 **A ilha é dado e é obstáculo.** `ilha = { x: -5, z: -12, raio: 5.5 }` está em `regras.js`: barca e barcos
-**batem** nela como num recife (`recifeTocadoPor` confere os recifes e depois a ilha). Antes, ela só era
-desenhada e todos passavam por dentro. A torre também entra em `oclusores`: um recife atrás do farol fica no
+**batem** nela como num recife (`recifeTocadoPor` confere os recifes e depois a ilha), e o `script.js` põe o farol
+em `ilha.x`, `ilha.z`. Antes, ela só era desenhada e todos passavam por dentro. A torre também entra em `oclusores`: um recife atrás do farol fica no
 escuro.
 
 ---
@@ -120,7 +120,7 @@ recife.brasa = recife.iluminado ? SEGUNDOS_DE_BRASA : Math.max(0, recife.brasa -
 ```
 
 Visto neste quadro: `brasa = 3` s. Não visto: `brasa` só esfria, e não passa de 0. É o temporizador
-do `dealer-out/06-atordoamento` (`atordoado = Math.max(0, atordoado - tempo)`: um número que desce até
+do `shoot-em-up/03-tiros` (`tempoDoClarao = Math.max(0, tempoDoClarao - tempo)`: um número que desce até
 zero). O desenho depende dos dois números, `iluminado` e `brasa`:
 
 | Estado | Condição | Pedra | Espuma | Opacidade |
@@ -144,30 +144,24 @@ desenhado vem das mesmas constantes da regra: **o que você vê e o que a regra 
 
 ---
 
-## 6. A câmera tem de ver a cauda
+## 6. A câmera do passo 5, medida com a névoa e a lanterna
 
-A cauda balançando é o centro do jogo, e a câmera do passo 5 só mostrava o primeiro barco (o teto de 650 linhas
-dele não deixou consertar). Agora ela fica em
-`(0, 18, 22)` (local à barca: 18 m acima, 22 m atrás), com 75° de campo na tela larga (80° em pé, como antes),
-e **olha para um ponto entre a barca e o meio da fila**:
-
-```js
-rascunho.mira.lerp(pontoDeMira(rascunho.alvo), fracao);   // 63% do caminho da barca até o meio dos barcos
-camera.lookAt(rascunho.mira);
-```
-
-`pontoDeMira` tira a média dos barcos direto do mundo (`regras.js`), sem alocar nada, e o olhar é suavizado
-como a posição. Os números saíram de uma conta: projetei na tela a barca, um recife 14 a 20 m à frente e os
-três primeiros barcos, nas duas telas, e procurei a câmera que os deixa todos dentro. Custo honesto: a barca
-fica pequena e a câmera, mais longe, pesa mais na névoa. O quarto barco só aparece se a fila encolher.
+A câmera é a do passo 5 (`seguirComACamera`: a barca, 14 m à frente e os 3 primeiros barcos, a `(0, 18, 22)` do
+meio entre a frente e o 3º barco, afastando-se até ×3 quando a fila se estica). O que muda aqui é só o que ela
+mostra: a barca, a luz e os recifes lembrados. Repeti a projeção (120 s, retas de 10 s e retornos em U, 1280×800 e
+390×750): a barca, o ponto à frente e os barcos 1 e 2 ficaram dentro da tela em **100%** dos quadros, e o 3º saiu
+em 8 de 7.200 quadros (tela larga) e 17 (em pé), com ele a 59 m e a câmera ainda subindo. O mar passa de 90 para
+130 m: com a câmera afastada, a borda de 90 m apareceria no fundo da tela; a névoa esconde a de 130 m. O quarto barco
+só aparece se a fila encolher.
 
 ---
 
 ## 7. Onde o comboio nasce, e a névoa que leva tempo
 
 O comboio nasce só onde `filaLivre` diz que dá para viver (dentro do mundo, fora do porto, longe de recifes e
-ilha); se a fila de trás da barca não serve, **gira 30°** e tenta de novo, e a cada volta inteira sem achar
-**recua 7 m** (a barca pode estar no meio do porto). Sem sorteio: o mesmo mundo dá o mesmo comboio. E um barco só
+ilha); se a fila de trás da barca não serve, **gira 30°** e tenta de novo, e a cada volta inteira (12 giros) sem
+achar **recua mais 7 m** (0, 7, 14, 21: a barca pode estar no meio do porto). Cercada por 48 tentativas, a fila nasce
+na `PARTIDA`, que `filaLivre` aprova. Sem sorteio: o mesmo mundo dá o mesmo comboio. E um barco só
 se perde na névoa depois de **5 s seguidos** a mais de 35 m do da frente; senão, perdido o primeiro, o de trás
 mediria até a barca e a fila sumiria em 4 quadros. As duas regras já vêm do passo 5.
 

@@ -23,14 +23,15 @@ const SEGUNDOS_APAGADA = 4, CALOR_DEPOIS_DE_APAGAR = 0.4, RESFRIAR_ENCALHADA = 0
 const SEGUNDOS_DA_AURORA = 15, SEGUNDOS_DO_RESULTADO = 4, NAUFRAGIOS_PARA_PERDER = 3;
 const DURACAO_DO_RELAMPAGO = 0.25;           // segundos de clarão seco
 const SUBIDA_SUAVE = 0.6, BRILHO_SUAVE_MAXIMO = 0.25;   // "reduzir clarões": sobe em 0,6 s, no máximo 25%, e desce igual (GDD §7)
+const INTERVALO_MINIMO_ENTRE_CLAROES = 1 / 3;   // WCAG 2.3.1: nunca mais de 3 clarões por segundo, seja qual for a ficha
 
-/* Uma ficha por noite (GDD §4.8). Mudar a curva do jogo é mudar um número: é a tabela de níveis do tetris/08-velocidade. */
+/* Uma ficha por noite (GDD §4.8); `chuva` é o número de gotas (o teto é GOTAS, no script.js). Mudar a curva é mudar um número, como na tabela do tetris/08-velocidade. */
 const fichas = [
-    { nome: "Calmaria", duracao: 120, barcos: 2, recifes: 8, colunas: 0, nevoa: 0.15, deriva: 0, relampagosPorMinuto: 0, meta: 2 },
-    { nome: "Garoa", duracao: 150, barcos: 3, recifes: 12, colunas: 2, nevoa: 0.3, deriva: 0.3, relampagosPorMinuto: 2, meta: 2 },
-    { nome: "Ventania", duracao: 150, barcos: 4, recifes: 16, colunas: 3, nevoa: 0.45, deriva: 0.6, relampagosPorMinuto: 4, meta: 3 },
-    { nome: "Cerração", duracao: 180, barcos: 4, recifes: 20, colunas: 4, nevoa: 0.6, deriva: 0.9, relampagosPorMinuto: 6, meta: 3 },
-    { nome: "Tormenta", duracao: 180, barcos: 5, recifes: 24, colunas: 5, nevoa: 0.75, deriva: 1.2, relampagosPorMinuto: 8, meta: 4 }
+    { nome: "Calmaria", duracao: 120, barcos: 2, recifes: 8, colunas: 0, nevoa: 0.15, deriva: 0, relampagosPorMinuto: 0, chuva: 400, meta: 2 },
+    { nome: "Garoa", duracao: 150, barcos: 3, recifes: 12, colunas: 2, nevoa: 0.3, deriva: 0.3, relampagosPorMinuto: 2, chuva: 800, meta: 2 },
+    { nome: "Ventania", duracao: 150, barcos: 4, recifes: 16, colunas: 3, nevoa: 0.45, deriva: 0.6, relampagosPorMinuto: 4, chuva: 1200, meta: 3 },
+    { nome: "Cerração", duracao: 180, barcos: 4, recifes: 20, colunas: 4, nevoa: 0.6, deriva: 0.9, relampagosPorMinuto: 6, chuva: 1600, meta: 3 },
+    { nome: "Tormenta", duracao: 180, barcos: 5, recifes: 24, colunas: 5, nevoa: 0.75, deriva: 1.2, relampagosPorMinuto: 8, chuva: 2000, meta: 4 }
 ];
 const FOCOS = {   // GDD §4.2 e §4.5: o estreito alcança longe e esquenta; o largo cobre mais, alcança menos e esfria
     estreito: { meioAngulo: 7 * GRAU, alcanceBase: 46, calorPorSegundo: 0.12 },
@@ -41,8 +42,8 @@ const FOCOS = {   // GDD §4.2 e §4.5: o estreito alcança longe e esquenta; o 
 const PARTIDA = { x: 14, z: 42, proa: 0 };
 const porto = { x: 6, z: -26, raio: 9 };
 const ilha = { x: -5, z: -12, raio: 5.5 };   // a ilha do farol: bate como um recife e a torre TAPA a luz
-/* Todos os recifes, em duas listas: a noite N usa os primeiros `recifes − colunas` baixos e as primeiras `colunas` altas. As
-   posições saíram de um gerador com semente e de uma busca em largura que conferiu: em TODAS as noites há caminho até o porto. */
+/* Todos os recifes, em duas listas fixas (sem sorteio): a noite N usa os primeiros `recifes − colunas` baixos e as primeiras `colunas`
+   altas. Em toda noite há caminho da PARTIDA ao porto: a `haCaminhoAtePorto` do passo 8 confere. */
 const RECIFES_BAIXOS = [
     { x: 20, z: 6.5, raio: 2.5 }, { x: -16.5, z: 13, raio: 2 }, { x: 6.5, z: 2.5, raio: 2 }, { x: -3, z: 5.5, raio: 2 },
     { x: -1, z: -44, raio: 2.5 }, { x: -8.5, z: -26, raio: 2.5 }, { x: 35.5, z: 3.5, raio: 2 }, { x: -28.5, z: 12.5, raio: 3 },
@@ -62,7 +63,7 @@ let proximoIdDeBarco = 0, salvos = 0, naufragios = 0;
 const lanternaDaBarca = { foco: "largo", calor: 0, segundosApagada: 0, meioAngulo: FOCOS.largo.meioAngulo, alcance: FOCOS.largo.alcanceBase };
 const noite = {   // o relógio e o placar da noite; `geracao` sobe a cada noite montada, para o script.js refazer o desenho
     indice: 0, ficha: fichas[0], geracao: 0, segundos: 0, aurora: 0, nevoa: 0, salvos: 0, resultado: "", proxima: 0, segundosParaProxima: 0,
-    relampagos: [], proximoRelampago: 0, segundosDoRelampago: -1
+    relampagos: [], proximoRelampago: 0, segundosDoRelampago: -1, horaDoUltimoRelampago: -Infinity
 };
 let reduzirClaroes = false;  // GDD §7: o script.js a liga se o sistema pedir menos movimento
 
@@ -70,18 +71,13 @@ let reduzirClaroes = false;  // GDD §7: o script.js a liga se o sistema pedir m
 function limitar(valor, minimo, maximo) { return Math.min(Math.max(valor, minimo), maximo); }
 
 /* Aceleração com teto: o valor só muda `passo` por quadro e chega ao alvo sem saltos. */
-function aproximar(valor, alvo, passo) {
-    return valor + limitar(alvo - valor, -passo, passo);
-}
+function aproximar(valor, alvo, passo) { return valor + limitar(alvo - valor, -passo, passo); }
 
 function normalizarAngulo(angulo) { return Math.atan2(Math.sin(angulo), Math.cos(angulo)); }   // entre −π e π
 
 function distanciaEntre(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-function andar(coisa, velocidade, tempo) {
-    coisa.x -= Math.sin(coisa.proa) * velocidade * tempo;
-    coisa.z -= Math.cos(coisa.proa) * velocidade * tempo;
-}
+function andar(coisa, velocidade, tempo) { coisa.x -= Math.sin(coisa.proa) * velocidade * tempo; coisa.z -= Math.cos(coisa.proa) * velocidade * tempo; }
 
 // ---- A NOITE: montar, andar o relógio, encerrar ----
 function comecarNoite(indice) {
@@ -89,7 +85,7 @@ function comecarNoite(indice) {
         salvos = naufragios = 0;   // partida nova (a primeira noite, ou depois de perder ou de vencer a quinta)
     }
     const ficha = fichas[indice];
-    Object.assign(noite, { indice: indice, ficha: ficha, segundos: 0, aurora: 0, nevoa: ficha.nevoa, salvos: 0, resultado: "", proximoRelampago: 0, segundosDoRelampago: -1 });
+    Object.assign(noite, { indice: indice, ficha: ficha, segundos: 0, aurora: 0, nevoa: ficha.nevoa, salvos: 0, resultado: "", proximoRelampago: 0, segundosDoRelampago: -1, horaDoUltimoRelampago: -Infinity });
     noite.geracao++;
     noite.relampagos = roteiroDeRelampagos(ficha);
     while (barcosDePesca.length > 0) { removerBarco(barcosDePesca, 0); }       // as malhas saem pela lista dos removidos
@@ -117,8 +113,12 @@ function atualizarNoite(tempo) {
     if (noite.segundosDoRelampago >= 0) {   // um clarão em andamento: conta o tempo e, passada a duração, acaba (−1)
         noite.segundosDoRelampago = noite.segundosDoRelampago + tempo < duracaoDoRelampago() ? noite.segundosDoRelampago + tempo : -1;
     }
-    if (noite.proximoRelampago < noite.relampagos.length && noite.segundos >= noite.relampagos[noite.proximoRelampago]) {
+    /* A trava é da REGRA, não da ficha: um clarão só começa com o anterior terminado (a rampa reduzida de 1,2 s nunca recomeça no meio) e
+       a pelo menos 1/3 s do começo dele. Um evento atrasado por isso espera a vez. */
+    const livre = noite.segundosDoRelampago < 0 && noite.segundos - noite.horaDoUltimoRelampago >= INTERVALO_MINIMO_ENTRE_CLAROES;
+    if (livre && noite.proximoRelampago < noite.relampagos.length && noite.segundos >= noite.relampagos[noite.proximoRelampago]) {
         noite.segundosDoRelampago = 0;
+        noite.horaDoUltimoRelampago = noite.segundos;
         noite.proximoRelampago++;
     }
     const fimDaFila = barcosDePesca.length === 0 && barcosAfundando.length === 0;
@@ -138,9 +138,7 @@ function encerrarNoite(resultado, proxima) {
 }
 
 // ---- O RELÂMPAGO ----
-function duracaoDoRelampago() {
-    return reduzirClaroes ? 2 * SUBIDA_SUAVE : DURACAO_DO_RELAMPAGO;
-}
+function duracaoDoRelampago() { return reduzirClaroes ? 2 * SUBIDA_SUAVE : DURACAO_DO_RELAMPAGO; }
 
 /* Quanto o céu clareia agora (0 a 1). Normal: um clarão seco de 0,25 s. Reduzido: sem salto, sobe e desce em rampa suave. */
 function brilhoDoRelampago() {
@@ -156,9 +154,7 @@ function brilhoDoRelampago() {
 }
 
 // ---- A LANTERNA: foco, calor e alcance ----
-function alternarFoco() {
-    lanternaDaBarca.foco = lanternaDaBarca.foco === "estreito" ? "largo" : "estreito";
-}
+function alternarFoco() { lanternaDaBarca.foco = lanternaDaBarca.foco === "estreito" ? "largo" : "estreito"; }
 
 /* Estreito esquenta, largo esfria; encalhada, o estreito esquenta o dobro e tudo esfria um pouco. Calor 1 = sobrecarga: apagada
    por 4 s e volta com 0,4. O alcance é a base do foco encurtada pela névoa (GDD §4.2). */
@@ -280,27 +276,31 @@ function alvoDoBarco(barco) {
     return indice <= 0 ? barcaNoMundo : barcosDePesca[indice - 1];
 }
 
-/* O comboio nasce em fila atrás da barca, mas só onde dá para viver (no mundo, fora do porto, longe de recifes e ilha). Sem sorteio:
-   gira a fila 30° por tentativa; a cada volta inteira sem achar, ela recua 7 m. */
+/* O comboio nasce em fila atrás da barca, onde dá para viver (no mundo, fora do porto, longe de recifes e ilha). Sem sorteio: gira a
+   fila 30° por tentativa e, a cada volta inteira (12), recua mais 7 m: 0, 7, 14 e 21 m. Cercada (48 tentativas), nasce na PARTIDA. */
 function criarComboio() {
-    let rumo = barcaNoMundo.proa, recuo = 0;
-    for (let tentativa = 1; tentativa <= 36 && !filaLivre(rumo, recuo); tentativa++) {
+    let origem = barcaNoMundo, rumo = origem.proa, recuo = 0;
+    for (let tentativa = 1; !filaLivre(origem, rumo, recuo); tentativa++) {
+        if (tentativa === 48) {
+            origem = PARTIDA; rumo = PARTIDA.proa; recuo = 0;   // a PARTIDA é livre em todas as noites
+            break;
+        }
         rumo += Math.PI / 6;
         recuo = DISTANCIA_DO_COMBOIO * Math.floor(tentativa / 12);
     }
     for (let i = 1; i <= noite.ficha.barcos; i++) {
-        const lugar = lugarNaFila(rumo, recuo + DISTANCIA_DO_COMBOIO * i);
+        const lugar = lugarNaFila(origem, rumo, recuo + DISTANCIA_DO_COMBOIO * i);
         barcosDePesca.push({ id: proximoIdDeBarco++, x: lugar.x, z: lugar.z, proa: normalizarAngulo(rumo), velocidade: 0, segundosAfundando: 0, afundamento: 0 });   // afundamento: 0 boiando … 1 no fundo
     }
 }
 
-function lugarNaFila(rumo, metrosAtrasDaBarca) {
-    return { x: barcaNoMundo.x + Math.sin(rumo) * metrosAtrasDaBarca, z: barcaNoMundo.z + Math.cos(rumo) * metrosAtrasDaBarca };
+function lugarNaFila(origem, rumo, metrosAtrasDaOrigem) {
+    return { x: origem.x + Math.sin(rumo) * metrosAtrasDaOrigem, z: origem.z + Math.cos(rumo) * metrosAtrasDaOrigem };
 }
 
-function filaLivre(rumo, recuo) {
+function filaLivre(origem, rumo, recuo) {
     for (let i = 1; i <= noite.ficha.barcos; i++) {
-        const lugar = lugarNaFila(rumo, recuo + DISTANCIA_DO_COMBOIO * i);
+        const lugar = lugarNaFila(origem, rumo, recuo + DISTANCIA_DO_COMBOIO * i);
         const foraDoMundo = Math.abs(lugar.x) > METADE_DO_MUNDO - FOLGA_DO_NASCIMENTO || Math.abs(lugar.z) > METADE_DO_MUNDO - FOLGA_DO_NASCIMENTO;
         if (foraDoMundo || distanciaEntre(lugar, porto) < porto.raio + FOLGA_DO_NASCIMENTO || recifeTocadoPor(lugar, FOLGA_DO_NASCIMENTO) !== null) {
             return false;
@@ -341,9 +341,7 @@ function atualizarBarcosAfundando(tempo) {
     }
 }
 
-function removerBarco(lista, indice) {
-    barcosRemovidos.push(lista.splice(indice, 1)[0]);
-}
+function removerBarco(lista, indice) { barcosRemovidos.push(lista.splice(indice, 1)[0]); }
 
 function recifeTocadoPor(coisa, folga = 0) {   // recife ou ilha: quem bate nela; `folga` alarga o círculo
     for (let i = 0; i < recifes.length; i++) {

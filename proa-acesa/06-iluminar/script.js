@@ -15,10 +15,10 @@ const COR_DO_RECIFE = 0xe8e3d4, COR_DO_RECIFE_LEMBRADO = 0x7f8a94;   // recife V
 const COR_DO_PERIGO = 0xff8a4d;       // o disco de colisão que a tecla H mostra
 const CAMPO_DE_VISAO = 75, CAMPO_DE_VISAO_EM_PE = 80;   // graus, na vertical; o celular em pé é mais aberto
 const ALTURA_DA_CAMERA = 18, RECUO_DA_CAMERA = 22;      // câmera 3/4: cabe a barca, o mar à frente e a cauda do comboio
-const PARTE_DO_COMBOIO_NA_MIRA = 0.63; // o olhar vai da barca (0) até o meio da fila (1)
+const METROS_A_FRENTE = 14, ALCANCE_PARA_TRAS = 15, ALCANCE_LATERAL = 20, ALCANCE_DA_PERSPECTIVA = 37, ESCALA_MAXIMA_DA_CAMERA = 3;   // o que a câmera enquadra, em metros (ver escalaParaCaber)
 const TETO_DO_DELTA = 0.05;           // segundos, igual ao Pong
 const RAIO_DO_FEIXE = ALCANCE_DA_LANTERNA * Math.tan(MEIO_ANGULO_DA_LANTERNA);   // o cone desenhado = o cone da regra
-const TAMANHO_DO_MAR = 90;            // metros
+const TAMANHO_DO_MAR = 130;           // metros; a câmera se afasta com a fila esticada: 130 m para a borda sumir na névoa
 const DIVISOES_DO_MAR = 64;           // 64 × 64 quadradinhos = 4.225 vértices
 const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // um quadradinho do mar, em metros
 const AMPLITUDE_DA_ONDA = 0.5;        // metros de altura
@@ -219,7 +219,7 @@ function montarCena() {
     cena = new THREE.Scene();
     cena.background = new THREE.Color(COR_DO_CEU_DE_TARDE);
     cena.fog = new THREE.FogExp2(COR_DO_CEU_DE_TARDE, NEVOA_DE_TARDE);   // a cor da névoa tem de ser a do fundo
-    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 100);
+    camera = new THREE.PerspectiveCamera(CAMPO_DE_VISAO, 1, 0.1, 200);
     rascunho = { cor: new THREE.Color(), ponto: new THREE.Vector3(), alvo: new THREE.Vector3(), mira: new THREE.Vector3() };
     raycaster = new THREE.Raycaster();
     partes = {
@@ -247,8 +247,8 @@ function criarMar() {
 }
 
 function criarIlhaComFarol() {
-    const ilha = new THREE.Group();
-    ilha.position.set(-5, 0, -12);
+    const ilhaComFarol = new THREE.Group();
+    ilhaComFarol.position.set(ilha.x, 0, ilha.z);
     const chao = criarMalha(new THREE.CylinderGeometry(4, 5.5, 1.2, 12), 0x2b3a2f);
     const torre = criarMalha(new THREE.CylinderGeometry(0.9, 1.4, 9, 10), 0x4a5563);
     const salaDaLampada = criarMalha(new THREE.CylinderGeometry(1.1, 1.1, 1, 10), 0x1c232b);
@@ -257,9 +257,9 @@ function criarIlhaComFarol() {
     torre.position.y = 5.3;
     salaDaLampada.position.y = 10.3;   // apagada: sem emissivo
     telhado.position.y = 11.45;
-    ilha.add(chao, torre, salaDaLampada, telhado);
+    ilhaComFarol.add(chao, torre, salaDaLampada, telhado);
     oclusores.push(chao, torre);   // a ilha também tapa a luz
-    return ilha;
+    return ilhaComFarol;
 }
 
 function criarBarca() {
@@ -475,23 +475,30 @@ function seguirAlvo(eixo, alvo, tempo) {
     eixo.angulo = limitar(eixo.angulo + eixo.velocidade * tempo, eixo.minimo, eixo.maximo);
 }
 
-/* O ponto (0, 14, 22) é LOCAL à barca (atrás e acima); `localToWorld` o leva ao mundo, já com a proa. O olhar vai para um ponto
-   entre a barca e o meio da fila (e é suavizado como a câmera): a barca, o mar à frente e ao menos 3 barcos cabem na tela. */
-function seguirComACamera(fracao) {
-    camera.position.lerp(barca.localToWorld(rascunho.ponto.set(0, ALTURA_DA_CAMERA, RECUO_DA_CAMERA)), fracao);
-    rascunho.mira.lerp(pontoDeMira(rascunho.alvo), fracao);
+/* A câmera mostra o que importa: a barca, 14 m à frente dela (a tempo de desviar de um recife) e os 3 primeiros barcos. Ela olha para o
+   meio entre a frente e o 3º barco, de um ponto (0, 18, 22) LOCAL à proa. A fila se estica (o 1º barco é 5% mais lento): o ponto se
+   afasta, até ×3, na proporção do que não cabe na tela. */
+function seguirComACamera(fracaoDoCaminho) {
+    const frente = { x: barcaNoMundo.x - Math.sin(barcaNoMundo.proa) * METROS_A_FRENTE, z: barcaNoMundo.z - Math.cos(barcaNoMundo.proa) * METROS_A_FRENTE };
+    const barcos = barcosDePesca.slice(0, 3);
+    const terceiro = barcos.length > 0 ? barcos[barcos.length - 1] : barcaNoMundo;
+    const meio = { x: (frente.x + terceiro.x) / 2, z: (frente.z + terceiro.z) / 2 };
+    let escala = 1;
+    barcos.concat(barcaNoMundo, frente).forEach(function (ponto) { escala = Math.max(escala, escalaParaCaber(ponto, meio)); });
+    escala = Math.min(escala, ESCALA_MAXIMA_DA_CAMERA);
+    rascunho.ponto.set(meio.x + Math.sin(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala, ALTURA_DA_CAMERA * escala, meio.z + Math.cos(barcaNoMundo.proa) * RECUO_DA_CAMERA * escala);
+    camera.position.lerp(rascunho.ponto, fracaoDoCaminho);
+    rascunho.mira.lerp(rascunho.alvo.set(meio.x, 0, meio.z), fracaoDoCaminho);
     camera.lookAt(rascunho.mira);
 }
 
-function pontoDeMira(destino) {
-    let somaX = 0, somaZ = 0;
-    for (let i = 0; i < barcosDePesca.length; i++) {
-        somaX += barcosDePesca[i].x;
-        somaZ += barcosDePesca[i].z;
-    }
-    const meioX = barcosDePesca.length > 0 ? somaX / barcosDePesca.length : barcaNoMundo.x;   // sem fila, olha para a barca
-    const meioZ = barcosDePesca.length > 0 ? somaZ / barcosDePesca.length : barcaNoMundo.z;
-    return destino.set(lerp(barcaNoMundo.x, meioX, PARTE_DO_COMBOIO_NA_MIRA), 0, lerp(barcaNoMundo.z, meioZ, PARTE_DO_COMBOIO_NA_MIRA));
+/* Quantas vezes a vista padrão precisa crescer para o ponto caber. Medido por projeção: atrás do meio o ponto fica perto da câmera e
+   a tela é estreita ali; quanto mais estreita a tela (celular em pé), menos largura cabe. */
+function escalaParaCaber(ponto, meio) {
+    const dx = ponto.x - meio.x, dz = ponto.z - meio.z;
+    const atras = dx * Math.sin(barcaNoMundo.proa) + dz * Math.cos(barcaNoMundo.proa);   // positivo: atrás do meio, do lado da câmera
+    const lado = Math.abs(dx * Math.cos(barcaNoMundo.proa) - dz * Math.sin(barcaNoMundo.proa));
+    return Math.max(atras / ALCANCE_PARA_TRAS, lado / (ALCANCE_LATERAL * camera.aspect) + Math.max(atras, 0) / ALCANCE_DA_PERSPECTIVA);
 }
 
 /* ONDAS. sen(x · frequência + tempo · velocidade): o `x` muda a fase de vértice em vértice (vira onda) e o `tempo` a faz andar. */

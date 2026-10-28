@@ -3,7 +3,7 @@
 **Mudou:** o `index.html` traz o **`OrbitControls`** pela import map; a tecla **H** passa a mostrar o **invisível**
 (o leque da regra, os discos de colisão, o círculo da ilha, o alvo de cada barco) e as **medidas** (draw calls,
 tempo, memória da GPU); e, ao recomeçar a noite, os recifes velhos recebem **`dispose()`**: a memória deixa
-de crescer. O jogo em si é o do passo 7.
+de crescer. O jogo em si é o do passo 7, com a **busca em largura** que confere as noites (`haCaminhoAtePorto`).
 **Rode:** abra o `index.html` e aperte **H**. Arraste para girar a câmera em volta da barca, role a roda para
 aproximar. **R** recomeça a noite; **C** troca a chuva; **H** de novo volta ao jogo.
 
@@ -11,7 +11,8 @@ aproximar. **R** recomeça a noite; **C** troca a chuva; **H** de novo volta ao 
 
 ## O que você vê
 
-Com **H** ligado a câmera deixa de seguir a barca e passa a ser sua. O mar se enche de **anéis laranja**: um por
+Com **H** ligado a câmera deixa de ser a do jogo e passa a ser sua: o `OrbitControls` gira em torno da barca e a
+carrega junto, então ela segue a barca onde ela for (sem a conta que enquadra o comboio, que volta quando H desliga). O mar se enche de **anéis laranja**: um por
 recife, com o raio de onde o barco bate (raio do recife + 1,2 m), até nos recifes que a lanterna esqueceu. À frente
 da barca aparece o **leque** da regra, laranja e translúcido, do tamanho do foco de agora. Uma **linha branca** liga cada
 barco ao seu alvo (o primeiro à barca, os outros ao da frente). O círculo da ilha aparece quando você gira até ela. Num canto,
@@ -94,12 +95,35 @@ function descartar(grupo) {
 `traverse` visita o grupo e todos os descendentes. Só serve para o que **não é compartilhado**: as geometrias e os
 materiais dos barcos de pesca (`partes`) são usados por todos, então ficam. Só aparece no contador o que **já foi
 desenhado** (com H desligado, os recifes esquecidos nem sobem para a GPU, e o vazamento é lento): é por isso que a
-medida pede H ligado. É o mesmo tipo de vazamento das listas do `dealer-out` que não encolhiam, só que na GPU em vez
-de na memória do JavaScript.
+medida pede H ligado. É o mesmo tipo de vazamento da lista de tiros do `shoot-em-up/03-tiros` que ninguém esvazia,
+só que na GPU em vez de na memória do JavaScript.
 
 ---
 
-## 4. Medidas que o jogo oferece
+## 4. A busca em largura: toda noite tem caminho?
+
+Os recifes das cinco noites são **fixos** (duas listas, sem sorteio). Para provar que nenhuma noite é impossível,
+`haCaminhoAtePorto` faz uma **busca em largura** (a do `pacman/06-modos`) numa grade de 4 m sobre o mundo:
+
+```js
+const fila = [largada], vistas = new Set([largada[1] * lado + largada[0]]);
+for (let i = 0; i < fila.length; i++) {          // a fila CRESCE enquanto é lida: vizinhos entram no fim
+    if (distanciaEntre(centroDa(fila[i][0], fila[i][1]), porto) < porto.raio) { return true; }
+    ...                                           // cada vizinho livre e ainda não visto entra na fila
+}
+return false;
+```
+
+Ela parte da célula da `PARTIDA`, anda para cima, baixo, esquerda e direita e só pisa em célula a mais de
+`FOLGA_DO_CAMINHO` (6 m) de qualquer recife ou da ilha, contando o raio do barco: é a folga para o comboio passar.
+Chegou a uma célula dentro do porto? `true`. A fila esvaziou sem chegar? `false`. Ela confere a noite **montada
+agora**; para as cinco: `fichas.every(function (f, i) { comecarNoite(i); return haCaminhoAtePorto(); })`, que dá
+`true`. O mesmo `PARTIDA` é o lugar seguro onde o comboio nasce quando a barca está cercada (`criarComboio`). O
+jogo não chama a busca: ela é uma **prova**, e o `final` a rodará a cada partida, depois de sortear os recifes.
+
+---
+
+## 5. Medidas que o jogo oferece
 
 O painel mostra o que o jogo lê de graça. Para uma página de **medição no celular**, estes nomes existem como
 globais: `ultimoTempoDeQuadro` (milissegundos de JS: atualizar + mandar desenhar), `ultimoTempoDeAtualizacao`,
@@ -124,6 +148,8 @@ tempo vale, só as **contagens**).
 6. Aperte **H**, gire a câmera para ver a **ilha** e empurre a barca para dentro do anel dela. Quem bate primeiro:
    o anel ou o casco? Mude `RAIO_DO_BARCO` e veja os anéis crescerem.
 7. Acrescente à depuração o círculo do **porto** (raio 9 m). Quais linhas de `criarDepuracao` você copia?
+8. Ponha um recife grande no meio do corredor da noite 1 e rode `haCaminhoAtePorto()` no console. Quando ela passa a
+   dizer `false`? Mude `FOLGA_DO_CAMINHO` para 2 e veja o que muda (e se o comboio caberia mesmo assim).
 
 ---
 
