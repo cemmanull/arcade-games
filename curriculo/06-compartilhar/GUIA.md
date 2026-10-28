@@ -1,6 +1,6 @@
 # Currículo — Passo 6: Compartilhar
 
-**Mudou:** só o `<head>` do `index.html` (descrição, `theme-color`, as tags **Open Graph**, o ícone embutido e o marcador de endereço). O `<body>`, o `script.js`, o `projetos.js` e o `style.css` são os do passo 5.
+**Mudou:** o `<head>` do `index.html` (descrição, `theme-color`, as tags **Open Graph**, o ícone embutido e o marcador de endereço) e **uma linha** do `script.js` (`mostrarTema` pinta a barra do navegador). O `<body>`, o `projetos.js` e o `style.css` são os do passo 5.
 **Rode:** abra o `index.html` e olhe a **aba**: agora ela tem um ícone. Depois abra as ferramentas do desenvolvedor (F12), aba "Elementos", e leia o `<head>`.
 
 ---
@@ -71,6 +71,11 @@ caracteres `<`, `>` e `#` aparecem como `%3C`, `%3E` e `%23` porque o endereço 
 
 No celular, a barra de cima do navegador pega essa cor. São as mesmas cores de `--fundo` do [passo 5](../05-acabamento/), uma para cada
 tema, escolhidas por `media`, como no CSS. Se você trocar a paleta, troque aqui também.
+
+Só que `media="(prefers-color-scheme: dark)"` olha o **sistema**, e a pessoa pode ter escolhido o outro tema no botão (`data-tema`).
+Então o `script.js` acerta isso: `mostrarTema`, que roda ao carregar, ao clicar no botão e quando o sistema muda de tema, copia a cor do fundo
+que está **de fato** na tela (`getComputedStyle(document.body).backgroundColor`) para as duas tags. Os valores do `<head>` ficam como o primeiro palpite,
+antes de o script rodar. Teste: com o sistema no claro, aperte **Tema escuro** e, em F12, olhe o `content` das tags mudar.
 
 ---
 

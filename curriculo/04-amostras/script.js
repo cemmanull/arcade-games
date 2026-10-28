@@ -2,23 +2,29 @@
   CURRÍCULO — PASSO 4: AMOSTRAS
 
   Cada cartão ganha um selo (abre sem internet?), um trecho de código e, se jogarAqui for true, um botão
-  que cria o <iframe> só ao clicar. Esc fecha o jogo e devolve o foco ao botão.
+  que cria o <iframe> só ao clicar. Esc fecha o jogo quando o foco está no cartão (no botão, no Fechar ou no cartão) e devolve o foco ao botão.
+  Dentro do jogo as teclas são do jogo: para sair, Tab/Shift+Tab ou o botão Fechar.
 */
 
 const CAMPOS_DE_TEXTO = ["id", "nome", "resumo", "pasta", "alt"];
+const ENDERECO_DO_CURSO = "https://github.com/cemmanull/arcade-games";   // absoluto: um caminho relativo quebra depois de publicar
 
 const listaDeProjetos = document.getElementById("lista-projetos");
 const caixaDeAvisos = document.getElementById("avisos");
 
-let jogoAberto = null;   // { botao, quadro, projeto } do jogo que está aberto no cartão, se houver
+let jogoAberto = null;   // { botao, quadro, cartao, projeto } do jogo que está aberto, se houver
 
-desenharProjetos();
+// O ouvinte vem antes dos cartões: um erro nos dados não derruba as teclas.
 document.addEventListener("keydown", (evento) => {
-    if (evento.key === "Escape") fecharJogo(true);
+    if (typeof evento.key !== "string") return;
+    const focoNoJogo = jogoAberto !== null && jogoAberto.cartao.contains(document.activeElement);
+    if (evento.key === "Escape" && focoNoJogo) fecharJogo(true);
 });
+desenharProjetos();
 
 function desenharProjetos() {
-    const problemas = conferirProjetos(projetos);
+    const leitura = lerProjetos();
+    const problemas = leitura.motivo ? [leitura.motivo] : conferirProjetos(leitura.lista);
 
     listaDeProjetos.replaceChildren();
     caixaDeAvisos.replaceChildren();
@@ -28,19 +34,28 @@ function desenharProjetos() {
         return;
     }
 
-    listaDeProjetos.append(...projetos.map((projeto) => criarCartao(projeto)));
+    listaDeProjetos.append(...leitura.lista.map((projeto) => criarCartao(projeto)));
+}
+
+// Ler `projetos` pode estourar: se projetos.js falhou no meio (ex.: `nome: Tetris` sem aspas), a constante existe mas
+// nunca foi inicializada e qualquer leitura, até `typeof`, lança ReferenceError. O try/catch devolve um motivo em vez de quebrar.
+function lerProjetos() {
+    try {
+        return { lista: projetos };
+    } catch (erro) {
+        return { motivo: "projetos.js não terminou de carregar: veja o erro no console (F12), que mostra a linha." };
+    }
 }
 
 // ---------- Conferir os dados: devolve a lista de problemas (vazia = tudo certo) ----------
 
 function conferirProjetos(listaParaConferir) {
     if (!Array.isArray(listaParaConferir)) {
-        return ["projetos precisa ser uma lista: const projetos = [ … ]"];
+        return ["projetos precisa ser uma lista: const projetos = [ … ]. Se projetos.js tem um erro de sintaxe, o console (F12) mostra a linha."];
     }
 
     const problemas = [];
-    const nomesVistos = new Set();
-    const idsVistos = new Set();
+    const vistos = { nome: new Set(), id: new Set() };
 
     listaParaConferir.forEach((projeto, posicao) => {
         const dados = projeto || {};
@@ -48,10 +63,10 @@ function conferirProjetos(listaParaConferir) {
 
         problemas.push(...conferirCampos(dados, rotulo));
 
-        if (nomesVistos.has(dados.nome)) problemas.push(`${rotulo}: o nome "${dados.nome}" está repetido`);
-        if (idsVistos.has(dados.id)) problemas.push(`${rotulo}: o id "${dados.id}" está repetido`);
-        nomesVistos.add(dados.nome);
-        idsVistos.add(dados.id);
+        for (const campo of ["nome", "id"].filter((campo) => textoPreenchido(dados[campo]))) {
+            if (vistos[campo].has(dados[campo])) problemas.push(`${rotulo}: o ${campo} "${dados[campo]}" está repetido`);
+            vistos[campo].add(dados[campo]);
+        }
     });
 
     return problemas;
@@ -63,6 +78,10 @@ function conferirCampos(dados, rotulo) {
     for (const campo of CAMPOS_DE_TEXTO.filter((campo) => !textoPreenchido(dados[campo]))) {
         problemas.push(`${rotulo}: falta "${campo}"`);
     }
+
+    // O id vira o endereço #projeto-<id>: um espaço ou uma letra maiúscula quebraria o link sem avisar.
+    const idInvalido = textoPreenchido(dados.id) && !/^[a-z0-9-]+$/.test(dados.id);
+    if (idInvalido) problemas.push(`${rotulo}: o id "${dados.id}" só pode ter letras minúsculas sem acento, números e hífen`);
 
     const tecnicasValidas = Array.isArray(dados.tecnicas) && dados.tecnicas.length > 0 && dados.tecnicas.every(textoPreenchido);
     if (!tecnicasValidas) problemas.push(`${rotulo}: "tecnicas" precisa ser uma lista de textos, com pelo menos um`);
@@ -161,7 +180,7 @@ function criarTrecho(projeto) {
 function criarCredito() {
     const credito = criarElemento("p", "Feito seguindo o curso ", "credito");
     const link = criarElemento("a", "Do zero ao jogo");
-    link.href = "../../README.md";
+    link.href = ENDERECO_DO_CURSO;
 
     credito.append(link, ".");
     return credito;
@@ -199,7 +218,7 @@ function abrirJogo(projeto, botao) {
 
     botao.closest(".cartao").append(quadro);
     rotularBotao(botao, projeto, true);
-    jogoAberto = { botao, quadro, projeto };
+    jogoAberto = { botao, quadro, cartao: quadro.parentElement, projeto };
 }
 
 function fecharJogo(devolverOFoco) {
@@ -224,7 +243,7 @@ function criarMiniatura(projeto) {
 // Sem arquivo de imagem: um SVG (que é texto) com a cor do projeto e a inicial do nome, embutido no próprio src.
 // A letra diz qual projeto é; a cor sozinha não diria.
 function criarBlocoColorido(projeto) {
-    const inicial = /^\p{L}/u.test(projeto.nome) ? projeto.nome[0].toUpperCase() : "#";
+    const inicial = /^\p{L}/u.test(projeto.nome) ? Array.from(projeto.nome)[0].toUpperCase() : "#";
     const desenho = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90">` +
         `<rect width="160" height="90" fill="${projeto.cor}"/>` +
         `<text x="80" y="62" text-anchor="middle" font-size="48" font-family="sans-serif" fill="#fff">${inicial}</text></svg>`;

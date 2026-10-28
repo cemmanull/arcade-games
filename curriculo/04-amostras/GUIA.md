@@ -1,7 +1,7 @@
 # Currículo — Passo 4: As amostras
 
-**Mudou:** `projetos.js` (cada projeto ganha `internet`, `jogarAqui`, `arquivo`, `oQueMostra` e `trecho`), `script.js` (selo, `criarTrecho`, crédito e o botão **Jogar aqui** com `abrirJogo`/`fecharJogo`; `conferirProjetos` confere o trecho) e `style.css` (botão, `<details>`, `<pre>`, o `iframe`). O `index.html` só muda no comentário.
-**Rode:** abra o `index.html`, abra "Ver um trecho do código" num cartão e role o código com Tab e as setas. Depois, em `projetos.js`, troque `jogarAqui: false` por `true` no primeiro projeto, recarregue e clique em **Jogar aqui**. Aperte **Esc**.
+**Mudou:** `projetos.js` (cada projeto ganha `internet`, `jogarAqui`, `arquivo`, `oQueMostra` e `trecho`), `script.js` (selo, `criarTrecho`, crédito e o botão **Jogar aqui** com `abrirJogo`/`fecharJogo`; `conferirProjetos` confere o trecho) e `style.css` (botão, `<details>`, `<pre>`, o `iframe` com a proporção de um celular). O `index.html` só muda no comentário.
+**Rode:** abra o `index.html`, abra "Ver um trecho do código" num cartão e role o código com Tab e as setas. Depois, em `projetos.js`, troque `jogarAqui: false` por `true` no primeiro projeto, recarregue e clique em **Jogar aqui**. Aperte **Esc** (com o foco no botão).
 
 ---
 
@@ -38,7 +38,7 @@ Todo `<iframe>` precisa de `title`, assim como toda imagem precisa de `alt`. Sem
 
 ### A armadilha de teclado, com honestidade
 
-Quando o foco está **dentro** do jogo, as teclas vão para o jogo, não para a sua página. Por isso o `Esc` fecha o jogo **só enquanto o foco está fora dele** (logo depois de clicar em "Jogar aqui", por exemplo). O que sempre funciona:
+Quando o foco está **dentro** do jogo, as teclas são do jogo: o `keydown` da sua página nunca as recebe (o `iframe` é outro documento e, em `file://`, até outra origem). Por isso o `Esc` fecha o jogo **só com o foco no cartão**: no botão (logo depois de clicar em "Jogar aqui"), no **Fechar** ou no próprio cartão. O `keydown` confere `jogoAberto.cartao.contains(document.activeElement)`; quem está lendo outro trecho da página e aperta `Esc` não perde o jogo. Para sair de dentro do jogo:
 
 - o botão vira **Fechar** (aperte Enter nele);
 - **Tab** e **Shift+Tab** saem do jogo, em jogos que não prendem o foco;
@@ -46,12 +46,22 @@ Quando o foco está **dentro** do jogo, as teclas vão para o jogo, não para a 
 
 Quando você publicar (passo 7) os `final/` dos jogos precisam ir **junto** na pasta, senão o `iframe` mostra uma página de erro.
 
+### O tamanho do quadro, com honestidade
+
+Os jogos do curso foram feitos para uma tela de celular de 390×750. O quadro tem essa proporção e, no máximo, 390 px de largura:
+
+```css
+.cartao iframe { width: 100%; max-width: 390px; aspect-ratio: 390 / 750; }
+```
+
+Num computador o jogo cabe inteiro. **Num celular de 390 px o cartão é mais estreito que a tela** (sobram uns 320 px depois das margens), então o quadro encolhe e o jogo, que pedia 390, aperta. Por isso, **no celular, o link "Abrir" é a melhor forma de jogar**: o jogo ocupa a tela toda. O "Jogar aqui" é uma conveniência para quem está no computador.
+
 ---
 
 ## 2. Só um jogo aberto, e `Esc` em um lugar
 
 ```js
-let jogoAberto = null;   // { botao, quadro, projeto }
+let jogoAberto = null;   // { botao, quadro, cartao, projeto }
 ```
 
 Uma variável diz **o que está aberto**. `alternarJogo` fecha o que estiver aberto e só abre o novo se o clique foi em outro botão. Assim há no máximo um `iframe`, e o `Esc` não precisa descobrir qual fechar. É o estado → ação → tela do [projeto de tarefas](../../tutorial/05-projeto/), em miniatura.
@@ -81,7 +91,7 @@ Como escolher o trecho: algo que mostre **uma ideia**, pequena e inteira. A rota
 
 ## 4. Crédito e privacidade
 
-Cada cartão termina com "Feito seguindo o curso *Do zero ao jogo*", com link. É o crédito de quem ensinou. O código dos jogos é **seu**, feito por você, mas o texto e a arte do curso, se você copiar, mantêm o crédito. Nada de imagem de terceiros sem licença.
+Cada cartão termina com "Feito seguindo o curso *Do zero ao jogo*", com link. É o crédito de quem ensinou. O link é um endereço **absoluto** (`https://github.com/cemmanull/arcade-games`): um caminho como `../../README.md` só existe na pasta do curso e quebraria depois de publicado. O código dos jogos é **seu**, feito por você, mas o texto e a arte do curso, se você copiar, mantêm o crédito. Nada de imagem de terceiros sem licença.
 
 ---
 

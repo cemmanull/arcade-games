@@ -27,8 +27,8 @@ por isso o contato aqui é um `mailto:`. O modelo **não tem foto**. Se quiser u
 ## O que você vê
 
 O mesmo currículo, agora com **tema claro ou escuro**, um **Sobre mim**, o perfil no contato e um botão
-**Ver estrutura (H)** no rodapé. Aperte **Ctrl+P**: some o menu, o fundo vira branco, e cada link mostra o endereço
-ao lado. É um PDF pronto (escolha "Salvar como PDF" na janela de impressão). **Nada anima sozinho.**
+**Ver estrutura (H)** no rodapé. Aperte **Ctrl+P**: some o menu, o fundo vira branco, e cada link externo (`https://…`)
+mostra o endereço ao lado. É um PDF pronto (escolha "Salvar como PDF" na janela de impressão). **Nada anima sozinho.**
 
 ---
 
@@ -55,6 +55,10 @@ Mas quem escolhe é a **pessoa**, e não só o sistema. O botão grava a escolha
 
 Sem `data-tema`, vale o sistema. Com ele, vale o botão. O botão tem `aria-pressed`, e o rótulo continua "Tema escuro": o
 leitor de tela diz "Tema escuro, ligado", em vez de um texto que muda.
+
+Para o `aria-pressed` dizer sempre a verdade, `mostrarTema` roda também quando **o sistema** troca de tema (o evento `change` de `matchMedia("(prefers-color-scheme: dark)")`). Sem isso, quem não clicou no botão e viu o sistema escurecer ficaria com um botão "desligado" numa página escura.
+
+**O piscar.** O script lê o tema salvo na **primeira linha de código**, antes de montar qualquer cartão, para que a escolha valha o mais cedo possível. Como o script é `defer`, o navegador pode ter desenhado um quadro no tema do sistema antes; se o seu aparecer claro por um instante, é isso. O remédio completo seria um `<script>` minúsculo dentro do `<head>`, que este curso deixa de fora para manter o `index.html` sem JavaScript.
 
 ### Contraste: um número, não um palpite
 
@@ -106,16 +110,24 @@ mouse passa. Mesmo isso some para quem pediu menos movimento ao sistema:
 ## 4. A folha de impressão
 
 ```css
+@page { size: A4; margin: 1.5cm; }
+
 @media print {
     nav, button, iframe, details, .pular { display: none !important; }
-    a[href]:not([href^="#"])::after { content: " (" attr(href) ")"; }
+    a[href^="http"]::after { content: " (" attr(href) ")"; }
+    .credito a::after { content: none; }
     .cartao { break-inside: avoid; }
 }
 ```
 
+O crédito de cada cartão leva `class="credito"` e uma regra `.credito a::after { content: none; }` o exclui: o endereço do curso sai **uma vez**, no rodapé, e não depois de cada cartão.
+
 Papel não tem clique: um link só serve se o **endereço estiver escrito**. `attr(href)` copia o endereço do próprio
-link para depois dele. Os links internos (`#projetos`) ficam de fora. `break-inside: avoid` impede um cartão de ser
-cortado entre duas folhas. O menu, os botões e o `iframe` não fazem sentido no papel e somem. E `color-scheme: light` força o
+link para depois dele, mas **só dos que começam com `http`**. Os de dentro da página (`#projetos`) ficam de fora; um caminho
+relativo como `../../tetris/final/index.html` não diz nada a quem lê no papel; e o e-mail (`mailto:`) já está escrito no
+próprio texto do link, então repeti-lo seria ruído. `@page` fixa o papel em A4 com margem. `break-inside: avoid` impede um cartão de ser
+cortado entre duas folhas. O menu, os botões e o `iframe` não fazem sentido no papel e somem, assim como o contorno e o
+aviso da tecla H (eles são ferramenta de quem constrói a página). E `color-scheme: light` força o
 fundo branco, mesmo se a pessoa estiver no tema escuro. Confira na prévia de **Ctrl+P**: cabe em A4?
 
 ---
@@ -127,6 +139,8 @@ Convenção do curso desde os jogos: **H** mostra o que não se vê. Aqui, a **e
 - cada **marco** ganha um contorno **tracejado** e o seu nome (`header`, `nav`, `section #projetos`…);
 - cada **título** ganha o nível ao lado (`[h2]`);
 - o aviso do rodapé lista os títulos **na ordem em que um leitor de tela os leria**.
+
+Segurar a tecla H repetiria o evento `keydown` várias vezes por segundo e a estrutura piscaria; por isso o script ignora `evento.repeat`. H digitado num campo de texto (`input`, `textarea`, `select` ou um elemento `contenteditable`) é uma letra, não o atalho: `digitandoNumCampo` olha o alvo do evento. E o `Esc`, que fecha o "Jogar aqui", só age com o foco **no cartão do jogo** (o botão, o **Fechar** ou o próprio cartão): em outro ponto da página não faz nada, e **dentro** do jogo as teclas são do jogo (saia com Tab ou com o botão **Fechar**).
 
 É o que você montou à mão no [passo 1](../01-estrutura/), agora à vista. A forma (tracejado e texto) mostra a estrutura; a
 cor sozinha não mostraria. O botão **Ver estrutura (H)** existe para quem está no celular e não tem a tecla. Ele é uma
@@ -160,11 +174,11 @@ Duas ou três frases, em primeira pessoa, que dizem **o que você faz e o que bu
 
 1. **Sua paleta.** Troque `--destaque` nos dois temas. Calcule o contraste de cada par e anote os números.
 2. **Estrague o dado.** `localStorage.setItem("curriculo-tema", "lixo")` no console e recarregue. Depois comente o `try/catch` e repita.
-3. **Sistema.** Mude o tema do seu sistema operacional com a página aberta e **sem** ter clicado no botão. O que muda?
+3. **Sistema.** Mude o tema do seu sistema operacional com a página aberta e **sem** ter clicado no botão. O que muda na página? E no `aria-pressed` do botão (olhe em F12)?
 4. **Prévia de impressão.** Ctrl+P: algum cartão é cortado ao meio? Tente tirar o `break-inside` e ver.
 5. **Só o teclado.** Tecle H, Tab, Enter. O contorno do foco continua visível nos dois temas e com a estrutura à mostra?
 6. **Sem ferramentas.** Apague o botão "Ver estrutura" e o `#aviso-estrutura` do HTML e as linhas de `script.js` que os usam. A página ainda funciona? (Se não, o que você esqueceu?)
-7. **Currículo de papel.** Gere o PDF e abra. Os endereços dos links estão legíveis? Algum dado de verdade escapou para ele?
+7. **Currículo de papel.** Gere o PDF e abra. Os endereços dos links de fora estão legíveis, e o e-mail aparece uma vez só? Algum dado de verdade escapou para ele?
 
 ---
 
