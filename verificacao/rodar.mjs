@@ -31,6 +31,7 @@ const pastaDasVerificacoes = join(pastaDoRepositorio, "verificacao");
 const pastasForaDoModoNormal = ["medicao", "autoteste"].map((nome) => join(pastaDasVerificacoes, nome));
 
 const OPCOES_COM_VALOR = ["--largura", "--altura", "--escala", "--saida"];
+const MODOS = ["--autoteste", "--links", "--captura", "--fumaca"];
 const { valores: opcoes, restantes: argumentos } = separarOpcoesComValor(process.argv.slice(2));
 const filtro = argumentos.find((argumento) => !argumento.startsWith("--"));
 
@@ -44,6 +45,11 @@ function lerLimiteDaPaginaEmMilissegundos() {
 }
 
 async function principal() {
+    const opcaoDesconhecida = argumentos.find((argumento) => argumento.startsWith("--") && !MODOS.includes(argumento));
+    if (opcaoDesconhecida) {
+        console.error(`Opção desconhecida: ${opcaoDesconhecida}. Modos: --fumaca, --links, --captura, --autoteste; sem opção, roda as páginas de teste (veja o começo de verificacao/rodar.mjs).`);
+        return 2;
+    }
     if (argumentos.includes("--autoteste")) {
         // Import dinâmico: as cópias do executor que o autoteste monta não levam a pasta autoteste/.
         const { rodarAutoteste } = await import("./autoteste/autoteste.mjs");

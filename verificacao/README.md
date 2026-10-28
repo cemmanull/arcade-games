@@ -41,6 +41,8 @@ O modo normal **não** entra em `verificacao/medicao/` (páginas de medição pa
 nem em `verificacao/autoteste/` (o autoteste do executor): essas pastas só rodam por caminho
 explícito (`node verificacao/rodar.mjs verificacao/medicao/<pagina>.html`).
 
+Uma opção desconhecida (como `--help` ou um erro de digitação) para com saída 2, sem rodar nada.
+
 ## Fumaça: todas as páginas do curso
 
 ```
