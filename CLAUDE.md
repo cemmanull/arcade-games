@@ -1,7 +1,8 @@
 # CLAUDE.md — arcade-games
 
 Curso em pt-BR, "do zero ao jogo": HTML, CSS e JavaScript puros, um módulo por jogo, cada passo uma
-pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md`.
+pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md` — **arquivos locais, ignorados pelo git: nunca commitar** (só existem na
+cópia principal; agentes em worktree recebem o contexto no prompt).
 
 ## Stack
 - Site estático. Sem build, sem `package.json`, sem framework, sem dependência.
@@ -18,6 +19,11 @@ pasta que roda sozinha. Estado do trabalho em andamento: `TODO.md` e `HANDOFF.md
     tabela `ERROS_ESPERADOS` de `verificacao/fumaca.mjs` (cada padrão casa com a linha inteira);
   - `node verificacao/rodar.mjs --links` — confere todo link relativo dos `.md` (inclusive maiúsculas).
   Os três precisam sair com 0 antes de qualquer merge.
+- Publicar uma etapa verificada: merge em `learning-path`, `main` em fast-forward, `git push origin
+  learning-path main`. Nunca `--force`, `--all`, `--mirror`, nem `backup/*`. Prefira avançar branches com
+  `git fetch . origem:destino` (só fast-forward) a trocar de branch. Antes de qualquer checkout, copie
+  `TODO.md` e `HANDOFF.md` para fora do repo e confira depois (um arquivo ignorado que outra branch
+  rastreia é sobrescrito ao entrar nela e apagado ao sair); nunca faça checkout de `backup/*`.
 - Página de teste nova: copiar o esqueleto de uma existente; carregar `../apoio.js` e depois os
   scripts reais do passo; se mexer em `localStorage`, guardar e devolver o valor do aluno.
 - Conferir uma página avulsa sem interface (Chrome headless; funciona com `file://`):
