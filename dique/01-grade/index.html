@@ -1,0 +1,32 @@
+<!--
+  DIQUE — PASSO 1: A GRADE
+
+  O mapa da ilha escrito em texto, desenhado como losangos por uma matriz 2×2.
+  Mova o mouse ou o dedo sobre a ilha e aperte H para ver os eixos e os números da matriz.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dique — passo 1</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="regras.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Dique</h1>
+
+    <canvas id="jogo" width="384" height="204">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <button type="button" id="ver" aria-label="Ver o invisível (H)">Ver</button>
+
+    <pre id="leitura" aria-live="off"></pre>
+
+    <p id="ajuda">Mouse ou dedo: marcar uma casa · H: mostrar o invisível</p>
+</body>
+</html>
