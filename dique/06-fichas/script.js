@@ -16,6 +16,8 @@ const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
 const PASSO_DA_ROLAGEM = 24;                    // pixels da janela por toque de tecla
 const LIMITE_DO_TOQUE = 8;                      // um arrasto maior que isto (pixels) rola o mapa; menor é um toque
 const LIMIAR_DA_RODA = 100;                     // deltaY acumulado que vale um degrau de zoom: um trackpad manda dezenas de eventos pequenos
+const PIXELS_POR_DELTA_DA_RODA = [1, 40, LIMIAR_DA_RODA];     // por deltaMode: pixels; linhas (o Firefox); páginas (uma página vale um degrau)
+const PAUSA_DA_RODA = 300;                      // milissegundos sem roda: o acúmulo recomeça do zero
 const NOME_DO_ZOOM = ["longe", "no meio", "perto"];     // um por degrau de ZOOMS
 const PASSO_DA_MARE = 0.5;                      // segundos entre um passo da água e o próximo: a maré é um filme curto
 const TEMPO_DE_LEITURA = 1.5;                   // a ficha fica em destaque antes de moldar
@@ -37,7 +39,8 @@ let previsao = null;                            // aguaDaFicha do terreno de ago
 let alcance = null;                             // buscaEmLargura do terreno de agora: até onde a água chegaria sem limite de volume
 let ponteiro = null;                            // o pixel da janela sob o mouse ou o dedo
 let dedo = null;                                // o ponteiro apertado: { id, inicio, ultimo, arrastando }
-let giroDaRoda = 0;                             // deltaY somado desde o último degrau de zoom
+let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
+let instanteDaRoda = 0;                         // quando veio o último evento da roda
 let depuracaoLigada = false;
 let faseDaOnda = 0;
 let instanteDoQuadroAnterior = performance.now();
@@ -56,7 +59,7 @@ const ESTILO_DO_MAR = estiloDoBloco("#17406b");
 
 function estiloDaAgua(casa) {                   // translúcida, com borda branca onde a água termina (forma, não só cor); a onda mexe no alfa
     const alfa = 0.55 + (movimentoReduzido ? 0 : 0.07 * Math.sin(faseDaOnda + casa.x * 0.9 + casa.y * 0.6));
-    return { topo: "rgba(42, 111, 219, " + alfa + ")", contorno: "rgba(255, 255, 255, 0.7)" };
+    return { topo: "rgba(42, 111, 219, " + alfa + ")", esquerda: "rgba(29, 78, 153, " + alfa + ")", direita: "rgba(21, 56, 110, " + alfa + ")", contorno: "rgba(255, 255, 255, 0.7)" };
 }
 
 const intencoes = {                             // teclado, mouse e toque chamam as mesmas funções
@@ -141,20 +144,20 @@ function irPara(maquina, destino) {             // só as transições da tabela
     return true;
 }
 
-function quantasFontes() {                      // as casas de água de graça (o mar e as nascentes): o início da ordem da previsão
+function quantasFontes() {                      // as casas do mar que a água cobre de graça, sem gastar volume: o início da ordem da previsão
     return previsao.ordem.filter(function (casa) { return casa.distancia === 0; }).length;
 }
 
-function mostrarAgua() {                        // a água que se vê: a baixa-mar, ou a previsão até o passo de agora
+function mostrarAgua() {                        // a água que se vê: a baixa-mar, ou a previsão do mar até o passo de agora, mais a água das nascentes (nível 1, já inteira)
     if (faseDaMare === "baixa") return definirAgua(NIVEL_DA_BAIXA_MAR, buscaEmLargura(alturas, NIVEL_DA_BAIXA_MAR, CASAS_DO_MAR).ordem);
-    definirAgua(fichaDeAgora().nivel, previsao.ordem.slice(0, quantasFontes() + passoDaMare * volumeDoPasso(fichaDeAgora())));
+    definirAgua(fichaDeAgora().nivel, previsao.ordem.slice(0, quantasFontes() + passoDaMare * volumeDoPasso(fichaDeAgora())).concat(previsao.nascentes));
 }
 
 function trocarEstado(novoEstado) {             // o terreno, a lista do pintor, a água e a previsão da ficha de agora seguem o estado
     estadoAtual = novoEstado;
     alturas = novoEstado.alturas;
     listaDeDesenho = montarListaDeDesenho();
-    alcance = buscaEmLargura(alturas, fichaDeAgora().nivel, fontesDaFicha(fichaDeAgora()));
+    alcance = buscaEmLargura(alturas, fichaDeAgora().nivel, CASAS_DO_MAR);
     previsao = aguaDaFicha(alturas, fichaDeAgora(), fichaDeAgora().passos);
     mostrarAgua();
 }
@@ -167,9 +170,10 @@ function comecarMare(indice) {                  // a ficha chega: o dia está em
     avisar("Maré " + (indice + 1) + " de " + TABUA_DE_MARES.length + ": " + descreverFicha(fichaDeAgora()));
 }
 
-function reiniciar() {                          // recomeçar o dia volta à cópia original, de qualquer fase: a única jogada que a maré não impede
+function reiniciar() {                          // recomeçar não é uma transição da tabela: é voltar ao estado inicial, como recarregar a página; por isso zera o relógio também
     fase = "ler";
     faseDaMare = "baixa";
+    relogioDaFase = 0;
     passoDaMare = 0;
     perdidas = criarMatriz(false);
     estadoAtual = estadoInicial();
@@ -207,6 +211,7 @@ function desfazer() {
 
 function avancar() {                            // M: libera a maré; depois que ela passa, chama a próxima ficha
     if (fase === "contar" && faseDaMare === "baixa") return seguirParaAProximaMare();
+    if (movimentoReduzido && faseDaMare !== "baixa") return darPassoDaMare();
     if (!podeMoldar()) return avisar(fase === "fim" ? "O dia acabou. N recomeça" : "Espere a água");
     liberarMare();
 }
@@ -217,12 +222,18 @@ function liberarMare() {                        // moldar → mare, e a maré sa
     passoDaMare = 0;
     marcada = false;
     mostrarAgua();
-    avisar("Maré liberada: nível " + fichaDeAgora().nivel + (fichaDeAgora().chuva ? ", com chuva" : ""));
+    avisar("Maré liberada: nível " + fichaDeAgora().nivel + (fichaDeAgora().chuva ? ", com chuva" : "") + (movimentoReduzido ? ". Maré de novo dá o próximo passo" : ""));
 }
 
 function seguirParaAProximaMare() {
     irPara("dia", "ler");
     comecarMare(indiceDaMare + 1);
+}
+
+function darPassoDaMare() {                     // movimento reduzido, sem filme: cada toque no botão Maré dá um passo (a enchente sobe, a preamar conta, a vazante desce)
+    if (faseDaMare === "preamar") return contarAMare();
+    moverAgua(faseDaMare === "enchente" ? 1 : -1);
+    if (faseDaMare !== "baixa") avisar("Maré: " + NOME_DA_MARE[faseDaMare] + ", passo " + passoDaMare + " de " + fichaDeAgora().passos + ", " + contarCasas(acumularPerdidas(perdidas, agua.alagado)).perdidas + " casas perdidas até agora");
 }
 
 function moverAgua(sentido) {                   // enchente: um passo para cima; vazante: um passo de volta, até a baixa-mar
@@ -272,14 +283,18 @@ document.addEventListener("keydown", function (evento) {
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
     else if (intencao) intencao();
 });
-document.getElementById("botoes").addEventListener("click", function (evento) {
-    const intencao = intencoes[evento.target.dataset.acao];
+document.addEventListener("click", function (evento) {      // um ouvinte só para todo botão [data-acao]: os botões, as ferramentas e as setas
+    const botao = evento.target.closest("[data-acao]");
+    const intencao = botao && intencoes[botao.dataset.acao];
     if (intencao) intencao();
 });
 tela.addEventListener("wheel", function (evento) {
     evento.preventDefault();                    // a roda aproxima o mapa, não rola a página
     if (evento.deltaY === 0) return;            // deslize horizontal ou Shift + roda
-    giroDaRoda += evento.deltaMode === 1 ? evento.deltaY * 33 : evento.deltaY;     // deltaMode 1: o Firefox conta em linhas
+    const depoisDeUmaPausa = evento.timeStamp - instanteDaRoda > PAUSA_DA_RODA;
+    if (depoisDeUmaPausa || Math.sign(evento.deltaY) !== Math.sign(giroDaRoda)) giroDaRoda = 0;     // pausa ou sentido invertido: o que sobrou não vale
+    instanteDaRoda = evento.timeStamp;
+    giroDaRoda += evento.deltaY * PIXELS_POR_DELTA_DA_RODA[evento.deltaMode];
     if (Math.abs(giroDaRoda) < LIMIAR_DA_RODA) return;
     mudarZoom(giroDaRoda < 0 ? 1 : -1, pixelDoEvento(evento));
     giroDaRoda = 0;
@@ -298,10 +313,10 @@ window.addEventListener("pointermove", function (evento) {      // na janela, n�
     dedo.ultimo = ponteiro;
 });
 window.addEventListener("pointerup", function (evento) {
-    if (!dedo || evento.pointerId !== dedo.id || evento.button !== 0) return;
-    const pixel = pixelDoEvento(evento), arrastou = dedo.arrastando;
+    if (!dedo || evento.pointerId !== dedo.id) return;     // qualquer botão solto encerra o gesto: senão, com dois botões apertados, o arrasto grudava
+    const pixel = pixelDoEvento(evento), foiToque = evento.button === 0 && !dedo.arrastando;
     dedo = null;
-    if (arrastou) return;
+    if (!foiToque) return;
     const acerto = pixelDentroDoCanvas(pixel) && casaSobOPixel(pixel);       // soltar sem arrastar é um toque, e soltar fora da janela não marca nada
     if (acerto) tocar(acerto);
 });
@@ -323,14 +338,27 @@ function desenharCaixa(x, y, de, ate, estilo) { // uma caixa da altura `de` à `
     tracar(topo, estilo.topo);
 }
 
-function desenharLeito(casa, estilo) {          // sob a água, só o fundo na altura dela: sem contorno nem laterais, a água lê-se como uma lâmina só
-    pincel.strokeStyle = "transparent";
-    tracar(cantosDoBloco(casa.x, casa.y, agua.nivel), estilo.topo);
+function lateraisDaAgua(casa, piso) {           // as laterais da água que se veem: onde ela está acima do topo da vizinha da frente (ou do fim do mapa) e do `piso` dado
+    const nivel = alturaVisivel(casa.x, casa.y), topo = cantosDoBloco(casa.x, casa.y, nivel);
+    return [{ nome: "direita", vizinha: [1, 0] }, { nome: "esquerda", vizinha: [0, 1] }].map(function (lateral) {
+        const vizinha = casaVizinha(casa.x, casa.y, lateral.vizinha[0], lateral.vizinha[1]);
+        const fundo = Math.max(piso, vizinha ? alturaVisivel(vizinha.x, vizinha.y) : 0);      // até onde a vizinha cobre a lateral (no fim do mapa, o chão); abaixo do piso a lateral é de outra coisa
+        if (fundo >= nivel) return null;
+        const base = cantosDoBloco(casa.x, casa.y, fundo);
+        return { nome: lateral.nome, poligono: lateral.nome === "direita" ? [topo[2], topo[1], base[1], base[2]] : [topo[3], topo[2], base[2], base[3]] };
+    }).filter(function (lateral) { return lateral; });
 }
 
-function desenharAgua(casa) {                   // uma superfície plana: sem laterais, e a borda só onde a água termina
-    const estilo = estiloDaAgua(casa), topo = cantosDoBloco(casa.x, casa.y, agua.nivel);
+function desenharLeito(casa, estilo) {          // sob a água, o terreno opaco: o fundo na altura dela e as laterais que se veem, sem contorno; a água lê-se como uma lâmina só
+    pincel.strokeStyle = "transparent";
+    lateraisDaAgua(casa, 0).forEach(function (lateral) { tracar(lateral.poligono, estilo[lateral.nome]); });
+    tracar(cantosDoBloco(casa.x, casa.y, alturaVisivel(casa.x, casa.y)), estilo.topo);
+}
+
+function desenharAgua(casa) {                   // a superfície, as laterais que se veem, e a borda só onde a água termina
+    const estilo = estiloDaAgua(casa), topo = cantosDoBloco(casa.x, casa.y, alturaVisivel(casa.x, casa.y));
     pincel.strokeStyle = "transparent";         // sem contorno: duas águas vizinhas não deixam linha entre si
+    lateraisDaAgua(casa, casa.altura).forEach(function (lateral) { tracar(lateral.poligono, estilo[lateral.nome]); });      // a água só tinge o que está acima do terreno da própria casa
     tracar(topo, estilo.topo);
     pincel.strokeStyle = estilo.contorno;
     ARESTAS_DO_LOSANGO.forEach(function (direcao, i) {
@@ -434,7 +462,7 @@ function descreverAcerto(acerto) {
 function textoDaLeitura() {
     const escondidas = casasEscondidas().map(function (casa) { return "(" + casa.x + ", " + casa.y + ")"; });
     const alcancadas = alcance.ordem.filter(function (casa) { return casa.distancia > 0; }).length;
-    const camada = "maré " + (indiceDaMare + 1) + ": nível " + fichaDeAgora().nivel + ", volume " + fichaDeAgora().passos * volumeDoPasso(fichaDeAgora()) + " · enchem " + (previsao.ordem.length - quantasFontes()) + ", alcance " + alcancadas + "\n"
+    const camada = "maré " + (indiceDaMare + 1) + ": nível " + fichaDeAgora().nivel + ", volume " + fichaDeAgora().passos * volumeDoPasso(fichaDeAgora()) + " · enchem " + (previsao.ordem.length - quantasFontes()) + ", alcance " + alcancadas + (previsao.nascentes.length ? ", nascentes " + previsao.nascentes.length : "") + "\n"
         + "casas escondidas: " + (escondidas.join(" ") || "nenhuma") + "\n";
     if (!ponteiro) return camada + "aponte o mouse ou toque no mapa";
     const ponto = paraOMapa(ponteiro);
@@ -453,7 +481,7 @@ function textoDoPainel() {
 
 function textoDaTabua() {                       // a tábua inteira, para ler antes de moldar: nível, passos × volume, blocos que chegam e ☂ se chove; [colchetes] na ficha de agora
     return "Tábua: " + TABUA_DE_MARES.map(function (ficha, i) {
-        const resumo = "n" + ficha.nivel + " " + ficha.passos + "×" + ficha.volume + " +" + ficha.blocos + (ficha.chuva ? " ☂" : "");
+        const resumo = "n" + ficha.nivel + " " + ficha.passos + "×" + volumeDoPasso(ficha) + " +" + ficha.blocos + (ficha.chuva ? " ☂" : "");
         return i === indiceDaMare ? "[" + resumo + "]" : resumo;
     }).join(" ");
 }
@@ -462,8 +490,8 @@ function escrever(elemento, texto) {            // só mexe no DOM quando o text
     if (elemento.textContent !== texto) elemento.textContent = texto;
 }
 
-function esperou(duracao) {                     // o relógio da fase chegou à duração? Com movimento reduzido, não há espera
-    if (relogioDaFase < (movimentoReduzido ? 0 : duracao)) return false;
+function esperou(duracao) {                     // o relógio da fase chegou à duração?
+    if (relogioDaFase < duracao) return false;
     relogioDaFase = 0;
     return true;
 }
@@ -472,6 +500,7 @@ function atualizar(tempo) {
     if (!movimentoReduzido) faseDaOnda += tempo * 2;
     relogioDaFase += tempo;
     if (fase === "ler" && esperou(TEMPO_DE_LEITURA)) irPara("dia", "moldar");
+    else if (movimentoReduzido) return;         // sem filme: o botão Maré dá cada passo da água
     else if (faseDaMare === "enchente" && esperou(PASSO_DA_MARE)) moverAgua(1);
     else if (faseDaMare === "preamar" && esperou(PAUSA_NA_PREAMAR)) contarAMare();
     else if (faseDaMare === "vazante" && esperou(PASSO_DA_MARE / 2)) moverAgua(-1);
@@ -494,7 +523,7 @@ function desenhar() {
     escrever(leitura, depuracaoLigada ? textoDaLeitura() : "");
     escrever(painel, textoDoPainel());
     escrever(tabua, textoDaTabua());
-    escrever(botaoDaMare, fase === "contar" ? "Seguir" : "Maré");
+    escrever(botaoDaMare, fase === "contar" && faseDaMare === "baixa" ? "Seguir" : "Maré");
 }
 
 function quadroAQuadro(instanteAtual) {

@@ -1,6 +1,6 @@
 # Currículo — Passo 3: Projetos como dados
 
-**Mudou:** `projetos.js` (novo: a lista `const projetos = [ … ]`, um objeto por projeto), `script.js` (novo: `conferirProjetos`, `criarCartao` e as funções que montam cada pedaço), `index.html` (os quatro cartões escritos à mão **sumiram**; no lugar ficou `<div id="lista-projetos">`) e `style.css` (miniatura, etiquetas de técnica e a caixa de aviso).
+**Mudou:** `projetos.js` (novo: a lista `const projetos = [ … ]`, um objeto por projeto), `script.js` (novo: `lerProjetos`, `conferirProjetos`, `criarCartao` e as funções que montam cada pedaço), `index.html` (os quatro cartões escritos à mão **sumiram**; no lugar ficou `<div id="lista-projetos">`) e `style.css` (miniatura, etiquetas de técnica e a caixa de aviso).
 **Rode:** abra o `index.html`. Depois abra `projetos.js`, troque um `nome`, salve e recarregue. Depois apague o `alt` de um projeto e recarregue de novo.
 
 ---
@@ -58,9 +58,16 @@ if (problemas.length > 0) {
 ```
 
 Ela confere, para cada projeto: `id`, `nome`, `resumo`, `pasta` e `alt` não vazios; `tecnicas` uma lista de textos
-com pelo menos um; `nome` e `id` **sem repetição**; e `cor` válida quando não há imagem. Veja que a função
+com pelo menos um; `nome` e `id` **sem repetição** (um campo que falta é avisado como "falta", não também como "repetido"); `id` só com letras minúsculas sem acento, números e hífen, porque ele vira o endereço `#projeto-<id>` e um espaço quebraria o link sem avisar; e `cor` válida quando não há imagem. Veja que a função
 **só responde** (devolve a lista); quem decide o que fazer com os problemas é `desenharProjetos`. É a mesma separação
 do [Pac-Man](../../pacman/01-labirinto/), que confere o mapa do labirinto antes de usá-lo.
+
+E se o erro estiver no próprio `projetos.js`? Há dois jeitos de ele falhar, e o script trata os dois com uma pequena função, `lerProjetos`, que lê a lista dentro de um `try … catch` e devolve a lista **ou o motivo**. Nos dois casos aparece um aviso na página (nos passos seguintes, o tema e as teclas continuam funcionando):
+
+- **Erro de sintaxe** (uma vírgula esquecida): o navegador descarta o arquivo inteiro e a constante `projetos` **nem é declarada**. Nesta página `projetos` também é o `id` de uma `<section>`, e o navegador cria uma variável global para cada `id`: então `projetos` passa a ser o **elemento**, e `Array.isArray` o recusa ("projetos precisa ser uma lista");
+- **Erro na hora de rodar** (`nome: Tetris`, sem aspas): a constante é criada, mas o arquivo para antes de lhe dar um valor, e ela fica **inutilizável**. Qualquer leitura, até `typeof projetos`, lança "Cannot access 'projetos' before initialization". Por isso a leitura fica no `try`, e o `catch` devolve "projetos.js não terminou de carregar: veja o erro no console (F12)".
+
+Em ambos, o console (F12) mostra o arquivo e a linha do erro.
 
 > O `alt` obrigatório **não é burocracia**: uma imagem sem ele é invisível para quem usa leitor de tela, e o
 > dado que o torna obrigatório garante que o cartão nunca saia sem ele.
@@ -70,14 +77,15 @@ do [Pac-Man](../../pacman/01-labirinto/), que confere o mapa do labirinto antes 
 ## 3. Criar elementos, sempre com `textContent`
 
 ```js
-function criarElemento(nomeDaTag, texto) {
+function criarElemento(nomeDaTag, texto, classe) {
     const elemento = document.createElement(nomeDaTag);
     elemento.textContent = texto;
+    if (classe) elemento.className = classe;
     return elemento;
 }
 ```
 
-É a receita do [DOM](../../tutorial/04-dom/): criar, preencher, acrescentar. O ponto que importa aqui é `textContent`
+É a receita do [DOM](../../tutorial/04-dom/): criar, preencher, acrescentar (o terceiro parâmetro, `classe`, é opcional: serve para as etiquetas e, adiante, o selo). O ponto que importa aqui é `textContent`
 em vez de `innerHTML`. Teste: mude um `nome` para `Tetris <b>(o melhor)</b>`. A página mostra os sinais `<b>`
 **como texto**, porque `textContent` nunca interpreta marcação. Com `innerHTML` o navegador obedeceria o que estivesse
 no dado. Num currículo em que você só digita seus próprios textos isso parece inofensivo. Mas o hábito é o mesmo que

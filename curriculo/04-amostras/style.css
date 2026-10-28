@@ -1,5 +1,5 @@
 /*
-  PASSO 2: LAYOUT MOBILE FIRST
+  PASSO 4: O LAYOUT DO PASSO 2, MAIS AS AMOSTRAS (selo, trecho de código e jogo)
   As regras fora de qualquer media query valem para o celular (390 px). O que muda em tela grande fica
   no fim, em @media (min-width: 48rem). Cores e espaços são variáveis: troque aqui e muda em tudo.
 */
@@ -72,7 +72,8 @@ nav a {
 
 section { margin: 2rem 0; }
 
-/* A GRADE: tantas colunas de pelo menos 16rem quantas couberem. Em 390 px cabe 1; em 1280 px, 4. */
+/* A GRADE: tantas colunas de pelo menos 16rem (256 px) quantas couberem, com 1rem de vão. Duas pedem 2×256+16 = 528 px de
+   espaço útil e três pedem 800 px. Em 390 px cabe 1. Em 1280 px cabem 3, nunca 4: o corpo para em 70rem e perde 2rem de cada lado. */
 .habilidades, .projetos {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
@@ -154,9 +155,10 @@ pre {
 
 .credito { margin: var(--espaco) 0 0; font-size: 0.875rem; }
 
-/* Com o jogo aberto, o cartão ocupa a linha inteira da grade. */
+/* Com o jogo aberto, o cartão ocupa a linha inteira da grade. O quadro tem a proporção de uma tela de celular (390×750) e no
+   máximo 390 px de largura: um jogo pensado para essa tela cabe inteiro, sem corte. */
 .cartao:has(iframe) { grid-column: 1 / -1; }
-.cartao iframe { width: 100%; height: 40rem; margin-top: var(--espaco); border: 2px solid var(--borda); }
+.cartao iframe { display: block; width: 100%; max-width: 390px; aspect-ratio: 390 / 750; margin-top: var(--espaco); border: 2px solid var(--borda); }
 
 /* O aviso só ocupa espaço quando os dados têm erro (quem edita projetos.js vê o que arrumar). */
 #avisos:not(:empty) {

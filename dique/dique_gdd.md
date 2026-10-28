@@ -107,6 +107,7 @@ deixar ver o dique atrás. Limite honesto: o pintor erra com peças que cruzam v
 Duas máquinas, ambas por turnos:
 - **Dia:** `ler → moldar → mare → contar → (proximo ler | fim)`.
 - **Maré:** `vazante → baixa → enchente → preamar → vazante`.
+- **Reiniciar** (N) não é uma transição da tabela: a tabela só lista as jogadas do jogo. Recomeçar é voltar ao estado inicial (como recarregar a página): o dia vai a `ler`, a maré a `baixa` e o relógio da fase a zero.
 
 A **tábua** é uma lista de fichas (dados, eco de `tetris/08-velocidade`): 
 `{ nivel, passos, volume, chuva, blocos }`: o `nivel` que a água alcança (em degraus de altura), por quantos
@@ -120,7 +121,7 @@ Sem volume, é a busca em largura do Pac-Man (`pacman/06-modos`) com um filtro d
 fronteira é consumida **da mais baixa para a mais alta** (empate: menor distância, depois índice), um
 bloco por unidade de `volume`: a água enche a vala antes de subir o terraço. Por isso a vala atrai a água
 e protege o que está atrás. A casa cujo bloco alagou está **perdida**; a que não, **salva**.
-Chuva: as nascentes `N` viram fontes extras com nível 1 e o `volume` da ficha sobe.
+Chuva: o `volume` da ficha sobe, e as nascentes `N` são **fontes à parte**, de nível 1 e **sem volume**: alagam toda casa ligada a elas de altura menor que 1. O mar enche com o `nivel` e o `volume` da ficha, como sem chuva; as duas águas são calculadas **separadas** e se juntam casa a casa, valendo o **maior nível** que chega a ela. Assim o resultado não depende da ordem, e uma nascente nunca barra nem alimenta a onda do mar.
 A água só avança; a vazante (a descida) existe para a tábua e para desenhar, não para devolver casas.
 
 ### 4.7 Moldar: Erguer e Cavar
@@ -179,7 +180,7 @@ casas fora do mar, `N` só em dias com chuva. Ele roda como **página de teste d
   a água tem **borda branca e padrão de ondas**, o terreno tem **número de altura** (modo Ver). HUD com
   texto: "Casas 4/6", "Blocos 2".
 - **Reduzir movimento** (`prefers-reduced-motion` e opção): sem ondas animadas, sem rolagem suave, sem
-  pulso no cursor; a maré pode ser mostrada **passo a passo por botão** (não há filme).
+  pulso no cursor; a maré é mostrada **passo a passo por botão** (um toque em Maré = um passo da água; ela nunca corre sozinha até o fim).
 - **Teclado para tudo:** cursor, ferramentas, giro, zoom, rolagem, maré, desfazer, pausa. Foco visível;
   `aria-live` anuncia "Bloco 4,3 subiu para 2", "Maré: 3 casas alagadas", "Dia vencido". Um **resumo em texto** das alturas
   (lista) fica disponível ao leitor de tela.

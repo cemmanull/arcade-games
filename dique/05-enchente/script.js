@@ -14,8 +14,11 @@ const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
 const PASSO_DA_ROLAGEM = 24;                    // pixels da janela por toque de tecla
 const LIMITE_DO_TOQUE = 8;                      // um arrasto maior que isto (pixels) rola o mapa; menor é um toque
 const LIMIAR_DA_RODA = 100;                     // deltaY acumulado que vale um degrau de zoom: um trackpad manda dezenas de eventos pequenos
+const PIXELS_POR_DELTA_DA_RODA = [1, 40, LIMIAR_DA_RODA];     // por deltaMode: pixels; linhas (o Firefox); páginas (uma página vale um degrau)
+const PAUSA_DA_RODA = 300;                      // milissegundos sem roda: o acúmulo recomeça do zero
 const NOME_DO_ZOOM = ["longe", "no meio", "perto"];     // um por degrau de ZOOMS
 const PASSO_DA_MARE = 0.18;                     // segundos entre uma casa alagada e a próxima: a maré é um filme curto
+const CASAS_POR_PASSO = 5;                      // movimento reduzido: cada toque no botão Maré dá um passo, de tantas casas
 const NOME_DA_FERRAMENTA = { erguer: "Erguer", cavar: "Cavar" };
 let cursor = { x: 4, y: 4 };                    // a casa do cursor
 let marcada = false;                            // dois toques: o primeiro marca o cursor, o segundo (na mesma casa) confirma
@@ -29,7 +32,8 @@ let mostradas = 0;                              // quantas casas da previsão a 
 let relogioDaMare = 0;
 let ponteiro = null;                            // o pixel da janela sob o mouse ou o dedo
 let dedo = null;                                // o ponteiro apertado: { id, inicio, ultimo, arrastando }
-let giroDaRoda = 0;                             // deltaY somado desde o último degrau de zoom
+let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
+let instanteDaRoda = 0;                         // quando veio o último evento da roda
 let depuracaoLigada = false;
 let faseDaOnda = 0;
 let instanteDoQuadroAnterior = performance.now();
@@ -48,7 +52,7 @@ const ESTILO_DO_MAR = estiloDoBloco("#17406b");
 
 function estiloDaAgua(casa) {                   // translúcida, com borda branca onde a água termina (forma, não só cor); a onda mexe no alfa
     const alfa = 0.55 + (movimentoReduzido ? 0 : 0.07 * Math.sin(faseDaOnda + casa.x * 0.9 + casa.y * 0.6));
-    return { topo: "rgba(42, 111, 219, " + alfa + ")", contorno: "rgba(255, 255, 255, 0.7)" };
+    return { topo: "rgba(42, 111, 219, " + alfa + ")", esquerda: "rgba(29, 78, 153, " + alfa + ")", direita: "rgba(21, 56, 110, " + alfa + ")", contorno: "rgba(255, 255, 255, 0.7)" };
 }
 
 const intencoes = {                             // teclado, mouse e toque chamam as mesmas funções
@@ -150,15 +154,22 @@ function desfazer() {
     avisar("Desfeito. Blocos: " + estadoAtual.blocos);
 }
 
-function liberarMare() {                        // a previsão vira filme: uma casa a mais por PASSO_DA_MARE, o mar primeiro
+function liberarMare() {                        // a previsão vira filme: uma casa a mais por PASSO_DA_MARE, o mar primeiro; com movimento reduzido, não há filme: cada toque dá um passo
+    if (fase === "mare" && movimentoReduzido) return subirAgua(CASAS_POR_PASSO);
     if (fase !== "moldar") return avisar("A maré já foi liberada");
     fase = "mare";
     marcada = false;
     relogioDaMare = 0;
     mostradas = previsao.ordem.filter(function (casa) { return casa.distancia === 0; }).length;
     mostrarAguaDaMare();
-    avisar("Maré liberada: a água sobe até o nível " + NIVEL_DA_MARE);
-    if (movimentoReduzido) { mostradas = previsao.ordem.length; mostrarAguaDaMare(); encerrarMare(); }      // sem filme: só o resultado
+    avisar("Maré liberada: a água sobe até o nível " + NIVEL_DA_MARE + (movimentoReduzido ? ". Maré de novo dá o próximo passo" : ""));
+}
+
+function subirAgua(casas) {                     // a água cobre mais `casas` da previsão; ao cobrir todas, a maré termina
+    mostradas = Math.min(previsao.ordem.length, mostradas + casas);
+    mostrarAguaDaMare();
+    if (mostradas === previsao.ordem.length) return encerrarMare();
+    if (movimentoReduzido) avisar("Passo da maré: " + contarCasas(agua.alagado).perdidas + " casas alagadas até agora");
 }
 
 function mostrarAguaDaMare() {
@@ -205,14 +216,18 @@ document.addEventListener("keydown", function (evento) {
     else if (teclaDeConfirmar && evento.target.tagName !== "BUTTON") { evento.preventDefault(); aplicar(); }      // num botão, Enter e Espaço já o acionam
     else if (intencao) intencao();
 });
-document.getElementById("botoes").addEventListener("click", function (evento) {
-    const intencao = intencoes[evento.target.dataset.acao];
+document.addEventListener("click", function (evento) {      // um ouvinte só para todo botão [data-acao]: os botões, as ferramentas e as setas
+    const botao = evento.target.closest("[data-acao]");
+    const intencao = botao && intencoes[botao.dataset.acao];
     if (intencao) intencao();
 });
 tela.addEventListener("wheel", function (evento) {
     evento.preventDefault();                    // a roda aproxima o mapa, não rola a página
     if (evento.deltaY === 0) return;            // deslize horizontal ou Shift + roda
-    giroDaRoda += evento.deltaMode === 1 ? evento.deltaY * 33 : evento.deltaY;     // deltaMode 1: o Firefox conta em linhas
+    const depoisDeUmaPausa = evento.timeStamp - instanteDaRoda > PAUSA_DA_RODA;
+    if (depoisDeUmaPausa || Math.sign(evento.deltaY) !== Math.sign(giroDaRoda)) giroDaRoda = 0;     // pausa ou sentido invertido: o que sobrou não vale
+    instanteDaRoda = evento.timeStamp;
+    giroDaRoda += evento.deltaY * PIXELS_POR_DELTA_DA_RODA[evento.deltaMode];
     if (Math.abs(giroDaRoda) < LIMIAR_DA_RODA) return;
     mudarZoom(giroDaRoda < 0 ? 1 : -1, pixelDoEvento(evento));
     giroDaRoda = 0;
@@ -231,10 +246,10 @@ window.addEventListener("pointermove", function (evento) {      // na janela, n�
     dedo.ultimo = ponteiro;
 });
 window.addEventListener("pointerup", function (evento) {
-    if (!dedo || evento.pointerId !== dedo.id || evento.button !== 0) return;
-    const pixel = pixelDoEvento(evento), arrastou = dedo.arrastando;
+    if (!dedo || evento.pointerId !== dedo.id) return;     // qualquer botão solto encerra o gesto: senão, com dois botões apertados, o arrasto grudava
+    const pixel = pixelDoEvento(evento), foiToque = evento.button === 0 && !dedo.arrastando;
     dedo = null;
-    if (arrastou) return;
+    if (!foiToque) return;
     const acerto = pixelDentroDoCanvas(pixel) && casaSobOPixel(pixel);       // soltar sem arrastar é um toque, e soltar fora da janela não marca nada
     if (acerto) tocar(acerto);
 });
@@ -256,14 +271,27 @@ function desenharCaixa(x, y, de, ate, estilo) { // uma caixa da altura `de` à `
     tracar(topo, estilo.topo);
 }
 
-function desenharLeito(casa, estilo) {          // sob a água, só o fundo na altura dela: sem contorno nem laterais, a água lê-se como uma lâmina só
-    pincel.strokeStyle = "transparent";
-    tracar(cantosDoBloco(casa.x, casa.y, agua.nivel), estilo.topo);
+function lateraisDaAgua(casa, piso) {           // as laterais da água que se veem: onde ela está acima do topo da vizinha da frente (ou do fim do mapa) e do `piso` dado
+    const nivel = alturaVisivel(casa.x, casa.y), topo = cantosDoBloco(casa.x, casa.y, nivel);
+    return [{ nome: "direita", vizinha: [1, 0] }, { nome: "esquerda", vizinha: [0, 1] }].map(function (lateral) {
+        const vizinha = casaVizinha(casa.x, casa.y, lateral.vizinha[0], lateral.vizinha[1]);
+        const fundo = Math.max(piso, vizinha ? alturaVisivel(vizinha.x, vizinha.y) : 0);      // até onde a vizinha cobre a lateral (no fim do mapa, o chão); abaixo do piso a lateral é de outra coisa
+        if (fundo >= nivel) return null;
+        const base = cantosDoBloco(casa.x, casa.y, fundo);
+        return { nome: lateral.nome, poligono: lateral.nome === "direita" ? [topo[2], topo[1], base[1], base[2]] : [topo[3], topo[2], base[2], base[3]] };
+    }).filter(function (lateral) { return lateral; });
 }
 
-function desenharAgua(casa) {                   // uma superfície plana: sem laterais, e a borda só onde a água termina
-    const estilo = estiloDaAgua(casa), topo = cantosDoBloco(casa.x, casa.y, agua.nivel);
+function desenharLeito(casa, estilo) {          // sob a água, o terreno opaco: o fundo na altura dela e as laterais que se veem, sem contorno; a água lê-se como uma lâmina só
+    pincel.strokeStyle = "transparent";
+    lateraisDaAgua(casa, 0).forEach(function (lateral) { tracar(lateral.poligono, estilo[lateral.nome]); });
+    tracar(cantosDoBloco(casa.x, casa.y, alturaVisivel(casa.x, casa.y)), estilo.topo);
+}
+
+function desenharAgua(casa) {                   // a superfície, as laterais que se veem, e a borda só onde a água termina
+    const estilo = estiloDaAgua(casa), topo = cantosDoBloco(casa.x, casa.y, alturaVisivel(casa.x, casa.y));
     pincel.strokeStyle = "transparent";         // sem contorno: duas águas vizinhas não deixam linha entre si
+    lateraisDaAgua(casa, casa.altura).forEach(function (lateral) { tracar(lateral.poligono, estilo[lateral.nome]); });      // a água só tinge o que está acima do terreno da própria casa
     tracar(topo, estilo.topo);
     pincel.strokeStyle = estilo.contorno;
     ARESTAS_DO_LOSANGO.forEach(function (direcao, i) {
@@ -379,13 +407,11 @@ function escrever(elemento, texto) {            // só mexe no DOM quando o text
 
 function atualizar(tempo) {
     if (!movimentoReduzido) faseDaOnda += tempo * 2;
-    if (fase !== "mare") return;
+    if (fase !== "mare" || movimentoReduzido) return;      // com movimento reduzido, o botão Maré dá cada passo
     relogioDaMare += tempo;
     const passos = Math.floor(relogioDaMare / PASSO_DA_MARE);
     relogioDaMare -= passos * PASSO_DA_MARE;
-    mostradas = Math.min(previsao.ordem.length, mostradas + passos);
-    mostrarAguaDaMare();
-    if (mostradas === previsao.ordem.length) encerrarMare();
+    subirAgua(passos);
 }
 
 function desenhar() {

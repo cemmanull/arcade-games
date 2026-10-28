@@ -131,7 +131,7 @@ function atualizar(tempo) {
 }
 ```
 
-O dia tem agora três momentos: **moldar → mare → contar**. É uma `fase` de texto e três `if`; o passo 6 transforma isso em uma **máquina de estados** de verdade, com a tábua de marés como dados. Com **movimento reduzido** não há filme: a maré termina de uma vez e só o resultado aparece.
+O dia tem agora três momentos: **moldar → mare → contar**. É uma `fase` de texto e três `if`; o passo 6 transforma isso em uma **máquina de estados** de verdade, com a tábua de marés como dados. Com **movimento reduzido** não há filme: cada toque no botão **Maré** (ou em **M**) dá **um passo** da água (`CASAS_POR_PASSO`, 5 casas, em `subirAgua`), o `#aviso` conta as casas alagadas, e a maré nunca corre sozinha até o fim. O mesmo `subirAgua` serve ao filme (`atualizar` o chama com as casas que o tempo pagou) e ao botão.
 
 Antes da maré, a água é a **maré baixa**: `buscaEmLargura(alturas, 1, CASAS_DO_MAR)`, ou seja, o mar e o que é mais baixo que 1 e está ligado a ele. Ao liberar, a água sobe para o nível 2.
 
@@ -150,6 +150,7 @@ function alturaVisivel(x, y) {
 `agua` é `{ nivel, alagado }`: o nível da superfície e uma matriz de booleanos, que `definirAgua` refaz. O desenho, o cursor, o picking (o raio do passo 3) e a ordem do pintor continuam os mesmos; só que perguntam a altura **a cada casa**. Duas consequências:
 
 - A casa **alagada** é pintada como o **leito** do passo 4 (o fundo na altura da água, sem contorno), com a água por cima. A **borda branca** só aparece onde a água termina: vizinha **seca**.
+- A água tem **laterais** onde fica acima da vizinha da frente (ou do fim do mapa): `lateraisDaAgua` compara a superfície com `alturaVisivel` da vizinha à direita e da vizinha à esquerda, na tela, e desenha a lateral entre as duas alturas, escura como as do bloco e sem contorno. Sem isso, uma casa alagada diante de uma vizinha seca e mais baixa deixava um **buraco**: o picking dizia "lateral", e o desenho mostrava o fundo da tela. Entre duas águas na mesma altura não há lateral, nem linha.
 - Uma **cova seca** (altura 0, sem água) tem o topo no chão e **laterais sem área** (quatro pontos numa reta). `facesDaCasa` as omite: a força bruta usa polígonos fechados, e um polígono achatado "continha" todo pixel da reta em que está.
 
 ---

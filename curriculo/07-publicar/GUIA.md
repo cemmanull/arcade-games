@@ -43,7 +43,17 @@ sem você instalar nada nem entender de servidores. Como o seu currículo é só
 ## 1. Prepare a pasta
 
 Crie uma pasta nova no computador, por exemplo `meu-curriculo`, e copie para dentro **só os arquivos do currículo** (`index.html`, `style.css`,
-`script.js`, `projetos.js`). Não copie o `GUIA.md`.
+`script.js`, `projetos.js`, e a pasta `amostras/` se o seu `projetos.js` usa imagens). Não copie o `GUIA.md`.
+
+**Quais links viajam com a página e quais são absolutos:**
+
+| Link | Depois de publicar |
+|---|---|
+| `style.css`, `script.js`, `projetos.js`, `amostras/…png` | **viajam**: são caminhos relativos, e os arquivos estão na mesma pasta |
+| `pasta` de cada jogo (`../../tetris/final/index.html`) | **quebram**, a menos que você leve o jogo junto (tabela abaixo) |
+| "Do zero ao jogo", no rodapé e em cada cartão | **absoluto** (`https://github.com/cemmanull/arcade-games`): funciona em qualquer lugar, sem você fazer nada |
+| `mailto:` e o seu perfil profissional (`https://…`) | **absolutos**: funcionam em qualquer lugar |
+| `og:url` e `og:image` | **absolutos**, e você os troca no passo 4 |
 
 **Os links dos jogos vão quebrar.** Eles apontam para `../../tetris/final/index.html`, e `../..` só existe na pasta do curso. Na internet
 essa pasta não existe. Você tem duas escolhas, por projeto:

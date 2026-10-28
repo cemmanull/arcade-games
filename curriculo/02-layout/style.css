@@ -72,7 +72,8 @@ nav a {
 
 section { margin: 2rem 0; }
 
-/* A GRADE: tantas colunas de pelo menos 16rem quantas couberem. Em 390 px cabe 1; em 1280 px, 4. */
+/* A GRADE: tantas colunas de pelo menos 16rem (256 px) quantas couberem, com 1rem de vão. Duas pedem 2×256+16 = 528 px de
+   espaço útil e três pedem 800 px. Em 390 px cabe 1. Em 1280 px cabem 3, nunca 4: o corpo para em 70rem e perde 2rem de cada lado. */
 .habilidades, .projetos {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
