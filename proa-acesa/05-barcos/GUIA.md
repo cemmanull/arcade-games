@@ -111,7 +111,10 @@ Acabou a fila? Chega um comboio novo, em fila **atrás da barca**, mas só onde 
 recifes e ilha (senão naufragariam no primeiro quadro). Sem sorteio: se a fila de trás da barca não serve,
 `criarComboio` a **gira 30°** e tenta de novo; a cada volta inteira (12 giros) sem achar, ela **recua mais 7 m**
 (0, 7, 14 e 21 m: a barca pode estar dentro do porto). Cercada nas 48 tentativas, a busca **acaba num lugar
-conferido**: a fila nasce na `PARTIDA`, que `filaLivre` aprova. Sem sorteio, o mesmo mundo dá o mesmo comboio.
+conferido**: depois dos giros e recuos, `criarComboio` tenta o **anel** (a 10 e a 20 m da barca, a fila de través) e só por último a
+`PARTIDA`, e todas passam por `filaLivre`, que também exige o 1º barco a menos de 35 m da barca (senão a névoa o engoliria
+no ato). Sem lugar vivo, **não nasce nada** naquele quadro: tenta no seguinte, com a barca em outro ponto, em vez de criar
+um comboio perdido. Sem sorteio, o mesmo mundo dá o mesmo comboio.
 
 ---
 
@@ -168,7 +171,9 @@ câmera, onde a tela é estreita; num celular em pé cabe menos largura), e a c�
 `camera.project` do jogo dizia onde caíam a barca, o ponto à frente e os 3 primeiros barcos, em 1280×800 e 390×750.
 A barca, o ponto à frente e os barcos 1 e 2 ficaram na tela em **100%** dos quadros; o 3º saiu em 8 de 7.200 quadros
 (tela larga) e 17 (em pé): ele estava a 59 m e a câmera ainda subia. Custo honesto: a barca fica pequena e, com a fila esticada, o mar
-de 90 m deixa ver a borda no fundo da tela (o passo 6 o alarga para 130 m).
+de 90 m deixava ver a borda (de tarde, com a névoa de 0,012, ela aparecia como uma faixa dura no alto do quadro). Por isso o mar
+vai a 130 m e a névoa de tarde sobe de 0,012 (passo 3) para 0,03, a da noite: em captura de 1280×800 e 390×750 com a fila
+esticada ao máximo (câmera ×3), nenhuma borda aparece.
 
 ---
 

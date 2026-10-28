@@ -107,23 +107,24 @@ function alvoDoBarco(barco) {
     return indice <= 0 ? barcaNoMundo : barcosDePesca[indice - 1];
 }
 
-/* O comboio nasce em fila atrás da barca, onde dá para viver: dentro do mundo, fora do porto (senão seria salvo de graça) e longe de
-   recifes e ilha (senão naufragaria no 1º quadro). Sem sorteio: gira a fila 30° por tentativa e, a cada volta inteira (12), recua mais
-   7 m (0, 7, 14, 21). Cercada (48 tentativas), a fila nasce na PARTIDA, que é livre. */
+/* O comboio nasce em fila atrás da barca, onde dá para viver: dentro do mundo, fora do porto (senão seria salvo de graça), longe de recifes
+   e ilha (senão naufragaria no 1º quadro) e o 1º barco a menos de DISTANCIA_PARA_SE_PERDER da barca (senão a névoa o engoliria). Sem sorteio, na ordem:
+   30° por tentativa e, a cada volta inteira (12), recua mais 7 m (0, 7, 14, 21); depois o anel a 10 e 20 m da barca, a fila de través; por
+   último a PARTIDA, só se `filaLivre` a aprovar e ela estiver perto. Sem lugar vivo, não nasce nada neste quadro: tenta no seguinte (a barca anda). */
 function criarComboio() {
-    let origem = barcaNoMundo, rumo = origem.proa, recuo = 0;
-    for (let tentativa = 1; !filaLivre(origem, rumo, recuo); tentativa++) {
-        if (tentativa === 48) {
-            origem = PARTIDA; rumo = PARTIDA.proa; recuo = 0;
-            break;
-        }
-        rumo += Math.PI / 6;
-        recuo = DISTANCIA_DO_COMBOIO * Math.floor(tentativa / 12);
-    }
+    const lugar = candidatosDoComboio().find(function (c) { return filaLivre(c.origem, c.rumo, c.recuo) && distanciaEntre(lugarNaFila(c.origem, c.rumo, c.recuo + DISTANCIA_DO_COMBOIO), barcaNoMundo) < DISTANCIA_PARA_SE_PERDER; });
+    if (lugar === undefined) { return; }
     for (let i = 1; i <= QUANTIDADE_DE_BARCOS; i++) {
-        const lugar = lugarNaFila(origem, rumo, recuo + DISTANCIA_DO_COMBOIO * i);
-        barcosDePesca.push({ id: proximoIdDeBarco++, x: lugar.x, z: lugar.z, proa: normalizarAngulo(rumo), velocidade: 0, segundosAfundando: 0, afundamento: 0 });   // afundamento: 0 boiando … 1 no fundo
+        const posicao = lugarNaFila(lugar.origem, lugar.rumo, lugar.recuo + DISTANCIA_DO_COMBOIO * i);
+        barcosDePesca.push({ id: proximoIdDeBarco++, x: posicao.x, z: posicao.z, proa: normalizarAngulo(lugar.rumo), velocidade: 0, segundosAfundando: 0, afundamento: 0 });   // afundamento: 0 boiando … 1 no fundo
     }
+}
+
+function candidatosDoComboio() {
+    const candidatos = [], giro = Math.PI / 6;
+    for (let k = 0; k < 48; k++) { candidatos.push({ origem: barcaNoMundo, rumo: barcaNoMundo.proa + k * giro, recuo: DISTANCIA_DO_COMBOIO * Math.floor(k / 12) }); }
+    for (let k = 0; k < 24; k++) { candidatos.push({ origem: lugarNaFila(barcaNoMundo, k * giro, 10 * (1 + Math.floor(k / 12))), rumo: k * giro + Math.PI / 2, recuo: 0 }); }
+    return candidatos.concat({ origem: PARTIDA, rumo: PARTIDA.proa, recuo: 0 });
 }
 
 function lugarNaFila(origem, rumo, metrosAtrasDaOrigem) {

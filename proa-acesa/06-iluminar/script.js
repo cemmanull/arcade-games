@@ -23,7 +23,7 @@ const DIVISOES_DO_MAR = 64;           // 64 × 64 quadradinhos = 4.225 vértices
 const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // um quadradinho do mar, em metros
 const AMPLITUDE_DA_ONDA = 0.5;        // metros de altura
 const DURACAO_DO_ENTARDECER = 40;     // segundos da tarde à noite
-const NEVOA_DE_TARDE = 0.012, NEVOA_DE_NOITE = 0.03;
+const NEVOA_DE_TARDE = 0.03, NEVOA_DE_NOITE = 0.03;   // de tarde TAMBÉM 0,03 (no passo 3 era 0,012): com a câmera afastada (até ×3) a borda do mar aparecia
 const LUZ_DO_CEU_DE_TARDE = 4, LUZ_DO_CEU_DE_NOITE = 3.4;   // intensidade da HemisphereLight
 const GRAU = Math.PI / 180;           // radianos em um grau
 const LIMITE_DA_GUINADA = 75 * GRAU;

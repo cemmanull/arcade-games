@@ -50,6 +50,7 @@ let guinada = { angulo: 0, velocidade: 0, minimo: -LIMITE_DA_GUINADA, maximo: LI
 let arfagem = { angulo: REPOUSO_DA_ARFAGEM, velocidade: 0, minimo: ARFAGEM_MINIMA, maximo: ARFAGEM_MAXIMA };
 let intencao = { leme: 0, devagar: false, guinadaAlvo: 0, arfagemAlvo: REPOUSO_DA_ARFAGEM };   // o que o jogador QUER
 let acoes = {};                       // ação → ENTRADAS que a seguram: { esquerda: ["tecla:a", "dedo:1"] }
+let apertouComMouse = false;          // o último ponteiro a apertar foi um mouse? (só o mouse tira o foco do botão)
 let miraDoPonteiro = null;            // { guinada, arfagem, restante } enquanto o ponteiro manda na mira
 let rascunho = null;                  // objetos do three.js reaproveitados a cada quadro
 let raycaster = null, acertos = [];   // o raio que pergunta "tem algo alto no caminho?" e a lista (reaproveitada) do que ele acertou
@@ -81,7 +82,8 @@ function iniciar() {
     window.addEventListener("keydown", aoApertarTecla);
     window.addEventListener("keyup", aoSoltarTecla);
     window.addEventListener("blur", function () { acoes = {}; miraDoPonteiro = null; });   // aba perdeu o foco: solta tudo
-    document.addEventListener("click", function (evento) { if (evento.detail > 0) { evento.target.blur(); } });   // mouse e dedo (detail ≥ 1) não deixam o botão com o foco: o Espaço seguinte é da lanterna
+    document.addEventListener("pointerdown", function (evento) { apertouComMouse = evento.pointerType === "mouse"; });   // dedo e leitor de tela (TalkBack, VoiceOver) mandam `click` com detail ≥ 1 e PRECISAM do foco
+    document.addEventListener("click", function (evento) { const botao = evento.target.closest("button"); if (apertouComMouse && evento.detail > 0 && botao !== null) { botao.blur(); } apertouComMouse = false; });   // o botão clicado com o mouse larga o foco: o Espaço seguinte é da lanterna
     ["esquerda", "direita", "devagar"].forEach(function (acao) { ligarBotao(document.getElementById("botao-" + acao), acao); });
     botaoFoco.addEventListener("click", trocarFoco);   // `click` serve ao dedo, ao mouse, ao Enter e ao Espaço
     botaoClarao.addEventListener("click", function () { reduzirClaroes = !reduzirClaroes; mostrarOpcoes(); });

@@ -151,7 +151,8 @@ meio entre a frente e o 3º barco, afastando-se até ×3 quando a fila se estica
 mostra: a barca, a luz e os recifes lembrados. Repeti a projeção (120 s, retas de 10 s e retornos em U, 1280×800 e
 390×750): a barca, o ponto à frente e os barcos 1 e 2 ficaram dentro da tela em **100%** dos quadros, e o 3º saiu
 em 8 de 7.200 quadros (tela larga) e 17 (em pé), com ele a 59 m e a câmera ainda subindo. O mar passa de 90 para
-130 m: com a câmera afastada, a borda de 90 m apareceria no fundo da tela; a névoa esconde a de 130 m. O quarto barco
+130 m: com a câmera afastada, a borda de 90 m apareceria no fundo da tela; a névoa esconde a de 130 m, e a névoa de tarde sobe
+de 0,012 para 0,03 (a da noite) para a borda não aparecer nem no entardecer. O quarto barco
 só aparece se a fila encolher.
 
 ---
@@ -160,8 +161,10 @@ só aparece se a fila encolher.
 
 O comboio nasce só onde `filaLivre` diz que dá para viver (dentro do mundo, fora do porto, longe de recifes e
 ilha); se a fila de trás da barca não serve, **gira 30°** e tenta de novo, e a cada volta inteira (12 giros) sem
-achar **recua mais 7 m** (0, 7, 14, 21: a barca pode estar no meio do porto). Cercada por 48 tentativas, a fila nasce
-na `PARTIDA`, que `filaLivre` aprova. Sem sorteio: o mesmo mundo dá o mesmo comboio. E um barco só
+achar **recua mais 7 m** (0, 7, 14, 21: a barca pode estar no meio do porto). Cercada por 48 tentativas, `criarComboio` tenta o **anel**
+(a 10 e a 20 m da barca, a fila de través) e só por último a `PARTIDA`; todas passam por `filaLivre`, que também exige o 1º
+barco a menos de 35 m da barca. Sem lugar vivo, não nasce nada naquele quadro (tenta no seguinte): nunca um comboio já perdido.
+Sem sorteio: o mesmo mundo dá o mesmo comboio. E um barco só
 se perde na névoa depois de **5 s seguidos** a mais de 35 m do da frente; senão, perdido o primeiro, o de trás
 mediria até a barca e a fila sumiria em 4 quadros. As duas regras já vêm do passo 5.
 

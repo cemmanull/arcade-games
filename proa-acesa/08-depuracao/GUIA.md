@@ -117,8 +117,9 @@ return false;
 Ela parte da célula da `PARTIDA`, anda para cima, baixo, esquerda e direita e só pisa em célula a mais de
 `FOLGA_DO_CAMINHO` (6 m) de qualquer recife ou da ilha, contando o raio do barco: é a folga para o comboio passar.
 Chegou a uma célula dentro do porto? `true`. A fila esvaziou sem chegar? `false`. Ela confere a noite **montada
-agora**; para as cinco: `fichas.every(function (f, i) { comecarNoite(i); return haCaminhoAtePorto(); })`, que dá
-`true`. O mesmo `PARTIDA` é o lugar seguro onde o comboio nasce quando a barca está cercada (`criarComboio`). O
+agora** (ou a lista que você passar, `haCaminhoAtePorto(lista)`: ela só LÊ, não muda o jogo); para as cinco, sem mexer em nada:
+`fichas.every(function (f) { return haCaminhoAtePorto(recifesDaFicha(f)); })`, que dá `true`. O mesmo `PARTIDA` é o último recurso
+onde o comboio nasce quando a barca está cercada (`criarComboio`, que antes tenta o anel a 10 e 20 m da barca, e confere tudo com `filaLivre`). O
 jogo não chama a busca: ela é uma **prova**, e o `final` a rodará a cada partida, depois de sortear os recifes.
 
 ---
@@ -148,8 +149,8 @@ tempo vale, só as **contagens**).
 6. Aperte **H**, gire a câmera para ver a **ilha** e empurre a barca para dentro do anel dela. Quem bate primeiro:
    o anel ou o casco? Mude `RAIO_DO_BARCO` e veja os anéis crescerem.
 7. Acrescente à depuração o círculo do **porto** (raio 9 m). Quais linhas de `criarDepuracao` você copia?
-8. Ponha um recife grande no meio do corredor da noite 1 e rode `haCaminhoAtePorto()` no console. Quando ela passa a
-   dizer `false`? Mude `FOLGA_DO_CAMINHO` para 2 e veja o que muda (e se o comboio caberia mesmo assim).
+8. Ponha um recife grande no meio do corredor da noite 1 e rode `haCaminhoAtePorto(recifes.concat({ x: 0, z: 0, raio: 12 }))`
+   no console (ela não mexe no jogo). Quando ela passa a dizer `false`? Mude `FOLGA_DO_CAMINHO` para 2 e veja o que muda (e se o comboio caberia mesmo assim).
 
 ---
 

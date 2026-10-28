@@ -64,8 +64,9 @@ for (let hora = intervalo / 2; hora <= ficha.duracao - SEGUNDOS_DA_AURORA; hora 
 `shoot-em-up/07-roteiro`: eventos numa lista ordenada e um índice (`proximoRelampago`) que só avança, então o
 jogo olha **um** número por quadro, não a lista inteira. Quando a hora chega, `noite.segundosDoRelampago` sai de
 −1 e conta; passada a duração, volta a −1. Um clarão só começa se o anterior **já terminou** e se passou
-`INTERVALO_MINIMO_ENTRE_CLAROES` (1/3 s) desde o começo dele: a trava é da **regra**, não da ficha, então nenhuma
-ficha, por errada que seja, passa de 3 clarões por segundo. Um evento atrasado por ela espera a vez.
+`INTERVALO_MINIMO_ENTRE_CLAROES` (0,4 s) desde o começo dele: a trava é da **regra**, não da ficha, então nenhuma
+ficha, por errada que seja, passa de 3 clarões em QUALQUER janela fechada de 1 s (com 1/3 s, 4 começos cabiam em 1 s: 0; 0,35;
+0,68; 1,0; com 0,4 s, 4 começos pedem 1,2 s). Um evento atrasado por ela espera a vez.
 
 Enquanto o clarão dura, `atualizarBrasas` põe **brasa cheia em todos os recifes**, sem iluminá-los: eles
 aparecem como lembrança, e a lembrança esfria em 3 s. O clarão é informação, não só efeito.
@@ -76,25 +77,28 @@ aparecem como lembrança, e a lembrança esfria em 3 s. O clarão é informaçã
 
 Luz que pisca pode causar crises em quem tem fotossensibilidade (WCAG 2.3.1: no máximo 3 clarões por segundo,
 e o padrão já fica bem abaixo: no máximo 8 por minuto). Duas coisas machucam: o **ritmo** e o **salto** de brilho
-de um quadro para outro. O ritmo é da regra (a trava da seção 2: no mínimo 1/3 s entre clarões, e com a opção
-ligada um clarão só começa depois que a rampa inteira de 1,2 s acabou, sem nunca recomeçar no meio). O salto é de
+de um quadro para outro. O ritmo é da regra (a trava da seção 2: no mínimo 0,4 s entre clarões, e com a opção
+ligada um clarão só começa depois que a rampa inteira de 1,2 s acabou, sem nunca recomeçar no meio). O modo vale para o clarão
+inteiro: `noite.relampagoReduzido` guarda a opção no começo de cada clarão, então ligar ou desligar no meio dele não o corta
+nem o dobra (um degrau 0→1 no meio da rampa), e não há como religar clarões repetidos mexendo na opção. O salto é de
 `brilhoDoRelampago()`, que devolve o brilho (0 a 1) em cada instante:
 
 | Modo | Curva | Salto máximo entre dois quadros de 16,7 ms | Intervalo mínimo entre clarões |
 |---|---|---|---|
-| normal | degrau: 1 por 0,25 s, depois 0 | 1,0 (o fundo muda de cor de uma vez) | 1/3 s |
+| normal | degrau: 1 por 0,25 s, depois 0 | 1,0 (o fundo muda de cor de uma vez) | 0,4 s |
 | **reduzir clarões** | rampa suave (3t² − 2t³): sobe em 0,6 s até 25%, desce em 0,6 s | ≈ 0,0104 (pico 0,25) | 1,2 s |
 
 Medido sem abrir o jogo: um teste de regras avançou a noite 5 por 150 s (quadros de 1/60 s) com a ficha em 8, 60,
-200 e 100.000 clarões por minuto. Normal: o intervalo mínimo foi 1/3 s e nunca houve mais de 3 começos em um
-segundo; reduzido: 1,2 s e no máximo 1 clarão por rampa.
+200 e 100.000 clarões por minuto. Normal: o intervalo mínimo foi 0,4 s e nunca houve mais de 3 começos em uma janela
+fechada de 1 s; reduzido: 1,2 s e no máximo 1 clarão por rampa.
 
 A opção liga por três caminhos, e todos chegam à mesma variável (`reduzirClaroes`): o botão **Reduzir clarões**
 (toque, mouse, **Tab + Enter/Espaço**), e, ao abrir, o `prefers-reduced-motion` do sistema. O botão é um `<button>`
 comum, com `aria-pressed` e um ✓ no texto quando ligado: o texto diz o que a opção **faz** e o estado nunca é só
 cor. O botão **Foco** não é interruptor: seu texto diz o foco de agora ("Foco: estreito" ou "Foco: largo"). Um clique
-de mouse tira o foco do botão, para o **Espaço** seguinte continuar trocando o foco da lanterna; quem chega ao botão
-com **Tab** continua com o Espaço e o Enter dele. A lanterna que **esfria** também
+de **mouse** (`pointerType` visto no `pointerdown`) tira o foco do botão, para o **Espaço** seguinte continuar trocando o foco da
+lanterna; toque e leitor de tela (TalkBack, VoiceOver, que mandam `click` com `detail` ≥ 1) mantêm o foco, e só botões o perdem. Quem
+chega ao botão com **Tab** continua com o Espaço e o Enter dele. A lanterna que **esfria** também
 não pisca: só muda a mensagem e o medidor.
 
 ---
