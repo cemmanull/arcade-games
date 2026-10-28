@@ -2,13 +2,13 @@
 //
 //   node verificacao/rodar.mjs            roda toda verificacao/**/*.html e confere o marcador
 //   node verificacao/rodar.mjs --fumaca   abre cada index.html do curso e lista erros de console
-//   node verificacao/rodar.mjs --links    confere os links relativos de todos os .md
+//   node verificacao/rodar.mjs --links    confere os links relativos dos .md e os href/src relativos dos .html
 //   node verificacao/rodar.mjs <trecho>   só as páginas cujo caminho contém <trecho>
 //   node verificacao/rodar.mjs <arquivo.html>   uma página de teste qualquer, mesmo fora da pasta
 //   node verificacao/rodar.mjs --captura <arquivo.html> [--largura N] [--altura N] [--escala N] [--saida x.png]
 //                                         grava um PNG da página (padrão 1280x800, escala 1, na pasta temporária)
 //
-//   node verificacao/rodar.mjs --autoteste   planta 13 defeitos e confere que este executor os pega
+//   node verificacao/rodar.mjs --autoteste   planta 15 defeitos e confere que este executor os pega
 //
 // O modo normal não roda verificacao/medicao/ nem verificacao/autoteste/ (só por caminho explícito).
 // Variável CHROME: caminho do navegador, se não for um dos lugares comuns.

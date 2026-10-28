@@ -170,6 +170,46 @@ function listarMutantes(pastaPrivada) {
                 "[bom](Ok.md)", "`[crase](nada.md)`", CERCA, "[bloco](nada.md)", CERCA,
             ]), ["--links"]),
         },
+        {
+            id: "7c", descricao: "links em .html: src quebrado, caixa errada e pasta sem index reprovam; pasta com index avisa; código, comentário, script e srcdoc são ignorados",
+            codigoEsperado: 1,
+            linhasChave: [
+                /^AVISO     index\.html:4  pasta\/  \(pasta: /,
+                /^QUEBRADO  index\.html:2  nao-existe\.png$/,
+                /^QUEBRADO  index\.html:3  ok\.html$/,
+                /^QUEBRADO  index\.html:5  vazia\/  \(pasta sem index\.html\)$/,
+                /^3 arquivos \.html, 7 links relativos, 3 quebrados, 0 esperados, 1 avisos\.$/,
+            ],
+            executar: rodarEmRepositorioFalso("links-c", (raiz) => montarRepositorioDeHtml(raiz, [
+                '<a href="Ok.html">bom</a>',
+                '<img src="nao-existe.png" alt="">',
+                '<a href="ok.html">caixa errada</a>',
+                '<a href="pasta/">pasta com index</a>',
+                '<a href="vazia/">pasta sem index</a>',
+                '<pre><code><a href="nada.html">em código</a>',
+                "</code></pre>",
+                "<!--",
+                '<a href="nada2.html">em comentário</a>',
+                "-->",
+                '<script src="Ok.html">var texto = \'<a href="nada3.html">\';</script>',
+                '<iframe src="Ok.html?x=1#y" srcdoc="&lt;a href=&quot;nada4.html&quot;&gt;"></iframe>',
+                '<a href="https://e.com">a</a> <a href="//e.com/x">b</a> <img src="data:image/png;base64,AA"> <a href="mailto:a@b.c">c</a> <a href="#x">d</a>',
+            ]), ["--links"]),
+        },
+        {
+            id: "7d", descricao: "links em .html: controle só com pasta com index e o quebrado esperado do tutorial passa",
+            codigoEsperado: 0,
+            linhasChave: [
+                /^ESPERADO  tutorial\/01-html\/index\.html:1  nao-existe\.png$/,
+                /^AVISO     index\.html:2  pasta\/  \(pasta: /,
+                /^4 arquivos \.html, 3 links relativos, 0 quebrados, 1 esperados, 1 avisos\.$/,
+            ],
+            executar: rodarEmRepositorioFalso("links-d", (raiz) => {
+                montarRepositorioDeHtml(raiz, ['<a href="Ok.html">bom</a>', '<a href="pasta/">pasta</a>', '<code><a href="nada.html"></code>']);
+                mkdirSync(join(raiz, "tutorial", "01-html"), { recursive: true });
+                writeFileSync(join(raiz, "tutorial", "01-html", "index.html"), '<img src="nao-existe.png" alt="">\n');
+            }, ["--links"]),
+        },
     ];
 }
 
@@ -205,6 +245,17 @@ function escreverPaginaDoTutorial(raiz, script) {
         `<script>${script}</script>`,
         "</body></html>",
     ].join("\n"));
+}
+
+/* index.html com as linhas dadas, mais Ok.html, pasta/index.html e vazia/ (sem index.html). */
+function montarRepositorioDeHtml(raiz, linhasDaPagina) {
+    mkdirSync(join(raiz, "pasta"), { recursive: true });
+    mkdirSync(join(raiz, "vazia"), { recursive: true });
+    spawnSync("git", ["init", "-q"], { cwd: raiz });
+    writeFileSync(join(raiz, "Ok.html"), "<p>ok</p>\n");
+    writeFileSync(join(raiz, "pasta", "index.html"), "<p>pasta</p>\n");
+    writeFileSync(join(raiz, "vazia", "leia-me.txt"), "sem index\n");
+    writeFileSync(join(raiz, "index.html"), linhasDaPagina.join("\n") + "\n");
 }
 
 function montarRepositorioDeLinks(raiz, linhasDoReadme) {

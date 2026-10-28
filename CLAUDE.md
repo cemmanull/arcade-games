@@ -17,7 +17,13 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
   - `node verificacao/rodar.mjs` — roda as páginas de teste `verificacao/<modulo>/<passo>.html`;
   - `node verificacao/rodar.mjs --fumaca` — abre todo `index.html` e falha em erro de console fora da
     tabela `ERROS_ESPERADOS` de `verificacao/fumaca.mjs` (cada padrão casa com a linha inteira);
-  - `node verificacao/rodar.mjs --links` — confere todo link relativo dos `.md` (inclusive maiúsculas).
+  - `node verificacao/rodar.mjs --links` — confere todo link relativo dos `.md` e todo `href`/`src` relativo dos
+    `.html` (`a`, `link`, `script`, `img`, `iframe`, `source`), exigindo as mesmas maiúsculas (o Pages distingue).
+    Ignora URLs absolutas, `data:`/`mailto:`/`tel:`/`javascript:`, `#frag`, e o que está em `<pre>`/`<code>`,
+    comentários, corpo de `<script>` e `srcdoc`. Link para pasta: `AVISO` se tem `index.html` (use `.../index.html`,
+    pois em `file://` abre uma listagem), `QUEBRADO` se não tem. Fora da conta: `verificacao/autoteste/` e `.claude/`
+    (`verificacao/medicao/` é conferida); as 2 imagens de `tutorial/01-html` saem como `ESPERADO`
+    (tabela `QUEBRADOS_ESPERADOS_NO_HTML` em `links.mjs`).
   Os três precisam sair com 0 antes de qualquer merge.
 - Publicar uma etapa verificada: merge em `learning-path`, `main` em fast-forward, `git push origin
   learning-path main`. Nunca `--force`, `--all`, `--mirror`, nem `backup/*`. Prefira avançar branches com
