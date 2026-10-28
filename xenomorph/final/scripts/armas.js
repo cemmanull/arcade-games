@@ -275,7 +275,7 @@ function contemPonto(caixa, x, y) {
 }
 
 /*
-  AS PARTÍCULAS, como no Dealer? Out!: nascem num ponto com velocidades
+  AS PARTÍCULAS, como no Shoot 'em up: nascem num ponto com velocidades
   sorteadas, caem um pouco, e morrem sozinhas. Não colidem com nada —
   ninguém repara, e custaria caro.
 */

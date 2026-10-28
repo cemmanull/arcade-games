@@ -1,6 +1,6 @@
 # Do zero ao jogo — HTML, CSS e JavaScript
 
-Um curso completo em nove módulos, do primeiro `<h1>` a um programa de xadrez que joga contra
+Um curso completo em oito módulos, do primeiro `<h1>` a um programa de xadrez que joga contra
 você e a um metroidvania gerado a partir de uma semente.
 
 **Nenhuma instalação.** Nenhum framework, nenhum `npm install`, nenhum servidor. Todo arquivo aqui
@@ -19,23 +19,25 @@ A coluna da direita diz o **mínimo** que você precisa ter feito antes.
 | 1 | [`jogo-da-cobrinha`](jogo-da-cobrinha/) | canvas, game loop, grade | tutorial |
 | 2 | [`pong`](pong/) | tempo contínuo (rAF + dt), AABB, máquina de estados | cobrinha |
 | 3 | [`tetris`](tetris/) | matriz, acumuladores, imutabilidade, dados como tabela | pong |
-| 4 | [`dealer-out`](dealer-out/) | listas vivas, catálogos, temporizadores, toque, GDD, vários arquivos | pong (tetris recomendado) |
-| 5 | [`shoot-em-up`](shoot-em-up/) | trigonometria, círculos, muitos × muitos, roteiro, chefe | dealer-out |
-| 6 | [`pacman`](pacman/) | grade + deslize, IA por alvos, busca em largura | tetris, dealer-out |
-| 7 | [`xadrez`](xadrez/) | regras complexas, DOM no lugar de canvas, minimax e alfa-beta | pong (pacman recomendado) |
-| 8 | [`xenomorph`](xenomorph/) | física de plataforma, geração procedural com semente, progressão | pacman, shoot-em-up |
+| 4 | [`shoot-em-up`](shoot-em-up/) | listas vivas, catálogos, temporizadores, trigonometria, círculos, muitos × muitos, roteiro, chefe | tetris |
+| 5 | [`pacman`](pacman/) | grade + deslize, IA por alvos, busca em largura | tetris (shoot-em-up recomendado) |
+| 6 | [`xadrez`](xadrez/) | regras complexas, DOM no lugar de canvas, minimax e alfa-beta | pong (pacman recomendado) |
+| 7 | [`xenomorph`](xenomorph/) | física de plataforma, geração procedural com semente, progressão | pacman, shoot-em-up |
 
 ### Por que esta ordem
 
-- **Tetris antes do Dealer? Out!** Os dois só pedem o Pong, mas o Tetris é a rampa mais suave: volta
-  à grade da cobrinha, com o loop do Pong por baixo, e acrescenta uma ideia por vez. O Dealer? Out!
-  já espera que você lide com dezenas de objetos, vários arquivos e um documento de design.
+- **Tetris antes do Shoot 'em up.** Os dois só pedem o Pong, mas o Tetris é a rampa mais suave: volta
+  à grade da cobrinha, com o loop do Pong por baixo, e acrescenta uma ideia por vez. O Shoot 'em up
+  já espera que você lide com dezenas de objetos, catálogos de dados e temporizadores, e o Tetris
+  deixa prontos os dados como tabela, o acumulador de tempo e o toque.
 - **Xadrez depois do Pac-Man.** A inteligência dos adversários cresce degrau a degrau: uma **regra
   reativa** (o computador do Pong), depois **alvos** (os fantasmas do Pac-Man), depois **busca em
   grafo** (a busca em largura) e, por fim, **busca em árvore de jogo** (minimax com poda). O xadrez só
   exige o Pong de verdade; quem estiver curioso pode fazê-lo antes.
-- **Shoot 'em up depois do Dealer? Out!**, porque reusa listas vivas, catálogos e temporizadores sem
-  explicá-los de novo. **Xenomorph por último**, porque junta quase tudo o que veio antes.
+- **Pac-Man depois do Shoot 'em up.** O Pac-Man só exige o Tetris de verdade (a matriz, os dados como
+  tabela); vir depois do Shoot 'em up ajuda porque temporizadores e coisas que se movem sozinhas já
+  foram vistos.
+- **Xenomorph por último**, porque junta quase tudo o que veio antes.
 
 Os guias dizem de onde vem cada peça; o índice [`CONCEITOS.md`](CONCEITOS.md) reúne tudo numa
 consulta só: conceito, onde se aprende, onde se reusa.
@@ -66,25 +68,19 @@ Oito passos e um final. O mundo vira uma matriz, as peças são dados, o tempo p
 tudo o que se testa, testa-se antes de mover. Termina com níveis, peça fantasma, recorde e controles
 de toque.
 
-### 4. [`dealer-out/`](dealer-out/) — do documento de design ao jogo
+### 4. [`shoot-em-up/`](shoot-em-up/) — muitos contra muitos
 
-Nove passos e um final, construídos a partir de um [documento de design](dealer-out/dealer-out_gdd.md)
-escrito antes do código. Objetos que nascem e morrem, catálogos de dados, temporizadores, combos,
-poderes, dificuldade progressiva, teclado e toque como a mesma intenção. O final se divide em arquivos
-por assunto.
+Oito passos e um final. Objetos que nascem e morrem, catálogos de dados, temporizadores, coordenadas
+pelo centro, trajetos por seno, colisão entre círculos, tiros mirados com `atan2`, a fase escrita
+como roteiro e uma nave-mãe com fases.
 
-### 5. [`shoot-em-up/`](shoot-em-up/) — muitos contra muitos
-
-Oito passos e um final. Coordenadas pelo centro, trajetos por seno, colisão entre círculos, tiros
-mirados com `atan2`, a fase escrita como roteiro e uma nave-mãe com fases.
-
-### 6. [`pacman/`](pacman/) — a grade, o deslizar e quatro fantasmas
+### 5. [`pacman/`](pacman/) — a grade, o deslizar e quatro fantasmas
 
 Oito passos e um final. Um labirinto escrito como texto, movimento por pixels sobre uma grade e
 fantasmas com uma regra só e alvos diferentes, que juntos parecem um plano. A busca em largura
 aparece para os olhos dos fantasmas voltarem para casa.
 
-### 7. [`xadrez/`](xadrez/) — regras complexas e um computador que pensa
+### 6. [`xadrez/`](xadrez/) — regras complexas e um computador que pensa
 
 Oito passos e um final. Sem física, sem reflexo: o desafio é o do software profissional, com regras
 cheias de exceção, um programa grande demais para um arquivo só e um adversário que decide, com
@@ -93,7 +89,7 @@ minimax e poda alfa-beta.
 Também mostra que nem todo jogo precisa de canvas: o tabuleiro são 64 botões numa grade de CSS,
 jogáveis por teclado e legíveis por leitor de tela.
 
-### 8. [`xenomorph/`](xenomorph/) — um planeta a partir de uma semente
+### 7. [`xenomorph/`](xenomorph/) — um planeta a partir de uma semente
 
 Nove passos e um final, também a partir de um [documento de design](xenomorph/xenomorph_gdd.md). Física
 de plataforma (o soldado tem peso), um planeta gerado por uma semente e conferido antes de jogar,
@@ -137,11 +133,11 @@ navegação por teclado de graça.
 
 **Dados no lugar de código.** Formas de peças, catálogos de objetos, tabelas de pontos e de
 velocidade, o roteiro de uma fase, os modos dos fantasmas: quando uma regra vira uma tabela, mudar o
-jogo é mudar um número, não reescrever uma função. Aparece no Tetris, no Dealer? Out!, no Shoot 'em
-up, no Pac-Man e no Xenomorph.
+jogo é mudar um número, não reescrever uma função. Aparece no Tetris, no Shoot 'em up, no Pac-Man e
+no Xenomorph.
 
 **Mostre o invisível.** Caixas de colisão, o alvo de cada fantasma, o estado de cada criatura: o que
-você não vê, você não consegue depurar. Em quatro módulos — Dealer? Out!, Shoot 'em up, Pac-Man e
+você não vê, você não consegue depurar. Em três módulos — Shoot 'em up, Pac-Man e
 Xenomorph — a tecla **H** liga essa visão.
 
 **O que vem de fora, confira.** O `localStorage` pode estar vazio, bloqueado ou com lixo. Lê-se
@@ -155,7 +151,7 @@ fez.
 
 ---
 
-## Oitenta pastas, todas executáveis
+## Setenta pastas, todas executáveis
 
 | Módulo | Passos | Formato |
 |---|---|---|
@@ -163,13 +159,12 @@ fez.
 | jogo-da-cobrinha | 9 passos + final | do primeiro quadrado ao pixel art |
 | pong | 8 passos + final | do retângulo parado ao adversário automático |
 | tetris | 8 passos + final | do poço vazio aos níveis, ao recorde e ao toque |
-| dealer-out | 9 passos + final | da tela parada ao arcade instalável |
 | shoot-em-up | 8 passos + final | do céu rolando à nave-mãe |
 | pacman | 8 passos + final | do labirinto em texto aos quatro fantasmas |
 | xadrez | 8 passos + final | do tabuleiro vazio ao minimax com poda |
 | xenomorph | 9 passos + final | da sala parada ao ciclo de expedições |
 
-São 72 passos numerados (5 lições + 67 passos de jogo) e 8 pastas `final`. Cada pasta é
+São 63 passos numerados (5 lições + 58 passos de jogo) e 7 pastas `final`. Cada pasta é
 **independente e roda sozinha**. Você pode abrir qualquer uma, quebrar tudo, e continuar na seguinte
 sem prejuízo.
 
@@ -177,7 +172,7 @@ sem prejuízo.
 
 ## Verificação
 
-Os módulos `tetris`, `dealer-out`, `shoot-em-up`, `pacman`, `xadrez` e `xenomorph` trazem, no próprio
+Os módulos `tetris`, `shoot-em-up`, `pacman`, `xadrez` e `xenomorph` trazem, no próprio
 `README.md`, uma seção "Verificação" com o que foi conferido neles: simulações de física e de jogo,
 robôs apertando teclas ao acaso, geração de mapas validada e, no xadrez, o teste de regras chamado
 perft. Leia lá o que cada afirmação cobre e o que ficou de fora.
@@ -193,8 +188,7 @@ node verificacao/rodar.mjs --links    # confere cada link relativo dos arquivos 
 ```
 
 As páginas de teste ficam em `verificacao/<módulo>/<passo>.html`, uma por passo conferido; a lista
-cresce com o curso. Na fumaça, duas exceções são
-esperadas e ficam listadas em `verificacao/README.md`: as imagens que faltam de propósito em
-`tutorial/01-html` (para mostrar o `alt`) e o manifesto PWA do `dealer-out/final`, que o `file://`
-bloqueia. Quem só estuda não precisa de nada disso: é para quem mantém o curso. Exige Chrome e
+cresce com o curso. Na fumaça, uma exceção é
+esperada e fica listada em `verificacao/README.md`: as imagens que faltam de propósito em
+`tutorial/01-html` (para mostrar o `alt`). Quem só estuda não precisa de nada disso: é para quem mantém o curso. Exige Chrome e
 Node 22 ou mais novo; nada para instalar para os alunos.

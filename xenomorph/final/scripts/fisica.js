@@ -15,8 +15,8 @@
 // ============================================================
 /*
   O soldado agora nasce de uma FÁBRICA: recomeçar a partida é chamar
-  criarSoldado() de novo, e é impossível esquecer um campo (a lição do
-  Dealer? Out!). Os campos são quase todos temporizadores, em segundos.
+  criarSoldado() de novo, e é impossível esquecer um campo (a lição do Pac-Man, que
+  recomeça a cada vida). Os campos são quase todos temporizadores, em segundos.
 */
 function criarSoldado() {
     const pouso = encontrarMarcador(POUSO.modulo, "@");

@@ -289,12 +289,12 @@ Pré-requisitos mínimos: **pacman, shoot-em-up, xadrez** (xenomorph recomendado
 | Passo | Conceito novo | Reusa | Seção |
 |---|---|---|---|
 | **01-planta** | mapa em texto, vista de cima, posição, ângulo, vetor direção | `pacman/01-labirinto` (mapa em texto, grade); `shoot-em-up` (seno e cosseno) | 4.1, 4.2 |
-| **02-andar** | andar relativo à direção, colisão com raio, um eixo por vez | `pong/05-colisao` (colisão por eixo); `dealer-out/02-movimento` (entrada → intenção) | 3, 4.2 |
+| **02-andar** | andar relativo à direção, colisão com raio, um eixo por vez | `pong/05-colisao` (colisão por eixo); `tetris/final` (entrada → intenção) | 3, 4.2 |
 | **03-um-raio** | DDA casa a casa; a planta desenha o raio | grade do Pac-Man; tecla H do curso | 4.3 |
 | **04-paredes** | um raio por coluna, plano da câmera, FOV, altura = k/distância, olho de peixe | `shoot-em-up` (trigonometria) | 4.3, 6, 7 |
 | **05-texturas** | textura como texto, amostrar a coluna, névoa, resolução baixa escalada, **medir ms/quadro** (técnica A × B) | sprites em texto de todo o curso | 6, 8.1, 8.2 |
-| **06-objetos** | sprites no espaço da câmera, projeção, z-buffer por coluna, ordem por distância | `shoot-em-up` (muitos objetos); `dealer-out/04-catalogo` | 4.4, 4.7 |
+| **06-objetos** | sprites no espaço da câmera, projeção, z-buffer por coluna, ordem por distância | `shoot-em-up` (muitos objetos); `shoot-em-up/04-inimigos` | 4.4, 4.7 |
 | **07-espelhos** | feixe = DDA que quica, receptor abre porta, sala imutável, reiniciar de cópia | `pong/03-paredes` (ricochete = sinal trocado); `xadrez/05-xeque` (estado imutável) | 4.3, 4.5, 4.6 |
 | **08-sombras** | máquina de estados, campo de distância por BFS, a luz desfaz, vidas | `pacman/06-modos` (BFS, estados); `pacman/04-fantasma` (perseguidor) | 4.7, 4.8 |
-| **final** (R9) | fases como dados, **validação de solubilidade por busca**, menu, pausa, som, recorde, toque, opções, H com raios; ~15 exercícios | `xenomorph/06-semente` (validação por busca); `dealer-out/final` (vários arquivos, toque) | 5, 7, 8, 9 |
+| **final** (R9) | fases como dados, **validação de solubilidade por busca**, menu, pausa, som, recorde, toque, opções, H com raios; ~15 exercícios | `xenomorph/06-semente` (validação por busca); `xadrez/07-computador` (vários arquivos); `tetris/final` (toque) | 5, 7, 8, 9 |
 

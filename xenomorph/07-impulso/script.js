@@ -638,7 +638,7 @@ function foraDaTela(ponto) {
 // ============================================================
 /*
   O QUE CADA ITEM FAZ ao ser apanhado: uma tabela de funções, como os
-  efeitos do Dealer? Out!. Devolver `false` quer dizer "não peguei" — a
+  catálogos do Shoot 'em up. Devolver `false` quer dizer "não peguei" — a
   cápsula de vida fica no chão quando a vida está cheia.
 */
 const AO_PEGAR = {
@@ -698,8 +698,8 @@ function verificarItens() {
 // ============================================================
 /*
   O soldado agora nasce de uma FÁBRICA: recomeçar a partida é chamar
-  criarSoldado() de novo, e é impossível esquecer um campo (a lição do
-  Dealer? Out!). Os campos são quase todos temporizadores, em segundos.
+  criarSoldado() de novo, e é impossível esquecer um campo (a lição do Pac-Man, que
+  recomeça a cada vida). Os campos são quase todos temporizadores, em segundos.
 */
 let soldado = null;   // nasce em iniciarExpedicao
 
@@ -1485,7 +1485,7 @@ function contemPonto(caixa, x, y) {
 }
 
 /*
-  AS PARTÍCULAS, como no Dealer? Out!: nascem num ponto com velocidades
+  AS PARTÍCULAS, como no Shoot 'em up: nascem num ponto com velocidades
   sorteadas, caem um pouco, e morrem sozinhas. Não colidem com nada —
   ninguém repara, e custaria caro.
 */
@@ -1959,7 +1959,7 @@ function sobrepoe(a, b) {
 /*
   Tocar uma criatura ou pisar numa poça fere. Uma ferida por vez: depois
   dela vem a invulnerabilidade, e enquanto ela durar nada mais fere — a
-  "janela de invulnerabilidade" do Dealer? Out!, que impede uma criatura
+  "janela de invulnerabilidade" dos jogos de ação, que impede uma criatura
   parada em cima do soldado de tirar toda a vida num segundo.
 */
 function verificarContatos() {
@@ -2757,7 +2757,7 @@ function mostrarMensagem(titulo, texto) {
 
 /*
   O AVISO: um texto por cima da tela, por alguns segundos. Contado pelo
-  relógio do jogo, como tudo (a lição do Dealer? Out!).
+  relógio do jogo, como tudo (e não o da parede).
 */
 function mostrarAviso(texto) {
     campoAviso.textContent = texto;

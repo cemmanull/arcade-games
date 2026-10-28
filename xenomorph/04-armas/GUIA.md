@@ -91,8 +91,8 @@ disparo. Se a munição morasse na ficha, duas armas iguais equipadas dividiriam
 | tamanho do pente, cadência, dano | `ARMAS` (a ficha) | nunca, durante o jogo |
 | munição, recarga em andamento | `equipamento.armas` | a cada disparo |
 
-É a separação entre *o que a coisa é* e *o estado em que ela está* — a mesma do Dealer? Out!
-(o catálogo e os objetos que caem) e do Tetris (as peças e a peça que cai).
+É a separação entre *o que a coisa é* e *o estado em que ela está* — a mesma do Shoot 'em up
+(o catálogo de inimigos e os que estão em cena) e do Tetris (as peças e a peça que cai).
 
 ### A recarga é da arma
 

@@ -93,7 +93,7 @@ function atualizarCriaturas(tempo) {
         /*
           O CONGELAMENTO desacelera o RELÓGIO da criatura, não a velocidade:
           tudo o que ela faz — andar, cair, esperar, mirar — acontece com
-          40% do tempo. A ideia dos poderes do Dealer? Out!, numa criatura.
+          40% do tempo. Uma escala do tempo, numa criatura só.
           (Multiplicar só o vx não serviria: o bote do saltador define o vx
           uma vez e depois o deixa em paz.)
         */

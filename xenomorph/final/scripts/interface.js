@@ -127,7 +127,7 @@ function mostrarMensagem(titulo, texto, botao = botaoVoltarABase) {
 
 /*
   O AVISO: um texto por cima da tela, por alguns segundos. Contado pelo
-  relógio do jogo, como tudo (a lição do Dealer? Out!).
+  relógio do jogo, como tudo (e não o da parede).
 */
 function mostrarAviso(texto, duracao = DURACAO_DO_AVISO) {
     campoAviso.textContent = texto;

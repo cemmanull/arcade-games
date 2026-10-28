@@ -51,7 +51,7 @@ const REGIOES = {
         nome: "Complexo de Pesquisa",
         colunas: [0, 3],     // da coluna 0 até a 3, inclusive
         salas: 9,
-        // os pesos do sorteio de cada espécie (passo 4 do Dealer? Out!)
+        // os pesos do sorteio de cada espécie
         criaturas: { rastejador: 5, cuspidora: 3, saltador: 1 }
     },
     floresta: {

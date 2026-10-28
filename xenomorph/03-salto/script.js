@@ -244,7 +244,7 @@ const sala = criarSala();
 // ============================================================
 /*
   Os campos novos são quase todos TEMPORIZADORES, em segundos — a ideia
-  do atordoamento do Dealer? Out!: um número que desce até zero, e
+  do pisca-pisca das linhas do Tetris: um número que desce até zero, e
   "está valendo" enquanto for maior que zero.
 */
 const soldado = {
@@ -270,7 +270,7 @@ const soldado = {
 
 /*
   O RASTRO da esquiva: cópias apagadas do soldado que somem sozinhas. Uma
-  lista que nasce e morre, como as partículas do Dealer? Out!.
+  lista que nasce e morre, como as faíscas do Shoot 'em up.
 */
 let rastro = [];
 

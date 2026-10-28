@@ -23,7 +23,7 @@ Nenhuma regra de movimento, de fantasma ou de fase. O acabamento:
 
 ---
 
-## Por que este módulo vem depois do Tetris e do Dealer? Out!
+## Por que este módulo vem depois do Tetris e do Shoot 'em up
 
 Ele junta quase tudo o que o curso ensinou:
 
@@ -32,7 +32,7 @@ Ele junta quase tudo o que o curso ensinou:
 | Tetris | a matriz como estado; o mapa feito de texto |
 | Pong | o deslizar com delta time; vetores de direção |
 | Cobrinha | a colisão por igualdade de casa; a última tecla apertada |
-| Dealer? Out! e Tetris | tabelas no lugar de código; temporizadores |
+| Tetris e Shoot 'em up | tabelas no lugar de código; temporizadores |
 | todos | a máquina de estados |
 
 E acrescenta o que faltava: **inteligência**. Não a do módulo de xadrez, mais adiante, que pensa lances à frente — a de
@@ -248,4 +248,4 @@ teste antes de mover; e mostre o invisível quando não entender o que o program
 
 **Anterior:** [`08-niveis`](../08-niveis/) · **Módulo:** [`README.md`](../README.md)
 
-**Pré-requisito:** [`../../tetris`](../../tetris/) e [`../../dealer-out`](../../dealer-out/) · **Antes:** [`../../shoot-em-up`](../../shoot-em-up/) · **Depois:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)
+**Pré-requisito:** [`../../tetris`](../../tetris/) · **Antes:** [`../../shoot-em-up`](../../shoot-em-up/) · **Depois:** [`../../xadrez`](../../xadrez/) · **Índice:** [`../../README.md`](../../README.md)

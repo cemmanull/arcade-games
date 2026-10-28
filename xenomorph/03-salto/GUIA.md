@@ -102,7 +102,7 @@ Nenhum jogador percebe que foi perdoado. Todo jogador percebe quando **não** fo
 passo provou os dois: um aperto 3 quadros depois da beirada pula, e um 4 quadros antes de aterrissar
 também — com 0,08 s de coiote, o primeiro falhava, e o número subiu para 0,1.
 
-> Esses dois temporizadores são o mesmo mecanismo do Dealer? Out!: um número que desce até zero,
+> Esses dois temporizadores são o mesmo mecanismo do pisca-pisca das linhas do Tetris: um número que desce até zero,
 > e "vale" enquanto for maior que zero. Quase todo o *game feel* de um jogo de plataforma é feito
 > deles.
 

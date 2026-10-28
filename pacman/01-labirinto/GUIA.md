@@ -24,7 +24,7 @@ const MAPA_EM_TEXTO = [
 ];
 ```
 
-O `EXEMPLO` do Tetris e os sprites do Dealer? Out! usavam a mesma ideia; aqui ela vai ao
+O `EXEMPLO` do Tetris e os sprites de texto da cobrinha usavam a mesma ideia; aqui ela vai ao
 máximo: **o nível inteiro** é um desenho feito de caracteres. Dá para ver o labirinto lendo o
 código, e criar outro é editar texto.
 

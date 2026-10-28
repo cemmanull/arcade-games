@@ -113,7 +113,7 @@ function acao(nome) {
   interruptor dela e, se for de APERTAR, faz o pedido — pela primeira
   tecla da ação, o mesmo caminho do teclado.
 
-  Pointer events (o Dealer? Out! ensinou): um dedo, uma caneta e um mouse
+  Pointer events (o Tetris ensinou): um dedo, uma caneta e um mouse
   são o mesmo evento. setPointerCapture garante que o "soltar" chega ao
   botão certo mesmo se o dedo escorregar para fora dele.
 */

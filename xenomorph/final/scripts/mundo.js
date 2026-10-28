@@ -184,7 +184,7 @@ function foraDaTela(ponto) {
 // ============================================================
 /*
   O QUE CADA ITEM FAZ ao ser apanhado: uma tabela de funções, como os
-  efeitos do Dealer? Out!. Devolver `false` quer dizer "não peguei" — a
+  catálogos do Shoot 'em up. Devolver `false` quer dizer "não peguei" — a
   cápsula de vida fica no chão quando a vida está cheia.
 */
 const AO_PEGAR = {

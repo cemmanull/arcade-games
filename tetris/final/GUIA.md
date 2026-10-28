@@ -357,4 +357,4 @@ Puyo Puyo, jogos de combinar três.
 
 **Anterior:** [`08-velocidade`](../08-velocidade/) · **Módulo:** [`README.md`](../README.md)
 
-**Pré-requisito:** [`../../pong`](../../pong/) · **Antes:** [`../../pong`](../../pong/) · **Depois:** [`../../dealer-out`](../../dealer-out/) · **Índice:** [`../../README.md`](../../README.md)
+**Pré-requisito:** [`../../pong`](../../pong/) · **Antes:** [`../../pong`](../../pong/) · **Depois:** [`../../shoot-em-up`](../../shoot-em-up/) · **Índice:** [`../../README.md`](../../README.md)
