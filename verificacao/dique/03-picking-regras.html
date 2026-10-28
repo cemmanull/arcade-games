@@ -16,6 +16,7 @@
     <pre id="resultado"></pre>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
 
     <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
     <script>
@@ -126,7 +127,7 @@
                     });
                 });
             });
-            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade || (b.y * TAMANHO + b.x) - (a.y * TAMANHO + a.x); });      // a lista do pintor lida de trás para a frente: da mais perto à mais longe, e no empate a pintada por último (maior índice) primeiro
             return casas;
         }
 
@@ -320,6 +321,58 @@
             conferir("e a força bruta do jogo concorda com a minha, escrita aqui", divergenciasDaBruta === 0, divergenciasDaBruta + " divergências; " + exemplos.join(" | "));
             conferir("a amostra cobre as três faces e o vazio: topo " + porFace.topo + ", esquerda " + porFace.esquerda + ", direita " + porFace.direita + ", nada " + vazios,
                 porFace.topo > 500 && porFace.esquerda > 500 && porFace.direita > 500 && vazios > 500);
+        });
+
+        testar("ARESTAS COMPARTILHADAS: num pixel exatamente sobre a aresta de duas faces, o raio, a força bruta do jogo e a minha (a lista do pintor lida de trás para a frente: a última pintada vence) dão a mesma casa e face", function () {
+            semearSorteio(4242);
+            let comparados = 0, empates = 0, divergenciasDoRaio = 0, divergenciasDaBruta = 0;
+            const exemplos = [];
+            function pontosDasArestas(cenario) {           // todo ponto de coordenada inteira sobre uma aresta (as arestas são 2:1 ou verticais, então há vários por aresta)
+                const pontos = new Map();
+                cenario.forEach(function (casa) {
+                    FACES.forEach(function (nome) {
+                        const poligono = casa.faces[nome];
+                        poligono.forEach(function (canto, i) {
+                            const proximo = poligono[(i + 1) % poligono.length];
+                            for (let passo = 0; passo <= 6; passo++) {
+                                const ponto = [canto.x + (proximo.x - canto.x) * passo / 6, canto.y + (proximo.y - canto.y) * passo / 6];
+                                if (Number.isInteger(ponto[0]) && Number.isInteger(ponto[1])) pontos.set(ponto.join(","), ponto);
+                            }
+                        });
+                    });
+                });
+                return Array.from(pontos.values());
+            }
+            for (let terreno = 0; terreno < 6; terreno++) {
+                sortearTerreno(terreno % 2 === 1);
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    const cenario = construirCenario();
+                    const todos = pontosDasArestas(cenario);
+                    for (let i = 0; i < 700; i++) {
+                        const pixel = todos[Math.floor(Math.random() * todos.length)];
+                        const donas = cenario.filter(function (casa) { return FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], { x: pixel[0], y: pixel[1] }); }); });
+                        if (donas.length < 2) continue;                // só o empate de verdade: o pixel é de duas casas ou mais (o contorno da ilha com o vazio não é empate)
+                        empates++;
+                        const doRaio = acharCasaPeloRaio(pixel[0], pixel[1]);
+                        const daBruta = acharCasaPorForcaBruta(pixel[0], pixel[1]);
+                        const minha = acharPelaMinhaForcaBruta(cenario, pixel[0], pixel[1]);
+                        comparados++;
+                        if (nomeDoAcerto(doRaio) !== nomeDoAcerto(minha)) {
+                            divergenciasDoRaio++;
+                            if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": raio " + nomeDoAcerto(doRaio) + " z " + (doRaio && doRaio.z) + ", minha " + nomeDoAcerto(minha) + "; donas " + donas.map(function (d) { return d.x + "," + d.y + " h" + d.altura; }).join(" / "));
+                        }
+                        if (nomeDoAcerto(daBruta) !== nomeDoAcerto(minha)) {
+                            divergenciasDaBruta++;
+                            if (exemplos.length < 3) exemplos.push("terreno " + terreno + " giro " + giro * 90 + "° pixel " + pixel + ": a bruta do jogo " + nomeDoAcerto(daBruta) + ", minha " + nomeDoAcerto(minha));
+                        }
+                    }
+                }
+            }
+            restaurarTerreno();
+            conferir(comparados + " pixels de empate entre casas: o raio = a minha força bruta (a última pintada vence)", divergenciasDoRaio === 0, divergenciasDoRaio + " divergências; " + exemplos.join(" | "));
+            conferir("e a força bruta do jogo = a minha", divergenciasDaBruta === 0, divergenciasDaBruta + " divergências; " + exemplos.join(" | "));
+            conferir("a amostra tem empates de verdade: " + empates + " pixels pertencem a mais de uma casa", empates > 800 && comparados === empates);
         });
 
         testar("PICKING denso: o raio = minha força bruta em toda a tela (e 40 px de margem), 20 terrenos × 4 giros", function () {

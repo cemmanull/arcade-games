@@ -146,6 +146,8 @@ Copie `tetris/03-queda.html`. Três truques fazem tudo funcionar por `file://`:
 
 O Proa Acesa reparte as verificações dos passos 5 a 8 em `proa-acesa/apoio-proa.js` (nascimento do comboio, trava e modo dos clarões, enquadramento da câmera, Espaço depois do clique, chuva, mar e névoa): funções com prefixo `verif…` que usam o `conferir` do `apoio.js`; carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo.
 
+O Dique reparte o que as páginas dos passos 1 a 6 têm em comum em `dique/apoio-dique.js` (a conta de enchente do teste por ponto fixo e por relaxamento, o gravador de polígonos do canvas, o clique de verdade em cada botão `[data-acao]`, o passo inteiro num `iframe` com `srcdoc` para tamanhos de tela e movimento reduzido, e a linha `TEMPO` com o tempo de execução da própria página, sem a abertura do navegador): carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo; as páginas dos passos 4 a 6 guardam o miolo do `<body>` do `index.html` numa constante e o inserem na página e no `iframe`.
+
 Se o jogo desenha num `<canvas>`, o teste de `tetris/03-queda.html` troca `getContext` por um
 contexto que ignora o desenho (o teste confere regras, não pixels): o robô de 30.000 quadros caiu
 de cerca de 17 s para 3 s. Em loops que esperam o jogo, confira o retorno de `avancarQuadro` e

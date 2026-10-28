@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 6: as fichas</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 6: as fichas</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
+
+    <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
+         Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
+    <script>
+        const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
+            + '<canvas id="jogo" width="384" height="252">Seu navegador não suporta canvas.</canvas>'
+            + '<p id="painel"></p>'
+            + '<p id="tabua" title="Tábua de marés"></p>'
+            + '<div id="ferramentas">'
+            + '<button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true" aria-label="Ferramenta Erguer: sobe a casa um degrau e gasta um bloco (1)">Erguer</button>'
+            + '<button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false" aria-label="Ferramenta Cavar: desce a casa um degrau e devolve um bloco (2)">Cavar</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar a ferramenta na casa marcada (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="desfazer" aria-label="Desfazer a última jogada (Z)">Desfazer</button>'
+            + '<button type="button" data-acao="avancar" aria-label="Liberar a maré; depois que ela passa, chamar a próxima ficha (M)">Maré</button>'
+            + '<button type="button" data-acao="reiniciar" aria-label="Recomeçar o dia (N)">Refazer</button>'
+            + '</div>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<div id="setas">'
+            + '<button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>'
+            + '<button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>'
+            + '<button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>'
+            + '<button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<pre id="leitura" aria-live="off"></pre>';
+        document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="252"', 'width="1" height="1"'));
+    </script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/06-fichas/regras.js"></script>
+    <script src="../../dique/06-fichas/script.js"></script>
+
+    <script>
+        const errosNaCarga = errosDeConsole.slice();
+        const ALTURAS_ORIGINAIS = JSON.stringify(ALTURAS_INICIAIS);
+        const MAR = matrizDoMar(ALTURAS_EM_TEXTO);
+        const FONTES_DO_MAR = fontesDoMar(MAR);
+        const SETAS_DA_TELA = [["cursorParaEsquerda", -1, 0], ["cursorParaCima", 0, -1], ["cursorParaBaixo", 0, 1], ["cursorParaDireita", 1, 0]];
+
+        // Os números do GDD e do GUIA, escritos aqui de propósito (não lidos do jogo).
+        const BONUS_DA_CHUVA_ESPERADO = 2, NIVEL_DA_NASCENTE_ESPERADO = 1, NIVEL_DA_BAIXA_MAR_ESPERADO = 1, META_ESPERADA = 2, BLOCOS_INICIAIS_ESPERADOS = 0;
+        const BASE_DAS_MAQUINAS = {                       // GDD 4.5
+            dia: { ler: ["moldar"], moldar: ["mare"], mare: ["contar"], contar: ["ler", "fim"], fim: [] },
+            mare: { baixa: ["enchente"], enchente: ["preamar"], preamar: ["vazante"], vazante: ["baixa"] },
+        };
+        const ALVO_DO_REINICIAR = { dia: "ler", mare: "baixa" };
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada, de estado e de conta
+        // ------------------------------------------------------------
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(0);
+            }
+        }
+
+        function definirCamera(zoom, desvioX, desvioY) {
+            camera.zoom = zoom;
+            camera.desvioX = desvioX;
+            camera.desvioY = desvioY;
+            limitarCamera();
+        }
+
+        function casasComObjeto(simbolo) {
+            const casas = [];
+            OBJETOS_EM_TEXTO.forEach(function (linha, y) { linha.split("").forEach(function (objeto, x) { if (objeto === simbolo) casas.push({ x: x, y: y }); }); });
+            return casas;
+        }
+
+        const CASAS_DO_TEXTO = casasComObjeto("C"), NASCENTES_DO_TEXTO = casasComObjeto("N");
+
+        function volumeDoPassoEsperado(ficha) {
+            return ficha.volume + (ficha.chuva ? BONUS_DA_CHUVA_ESPERADO : 0);
+        }
+
+        /* A água depois de `passos` passos, pela minha conta: o mar enche com nível e volume (como no passo 5); na chuva, as nascentes
+           alagam à parte, sem volume, o que alcançam no nível 1; as duas águas se juntam casa a casa. */
+        function aguaEsperada(terreno, ficha, passos, nascentes) {
+            const mar = encherPelaMinhaConta(terreno, ficha.nivel, FONTES_DO_MAR, passos * volumeDoPassoEsperado(ficha)).alagado;
+            return ficha.chuva ? uniaoDeMatrizes(mar, alagarPorPontoFixo(terreno, NIVEL_DA_NASCENTE_ESPERADO, nascentes || NASCENTES_DO_TEXTO)) : mar;
+        }
+
+        function niveisEsperados(terreno, ficha, passos, nascentes) {   // o nível de cada casa molhada: o maior entre as águas que a alcançam
+            const mar = encherPelaMinhaConta(terreno, ficha.nivel, FONTES_DO_MAR, passos * volumeDoPassoEsperado(ficha)).alagado;
+            const doNascente = ficha.chuva ? alagarPorPontoFixo(terreno, NIVEL_DA_NASCENTE_ESPERADO, nascentes || NASCENTES_DO_TEXTO) : matrizDeValor(terreno.length, false);
+            return mar.map(function (linha, y) { return linha.map(function (molhada, x) { return molhada ? ficha.nivel : (doNascente[y][x] ? NIVEL_DA_NASCENTE_ESPERADO : 0); }); });
+        }
+
+        function casasPerdidasPelaMinhaConta(alagado) {
+            return CASAS_DO_TEXTO.filter(function (casa) { return alagado[casa.y][casa.x]; }).length;
+        }
+
+        function somaDoTerreno(terreno) {
+            return terreno.reduce(function (soma, linha) { return soma + linha.reduce(function (parcial, altura) { return parcial + altura; }, 0); }, 0);
+        }
+
+        function quadrosDe(duracao) {                     // quadros de 16 ms que a espera pede (o jogo zera o relógio ao esperar)
+            return Math.ceil(duracao / 0.016 - 1e-9);
+        }
+
+        function congelarDeVez(valor) {
+            if (valor !== null && typeof valor === "object" && !Object.isFrozen(valor)) {
+                Object.freeze(valor);
+                Object.keys(valor).forEach(function (chave) { congelarDeVez(valor[chave]); });
+            }
+            return valor;
+        }
+
+        // O relógio falso não precisa pintar 100 casas por quadro (o dia inteiro são ~1.700 quadros): o desenho vira nada, e os casos que
+        // leem o que o desenho escreve no DOM (faixa, painel, botão) ou espiam o canvas chamam desenharVerdadeiro().
+        const desenharVerdadeiro = desenhar;
+        desenhar = function () { };
+
+        // ------------------------------------------------------------
+        // O vigia das máquinas: irPara é o único caminho das tabelas; qualquer mudança de fase que ele não explique é um desvio
+        // ------------------------------------------------------------
+        const chamadasDeIrPara = [];
+        const irParaVerdadeira = irPara;
+        irPara = function (maquina, destino) {
+            const de = maquina === "dia" ? fase : faseDaMare;
+            const mudou = irParaVerdadeira(maquina, destino);
+            chamadasDeIrPara.push({ maquina: maquina, de: de, para: destino, mudou: mudou });
+            return mudou;
+        };
+
+        const vigia = { dia: fase, mare: faseDaMare, chamadasLidas: chamadasDeIrPara.length, mudancas: [] };
+
+        function olharAsMaquinas(motivo) {
+            [["dia", fase], ["mare", faseDaMare]].forEach(function (par) {
+                const maquina = par[0], agora = par[1];
+                let atual = vigia[maquina];
+                chamadasDeIrPara.slice(vigia.chamadasLidas).filter(function (chamada) { return chamada.maquina === maquina && chamada.mudou; }).forEach(function (chamada) {
+                    if (chamada.de !== atual) { vigia.mudancas.push({ maquina: maquina, de: atual, para: chamada.de, via: "direto", motivo: motivo }); atual = chamada.de; }
+                    vigia.mudancas.push({ maquina: maquina, de: atual, para: chamada.para, via: "irPara", motivo: motivo });
+                    atual = chamada.para;
+                });
+                if (atual !== agora) vigia.mudancas.push({ maquina: maquina, de: atual, para: agora, via: "direto", motivo: motivo });
+                vigia[maquina] = agora;
+            });
+            vigia.chamadasLidas = chamadasDeIrPara.length;
+        }
+
+        function apertarTecla(tecla, modificadores) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, modificadores || {}));
+            document.dispatchEvent(evento);
+            olharAsMaquinas("tecla " + tecla);
+            return evento;
+        }
+
+        function quadro(vezes) {
+            for (let i = 0; i < (vezes || 1); i++) { avancarQuadro(16); olharAsMaquinas("quadro"); }
+        }
+
+        function clicar(acao) {
+            const existe = clicarNoBotao(acao);
+            olharAsMaquinas("clique " + acao);
+            return existe;
+        }
+
+        function avancarAte(condicao, limiteDeQuadros) {  // quadros até a condição valer; -1 se passar do limite
+            let quadros = 0;
+            while (!condicao() && quadros < limiteDeQuadros) { quadro(); quadros++; }
+            return condicao() ? quadros : -1;
+        }
+
+        function voltarAoComeco() {                       // o que o Refazer não limpa (giro, câmera, cursor, H, ferramenta) e, por último, o botão Refazer do jogo
+            if (depuracaoLigada) apertarTecla("h");
+            escolherFerramenta("erguer");
+            rotacao = 0;
+            definirCamera(1, 0, 0);
+            cursor = { x: 4, y: 4 };
+            marcada = false;
+            ponteiro = null;
+            dedo = null;
+            giroDaRoda = 0;
+            reiniciar();                                  // por último: o aviso fica sendo o da 1ª ficha
+            olharAsMaquinas("reiniciar");
+            irParaOGiro(0);
+        }
+
+        function fotoDoEstado() {
+            return JSON.stringify({ alturas: alturas, blocos: estadoAtual.blocos });
+        }
+
+        function lerATabua() {                            // o texto da faixa → uma lista de fichas lidas
+            const fichas = [];
+            const leitor = /(\[)?n(\d+) (\d+)×(\d+) \+(\d+)( ☂)?(\])?/g;
+            let achado;
+            while ((achado = leitor.exec(tabua.textContent)) !== null) {
+                fichas.push({ atual: achado[1] === "[", nivel: Number(achado[2]), passos: Number(achado[3]), volume: Number(achado[4]), blocos: Number(achado[5]), chuva: achado[6] !== undefined });
+            }
+            return fichas;
+        }
+
+        // ------------------------------------------------------------
+        // Jogar o dia inteiro pelo relógio falso, conferindo cada instante contra a tábua e a minha conta de água
+        // ------------------------------------------------------------
+        /* plano[i] = jogadas da maré i: [ferramenta, x, y]. Devolve o que aconteceu; os desvios vão em `problemas`. */
+        function jogarODia(plano, rotulo) {
+            voltarAoComeco();
+            const resumo = { problemas: [], blocosNoComeco: [], perdidasAcumuladas: [], terraNoMundo: [], passos: 0, fim: null };
+            const registrar = function (texto) { resumo.problemas.push(rotulo + ": " + texto); };
+            const dentroDe = function (obtido, esperado, nome) { if (obtido < 0 || Math.abs(obtido - esperado) > 1) registrar(nome + " levou " + obtido + " quadros, esperado " + esperado + " ±1"); };
+            let perdidasEsperadas = matrizDeValor(TAMANHO, false);
+            let blocosEsperados = BLOCOS_INICIAIS_ESPERADOS;
+            const terraDoMapa = somaDoTerreno(JSON.parse(ALTURAS_ORIGINAIS));
+            let terraEsperada = terraDoMapa;
+
+            TABUA_DE_MARES.forEach(function (ficha, i) {
+                if (resumo.problemas.length > 12) return;
+                blocosEsperados += ficha.blocos;
+                terraEsperada += ficha.blocos;
+                const nome = "maré " + (i + 1);
+                if (fase !== "ler" || faseDaMare !== "baixa" || indiceDaMare !== i || passoDaMare !== 0) registrar(nome + ": começo em " + fase + "/" + faseDaMare + "/" + indiceDaMare + "/" + passoDaMare);
+                if (estadoAtual.blocos !== blocosEsperados) registrar(nome + ": estoque " + estadoAtual.blocos + ", esperado " + blocosEsperados + " (o que sobrou + os blocos da ficha)");
+                resumo.blocosNoComeco.push(estadoAtual.blocos);
+                desenharVerdadeiro();                         // a faixa e o painel só mudam no desenho: pinta sem passar o relógio
+                if (blocosNoMundo(estadoAtual) !== terraEsperada) registrar(nome + ": a terra do mundo é " + blocosNoMundo(estadoAtual) + ", esperada " + terraEsperada);
+                if (primeiraDiferenca(agua.alagado, alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR))) registrar(nome + ": a água de baixa-mar não é o ponto fixo do nível 1");
+                const faixa = lerATabua();
+                if (faixa.length !== TABUA_DE_MARES.length || faixa.some(function (lida, j) {
+                    const f = TABUA_DE_MARES[j];
+                    return lida.nivel !== f.nivel || lida.passos !== f.passos || lida.volume !== volumeDoPassoEsperado(f) || lida.blocos !== f.blocos || lida.chuva !== f.chuva || lida.atual !== (j === i);
+                })) registrar(nome + ": a faixa da tábua não bate com as fichas e o volume real por passo (" + tabua.textContent + ")");
+                const anuncio = "Maré " + (i + 1) + " de " + TABUA_DE_MARES.length;
+                if (aviso.textContent.indexOf(anuncio) !== 0 || aviso.textContent.indexOf(ficha.passos + " passos de " + volumeDoPassoEsperado(ficha) + " casas") === -1) registrar(nome + ": o aviso da ficha: " + aviso.textContent);
+
+                dentroDe(avancarAte(function () { return fase === "moldar"; }, 400), quadrosDe(TEMPO_DE_LEITURA), nome + ": a leitura");
+                (plano[i] || []).forEach(function (jogada) {
+                    cursor = { x: jogada[1], y: jogada[2] };
+                    apertarTecla(jogada[0] === "erguer" ? "1" : "2");
+                    const antes = fotoDoEstado();
+                    apertarTecla("Enter");
+                    if (fotoDoEstado() === antes) registrar(nome + ": a jogada " + jogada + " foi recusada: " + aviso.textContent);
+                    blocosEsperados += jogada[0] === "erguer" ? -1 : 1;
+                });
+                if (estadoAtual.blocos !== blocosEsperados) registrar(nome + ": depois de moldar o estoque é " + estadoAtual.blocos + ", esperado " + blocosEsperados + " (erguer gasta um, cavar devolve um)");
+                if (blocosNoMundo(estadoAtual) !== terraEsperada) registrar(nome + ": depois de moldar, a terra do mundo é " + blocosNoMundo(estadoAtual) + ", esperada " + terraEsperada);
+                const terreno = JSON.parse(JSON.stringify(alturas));
+
+                quadro(40);                                   // o jogador pensa 0,64 s em 'moldar': o relógio da fase corre, e liberar a maré tem de zerá-lo
+                apertarTecla("m");
+                if (fase !== "mare" || faseDaMare !== "enchente" || passoDaMare !== 0) registrar(nome + ": M não liberou a maré (" + fase + "/" + faseDaMare + "/" + passoDaMare + ")");
+                const nivelDaMare = ficha.nivel;
+                const noPasso0 = casasDaMatriz(agua.alagado);
+                if (FONTES_DO_MAR.some(function (casa) { return !agua.alagado[casa.y][casa.x]; })) registrar(nome + ": no passo 0 o mar não está todo molhado");
+                if (primeiraDiferenca(uniaoDeMatrizes(agua.alagado, aguaEsperada(terreno, ficha, ficha.passos)), aguaEsperada(terreno, ficha, ficha.passos))) registrar(nome + ": no passo 0 há água que a maré cheia não tem");
+                if (noPasso0.length === 0) registrar(nome + ": no passo 0 não há água nenhuma");
+
+                for (let k = 1; k <= ficha.passos; k++) {
+                    dentroDe(avancarAte(function () { return passoDaMare === k; }, 300), quadrosDe(PASSO_DA_MARE), nome + ": o passo " + k + " da enchente");
+                    const diferenca = primeiraDiferenca(agua.alagado, aguaEsperada(terreno, ficha, k));
+                    if (diferenca) registrar(nome + ": a água do passo " + k + " (volume " + k * volumeDoPassoEsperado(ficha) + ") não é a minha conta " + diferenca);
+                    if (faseDaMare !== (k === ficha.passos ? "preamar" : "enchente")) registrar(nome + ": passo " + k + " na fase " + faseDaMare);
+                    if (fase !== "mare") registrar(nome + ": o dia saiu de 'mare' no passo " + k + " (" + fase + ")");
+                    resumo.passos++;
+                }
+                dentroDe(avancarAte(function () { return fase === "contar"; }, 400), quadrosDe(PAUSA_NA_PREAMAR), nome + ": a pausa na preamar");
+                perdidasEsperadas = uniaoDeMatrizes(perdidasEsperadas, aguaEsperada(terreno, ficha, ficha.passos));
+                if (faseDaMare !== "vazante") registrar(nome + ": depois da preamar a maré devia estar em vazante (" + faseDaMare + ")");
+                if (primeiraDiferenca(perdidas, perdidasEsperadas)) registrar(nome + ": as casas perdidas não são a união das marés até aqui " + primeiraDiferenca(perdidas, perdidasEsperadas));
+                const perdidasAteAgora = casasPerdidasPelaMinhaConta(perdidasEsperadas);
+                if (aviso.textContent.indexOf("Preamar: " + perdidasAteAgora + " casas perdidas até agora") !== 0) registrar(nome + ": o aviso da preamar: " + aviso.textContent);
+                resumo.perdidasAcumuladas.push(perdidasAteAgora);
+
+                for (let k = ficha.passos - 1; k >= 0; k--) {
+                    dentroDe(avancarAte(function () { return passoDaMare === k; }, 300), quadrosDe(PASSO_DA_MARE / 2), nome + ": o passo " + k + " da vazante");
+                    const esperada = k >= 1 ? aguaEsperada(terreno, ficha, k) : alagarPorPontoFixo(terreno, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR);
+                    const diferenca = primeiraDiferenca(agua.alagado, esperada);
+                    if (diferenca) registrar(nome + ": a água do passo " + k + " da vazante não é a esperada " + diferenca);
+                    if (k >= 1 && faseDaMare !== "vazante") registrar(nome + ": vazante passo " + k + " na fase " + faseDaMare);
+                }
+                if (faseDaMare !== "baixa") registrar(nome + ": a vazante terminou fora da baixa-mar (" + faseDaMare + ")");
+                if (primeiraDiferenca(perdidas, perdidasEsperadas)) registrar(nome + ": a vazante mexeu nas casas perdidas");
+                desenharVerdadeiro();
+                resumo.terraNoMundo.push(blocosNoMundo(estadoAtual));
+
+                if (i < TABUA_DE_MARES.length - 1) {
+                    const salvas = TOTAL_DE_CASAS - perdidasAteAgora;
+                    if (fase !== "contar") registrar(nome + ": esperava 'contar' à espera do M (" + fase + ")");
+                    if (aviso.textContent.indexOf("Maré " + (i + 1) + " passou, " + salvas + " casas a salvo") !== 0) registrar(nome + ": o aviso da vazante: " + aviso.textContent);
+                    if (botaoDaMare.textContent !== "Seguir") registrar(nome + ": o botão devia dizer Seguir (" + botaoDaMare.textContent + ")");
+                    apertarTecla("m");
+                    if (indiceDaMare !== i + 1 || fase !== "ler") registrar(nome + ": M não chamou a próxima ficha (" + indiceDaMare + "/" + fase + ")");
+                    if (historico.length !== 0) registrar(nome + ": a história de desfazer devia recomeçar");
+                } else {
+                    const salvas = TOTAL_DE_CASAS - perdidasAteAgora;
+                    const veredito = salvas >= META_ESPERADA ? "vencido" : "perdido";
+                    resumo.fim = { fase: fase, salvas: salvas, veredito: veredito };
+                    if (fase !== "fim") registrar(nome + ": depois da última vazante o dia devia estar em 'fim' (" + fase + ")");
+                    if (aviso.textContent.indexOf("Dia " + veredito + ": " + salvas + " de " + TOTAL_DE_CASAS + " casas salvas, meta " + META_ESPERADA) !== 0) registrar("o aviso do fim: " + aviso.textContent);
+                    if (painel.textContent.indexOf("Dia " + veredito) !== 0 || painel.textContent.indexOf("salvas " + salvas + "/" + TOTAL_DE_CASAS) === -1) registrar("o painel do fim: " + painel.textContent);
+                }
+            });
+            return resumo;
+        }
+
+        const TOTAL_DE_CASAS = 3;
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("a tábua é dado: fichas completas, volume real por passo (chuva soma 2), nascente do texto, mapa válido", function () {
+            conferirIgual("o mapa de verdade é válido", MAPA_VALIDO, true);
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferir("há fichas na tábua (" + TABUA_DE_MARES.length + ")", TABUA_DE_MARES.length >= 3);
+            conferir("toda ficha traz nível, passos, volume, chuva e blocos", TABUA_DE_MARES.every(function (ficha) {
+                return [ficha.nivel, ficha.passos, ficha.volume, ficha.blocos].every(function (numero) { return Number.isInteger(numero) && numero >= 0; }) && typeof ficha.chuva === "boolean" && ficha.nivel >= 1 && ficha.passos >= 1;
+            }));
+            conferir("a tábua tem chuva e tem tempo seco", TABUA_DE_MARES.some(function (ficha) { return ficha.chuva; }) && TABUA_DE_MARES.some(function (ficha) { return !ficha.chuva; }));
+            conferirIgual("o bônus da chuva é de 2 casas por passo (GUIA)", BONUS_DA_CHUVA, BONUS_DA_CHUVA_ESPERADO);
+            TABUA_DE_MARES.forEach(function (ficha, i) {
+                conferirIgual("ficha " + (i + 1) + ": volumeDoPasso = volume" + (ficha.chuva ? " + 2 (chuva)" : ""), volumeDoPasso(ficha), volumeDoPassoEsperado(ficha));
+            });
+            conferirIgual("a nascente da água de chuva vem do texto do mapa", textoDasCasas(NASCENTES), textoDasCasas(NASCENTES_DO_TEXTO));
+            conferirIgual("e a água dela só cobre o que é mais baixo que o nível 1", NIVEL_DA_NASCENTE, NIVEL_DA_NASCENTE_ESPERADO);
+            conferirIgual("a meta do dia é salvar 2 casas", META_DO_DIA, META_ESPERADA);
+            conferirIgual("o estoque começa vazio: os blocos chegam com as fichas", BLOCOS_INICIAIS, BLOCOS_INICIAIS_ESPERADOS);
+            conferirIgual("as fontes do mar são as casas de mar do texto", textoDasCasas(CASAS_DO_MAR), textoDasCasas(FONTES_DO_MAR));
+            conferirIgual("as três casas do mapa", textoDasCasas(CASAS_COM_CASA), textoDasCasas(CASAS_DO_TEXTO));
+        });
+
+        testar("as tabelas das máquinas: tudo da tábua do GDD vale, o resto só leva ao reiniciar; transicaoValida lê a tabela; irPara recusa o que não consta", function () {
+            const estados = { dia: ["ler", "moldar", "mare", "contar", "fim"], mare: ["baixa", "enchente", "preamar", "vazante"] };
+            ["dia", "mare"].forEach(function (maquina) {
+                let divergenciaDeLeitura = 0, foraDaBase = [], baseFaltando = [];
+                estados[maquina].forEach(function (de) {
+                    estados[maquina].forEach(function (para) {
+                        const naTabela = TRANSICOES[maquina][de].indexOf(para) !== -1;
+                        if (transicaoValida(maquina, de, para) !== naTabela) divergenciaDeLeitura++;
+                        const naBase = BASE_DAS_MAQUINAS[maquina][de].indexOf(para) !== -1;
+                        if (naBase && !naTabela) baseFaltando.push(de + "→" + para);
+                        if (naTabela && !naBase && para !== ALVO_DO_REINICIAR[maquina]) foraDaBase.push(de + "→" + para);
+                    });
+                });
+                conferirIgual("máquina " + maquina + ": transicaoValida concorda com a tabela em todos os pares", divergenciaDeLeitura, 0);
+                conferirIgual("máquina " + maquina + ": toda transição do GDD consta", baseFaltando.join(" "), "");
+                conferirIgual("máquina " + maquina + ": nenhuma transição extra, fora o reiniciar (→ " + ALVO_DO_REINICIAR[maquina] + ")", foraDaBase.join(" "), "");
+            });
+            voltarAoComeco();
+            const antes = fase + "/" + faseDaMare;
+            conferirIgual("irPara('dia', 'contar') a partir de 'ler' recusa", irPara("dia", "contar"), false);
+            conferirIgual("irPara('mare', 'vazante') a partir da baixa-mar recusa", irPara("mare", "vazante"), false);
+            conferirIgual("recusar não muda a fase", fase + "/" + faseDaMare, antes);
+            conferirIgual("irPara('dia', 'moldar') a partir de 'ler' vale", irPara("dia", "moldar"), true);
+            conferirIgual("e muda a fase", fase, "moldar");
+            conferirIgual("irPara('mare', 'enchente') vale", irPara("mare", "enchente"), true);
+            olharAsMaquinas("teste");
+            voltarAoComeco();
+        });
+
+        testar("funções puras da tábua: receberBlocos soma sem mexer no de antes; acumularPerdidas só ganha; resultadoDoDia pela meta; blocosNoMundo", function () {
+            const antes = congelarDeVez({ alturas: JSON.parse(ALTURAS_ORIGINAIS), blocos: 2 });
+            const depois = receberBlocos(antes, { nivel: 2, passos: 1, volume: 1, chuva: false, blocos: 3 });
+            conferirIgual("receberBlocos soma os blocos da ficha ao que sobrou (2 + 3)", depois.blocos, 5);
+            conferirIgual("e o terreno é o mesmo", JSON.stringify(depois.alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("o estado de antes ficou com 2 blocos", antes.blocos, 2);
+            conferir("devolve um estado novo", depois !== antes);
+            conferirIgual("blocosNoMundo = a terra empilhada + o estoque", blocosNoMundo(antes), somaDoTerreno(antes.alturas) + 2);
+            conferirIgual("o terreno do mapa tem 102 blocos", somaDoTerreno(JSON.parse(ALTURAS_ORIGINAIS)), 102);
+            const perdidasAntes = congelarDeVez(matrizDeValor(TAMANHO, false).map(function (linha, y) { return linha.map(function (valor, x) { return x === 3 && y === 3; }); }));
+            const alagado = matrizDeValor(TAMANHO, false).map(function (linha, y) { return linha.map(function (valor, x) { return x === 5 && y === 5; }); });
+            const juntas = acumularPerdidas(perdidasAntes, alagado);
+            conferirIgual("acumularPerdidas junta as duas (3,3) e (5,5)", textoDasCasas(casasDaMatriz(juntas)), "3,3 5,5");
+            conferirIgual("e devolve uma matriz nova (a de antes ficou com 1)", casasDaMatriz(perdidasAntes).length, 1);
+            conferirIgual("uma água que seca não devolve a casa perdida", textoDasCasas(casasDaMatriz(acumularPerdidas(juntas, matrizDeValor(TAMANHO, false)))), "3,3 5,5");
+            conferirIgual("salvar 2 de 3 vence o dia (a meta)", resultadoDoDia({ total: 3, perdidas: 1, salvas: 2 }), "vencido");
+            conferirIgual("salvar 1 de 3 perde o dia", resultadoDoDia({ total: 3, perdidas: 2, salvas: 1 }), "perdido");
+            conferirIgual("salvar 3 de 3 vence", resultadoDoDia({ total: 3, perdidas: 0, salvas: 3 }), "vencido");
+            conferirIgual("moldar não mexe na nascente nem na casa nem no mar", [moldar(estadoInicial(), "erguer", 4, 4), moldar(estadoInicial(), "cavar", 3, 3), moldar(estadoInicial(), "cavar", 0, 0)].join(","), ",,");
+        });
+
+        testar("MAR COM VOLUME (passo 5) segue valendo: o jogo = o ponto fixo sem volume e = a minha conta com volume, em 12 terrenos × 3 níveis × 7 volumes", function () {
+            semearSorteio(6161);
+            let divergenciasDoConjunto = 0, divergenciasDaOrdem = 0, divergenciasDaBusca = 0, comparados = 0;
+            const exemplos = [];
+            for (let sorteado = 0; sorteado < 12; sorteado++) {
+                const terreno = sorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, sorteado % 2 === 1);
+                [2, 3, 4].forEach(function (nivel) {
+                    const molhado = buscaEmLargura(terreno, nivel, FONTES_DO_MAR).distancia.map(function (linha) { return linha.map(function (distancia) { return distancia >= 0; }); });
+                    if (primeiraDiferenca(molhado, alagarPorPontoFixo(terreno, nivel, FONTES_DO_MAR))) divergenciasDaBusca++;
+                    [0, 1, 5, 10, 17, 40, 300].forEach(function (volume) {
+                        const dele = encherComVolume(terreno, nivel, FONTES_DO_MAR, volume), meu = encherPelaMinhaConta(terreno, nivel, FONTES_DO_MAR, volume);
+                        comparados++;
+                        if (primeiraDiferenca(dele.alagado, meu.alagado)) { divergenciasDoConjunto++; if (exemplos.length < 2) exemplos.push("terreno " + sorteado + " nível " + nivel + " volume " + volume); }
+                        if (textoDasCasas(dele.ordem.filter(function (casa) { return casa.distancia > 0; })) !== textoDasCasas(meu.consumidas)) divergenciasDaOrdem++;
+                    });
+                });
+            }
+            conferirIgual(comparados + " enchentes: o conjunto molhado = a minha conta", divergenciasDoConjunto, 0);
+            conferirIgual("a ordem baixa → alta (altura, distância, índice) = a minha", divergenciasDaOrdem, 0);
+            conferirIgual("sem volume, a busca em largura = o ponto fixo", divergenciasDaBusca, 0);
+            conferir("sem exemplos de divergência: " + exemplos.join(" | "), exemplos.length === 0);
+        });
+
+        testar("AS NASCENTES NA CHUVA: o mar enche com nível e volume, a nascente alaga à parte (nível 1, sem volume), a água de cada casa é a maior; a ordem das fontes não importa (12 terrenos × 2 × 4 passos)", function () {
+            const marGuardado = CASAS_DO_MAR.slice(), nascentesGuardadas = NASCENTES.slice();
+            semearSorteio(7272);
+            let comparados = 0, divergencias = 0, semChuva = 0, invertidas = 0;
+            const exemplos = [];
+            try {
+                for (let sorteado = 0; sorteado < 12; sorteado++) {
+                    const terreno = sorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, sorteado % 2 === 1);
+                    const nascentes = sorteado === 0 ? NASCENTES_DO_TEXTO : sortearFontesNaTerra(1 + sorteado % 3, MAR);
+                    NASCENTES.splice(0, NASCENTES.length, ...nascentes);
+                    [false, true].forEach(function (chuva) {
+                        const ficha = { nivel: 2 + sorteado % 2, passos: 3, volume: 4, chuva: chuva, blocos: 0 };
+                        for (let passos = 0; passos <= 3; passos++) {
+                            const esperada = aguaEsperada(terreno, ficha, passos, nascentes);
+                            const obtida = aguaDaFicha(terreno, ficha, passos).alagado;
+                            comparados++;
+                            const diferenca = primeiraDiferenca(obtida, esperada);
+                            if (diferenca) { divergencias++; if (exemplos.length < 3) exemplos.push("terreno " + sorteado + " chuva " + chuva + " passos " + passos + " " + diferenca); }
+                            if (!chuva && casasDaMatriz(obtida).length !== casasDaMatriz(encherPelaMinhaConta(terreno, ficha.nivel, FONTES_DO_MAR, passos * ficha.volume).alagado).length) semChuva++;
+                            CASAS_DO_MAR.reverse(); NASCENTES.reverse();
+                            if (primeiraDiferenca(aguaDaFicha(terreno, ficha, passos).alagado, esperada)) invertidas++;
+                            CASAS_DO_MAR.reverse(); NASCENTES.reverse();
+                        }
+                    });
+                }
+            } finally {
+                CASAS_DO_MAR.splice(0, CASAS_DO_MAR.length, ...marGuardado);
+                NASCENTES.splice(0, NASCENTES.length, ...nascentesGuardadas);
+            }
+            conferir(comparados + " águas: o jogo = o mar com volume ∪ a nascente sem volume" + (exemplos.length ? " (" + exemplos.join(" | ") + ")" : ""), divergencias === 0);
+            conferirIgual("sem chuva, as nascentes não molham nada", semChuva, 0);
+            conferirIgual("com as fontes na ordem inversa, o resultado é o mesmo", invertidas, 0);
+        });
+
+        testar("O CORREDOR: com a casa ao lado da nascente cavada a 0, o mar de nível 2 ainda passa por ela e molha o corredor de altura 1 depois dela (nos dois sentidos)", function () {
+            const marGuardado = CASAS_DO_MAR.slice(), nascentesGuardadas = NASCENTES.slice();
+            try {
+                [false, true].forEach(function (espelhado) {
+                    const terreno = matrizDeValor(TAMANHO, 4);
+                    const corredor = [0, 1, 1, 1, 0, 0, 1, 1, 1, 4];       // x0 mar; x4 nascente; x5 a casa cavada ao lado dela; x6 a x8, altura 1
+                    corredor.forEach(function (altura, x) { terreno[5][espelhado ? 9 - x : x] = altura; });
+                    CASAS_DO_MAR.splice(0, CASAS_DO_MAR.length, { x: espelhado ? 9 : 0, y: 5 });
+                    NASCENTES.splice(0, NASCENTES.length, { x: espelhado ? 5 : 4, y: 5 });
+                    const ficha = { nivel: 2, passos: 1, volume: 50, chuva: true, blocos: 0 };
+                    const molhadas = textoDasCasas(casasDaMatriz(aguaDaFicha(terreno, ficha, 1).alagado));
+                    const esperadas = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(function (x) { return (espelhado ? 9 - x : x) + ",5"; }).sort(function (a, b) { return Number(a.split(",")[0]) - Number(b.split(",")[0]); }).join(" ");
+                    conferirIgual("corredor " + (espelhado ? "espelhado (mar à direita)" : "(mar à esquerda)") + ": o mar passa pela cova da nascente e molha o resto", molhadas, esperadas);
+                    const depoisDaCova = espelhado ? [3, 2, 1] : [6, 7, 8];
+                    conferir("as casas depois da cova (" + depoisDaCova.join(",") + ") estão molhadas, o que a nascente de nível 1 sozinha nunca faria", depoisDaCova.every(function (x) { return aguaDaFicha(terreno, ficha, 1).alagado[5][x]; }));
+                    conferirIgual("o mesmo corredor sem chuva (só o mar): igual", textoDasCasas(casasDaMatriz(aguaDaFicha(terreno, { nivel: 2, passos: 1, volume: 50, chuva: false, blocos: 0 }, 1).alagado)), esperadas);
+                });
+            } finally {
+                CASAS_DO_MAR.splice(0, CASAS_DO_MAR.length, ...marGuardado);
+                NASCENTES.splice(0, NASCENTES.length, ...nascentesGuardadas);
+            }
+        });
+
+        testar("A NASCENTE NÃO GASTA O VOLUME DO MAR: uma cova de 6 casas ligada à nascente enche inteira mesmo com o mar sem volume nenhum", function () {
+            const marGuardado = CASAS_DO_MAR.slice(), nascentesGuardadas = NASCENTES.slice();
+            try {
+                const terreno = matrizDeValor(TAMANHO, 4);
+                for (let x = 3; x <= 8; x++) terreno[2][x] = 0;                  // a cova: (3..8, 2)
+                terreno[9][9] = 0;                                               // o mar, longe e isolado
+                CASAS_DO_MAR.splice(0, CASAS_DO_MAR.length, { x: 9, y: 9 });
+                NASCENTES.splice(0, NASCENTES.length, { x: 3, y: 2 });
+                const ficha = { nivel: 2, passos: 1, volume: 1, chuva: true, blocos: 0 };
+                const obtida = aguaDaFicha(terreno, ficha, 1).alagado;
+                conferirIgual("a cova inteira (6 casas) mais o mar", textoDasCasas(casasDaMatriz(obtida)), "3,2 4,2 5,2 6,2 7,2 8,2 9,9");
+                const semVolume = aguaDaFicha(terreno, { nivel: 2, passos: 0, volume: 1, chuva: true, blocos: 0 }, 0).alagado;
+                conferirIgual("no passo 0 (volume 0), a nascente já molha a cova", textoDasCasas(casasDaMatriz(semVolume)).indexOf("8,2") !== -1, true);
+            } finally {
+                CASAS_DO_MAR.splice(0, CASAS_DO_MAR.length, ...marGuardado);
+                NASCENTES.splice(0, NASCENTES.length, ...nascentesGuardadas);
+            }
+        });
+
+        testar("O DIA SEM JOGAR, pelo relógio falso: a tábua é aplicada nos instantes certos (nível, passos, volume por passo, pausa, vazante) e perdem-se 0, depois 2, depois 2 (GUIA)", function () {
+            const resumo = jogarODia([], "sem jogar");
+            conferir("nenhum desvio no dia inteiro: " + resumo.problemas.slice(0, 3).join(" | "), resumo.problemas.length === 0);
+            conferirIgual("casas perdidas depois de cada maré (acumuladas)", resumo.perdidasAcumuladas.join(","), "0,2,2");
+            conferirIgual("o estoque no começo de cada maré: o que sobrou + a ficha", resumo.blocosNoComeco.join(","), "1,2,2");
+            conferirIgual("o dia termina em 'fim', perdido (1 salva, a meta é 2)", resumo.fim && resumo.fim.fase + " " + resumo.fim.veredito + " " + resumo.fim.salvas, "fim perdido 1");
+            conferir("a terra do mundo só cresce com as fichas: " + resumo.terraNoMundo.join(","), resumo.terraNoMundo.join(",") === "103,104,104");
+            conferir("foram conferidos " + resumo.passos + " passos de enchente", resumo.passos === TABUA_DE_MARES.reduce(function (soma, ficha) { return soma + ficha.passos; }, 0));
+            apertarTecla("m");
+            conferir("depois do fim, M avisa que o dia acabou: " + aviso.textContent, /dia acabou/i.test(aviso.textContent));
+            conferirIgual("e o dia segue em 'fim'", fase, "fim");
+            apertarTecla("Enter");
+            conferirIgual("aplicar no fim não muda nada", fase, "fim");
+        });
+
+        testar("O ESTOQUE PASSA DE UMA MARÉ PARA A SEGUINTE: guardar o bloco salva as 3 casas; fechar um portão só na 1ª maré perde mais que não jogar; um por maré não basta", function () {
+            const guardar = jogarODia([[], [["erguer", 8, 4], ["erguer", 4, 8]], []], "guardar o bloco");
+            conferir("guardar: nenhum desvio. " + guardar.problemas.slice(0, 3).join(" | "), guardar.problemas.length === 0);
+            conferirIgual("guardar: o estoque no começo de cada maré (1, 1 + 1 guardado, 0 depois de gastar 2)", guardar.blocosNoComeco.join(","), "1,2,0");
+            conferirIgual("guardar: nenhuma casa perdida em maré nenhuma", guardar.perdidasAcumuladas.join(","), "0,0,0");
+            conferirIgual("guardar: dia vencido com as 3 salvas", guardar.fim && guardar.fim.veredito + " " + guardar.fim.salvas, "vencido 3");
+            conferirIgual("a terra cresceu só com as fichas (102 + 1 + 1 + 0)", guardar.terraNoMundo.join(","), "103,104,104");
+
+            const umPortao = jogarODia([[["erguer", 8, 4]], [], []], "um portão só");
+            conferir("um portão: nenhum desvio. " + umPortao.problemas.slice(0, 3).join(" | "), umPortao.problemas.length === 0);
+            conferir("fechar um só na 1ª maré perde mais que não jogar (" + umPortao.perdidasAcumuladas[0] + " > 0)", umPortao.perdidasAcumuladas[0] > 0);
+            conferirIgual("um portão: perde as 3 no fim", umPortao.perdidasAcumuladas.join(","), "2,3,3");
+
+            const umPorMare = jogarODia([[["erguer", 8, 4]], [["erguer", 4, 8]], []], "um portão por maré");
+            conferir("um por maré: nenhum desvio. " + umPorMare.problemas.slice(0, 3).join(" | "), umPorMare.problemas.length === 0);
+            conferirIgual("um por maré: o estoque no começo de cada maré (o que chegou foi gasto)", umPorMare.blocosNoComeco.join(","), "1,1,0");
+            conferirIgual("um por maré: a 1ª maré já perdeu 2", umPorMare.perdidasAcumuladas.join(","), "2,2,2");
+        });
+
+        testar("desfazer só volta até o começo da maré; a jogada de uma maré anterior fica; a casa perdida continua perdida na maré seguinte", function () {
+            voltarAoComeco();
+            avancarAte(function () { return fase === "moldar"; }, 400);
+            cursor = { x: 8, y: 4 };
+            apertarTecla("1");
+            apertarTecla("Enter");
+            conferirIgual("erguer (8,4) valeu: altura 2", alturas[4][8], 2);
+            conferirIgual("e gastou o bloco", estadoAtual.blocos, 0);
+            apertarTecla("m");
+            avancarAte(function () { return fase === "contar" && faseDaMare === "baixa"; }, 2000);
+            apertarTecla("m");
+            conferirIgual("a segunda ficha chegou", indiceDaMare, 1);
+            conferirIgual("o portão ficou erguido na maré 2", alturas[4][8], 2);
+            apertarTecla("z");
+            conferir("desfazer não volta a jogada da maré anterior: " + aviso.textContent, /nada para desfazer nesta maré/i.test(aviso.textContent));
+            conferirIgual("o portão continua", alturas[4][8], 2);
+            const jaPerdidas = casasDaMatriz(perdidas).length;
+            conferir("há casas já alagadas na maré 1 (" + jaPerdidas + ")", jaPerdidas > 0);
+            voltarAoComeco();
+        });
+
+        testar("AS MÁQUINAS SÓ FAZEM TRANSIÇÕES DA TABELA, o reiniciar incluído, de qualquer fase, e o relógio da fase recomeça", function () {
+            const alcancar = {
+                "ler": function () { },
+                "moldar": function () { avancarAte(function () { return fase === "moldar"; }, 400); },
+                "enchente": function () { avancarAte(function () { return fase === "moldar"; }, 400); apertarTecla("m"); avancarAte(function () { return passoDaMare === 1; }, 300); },
+                "preamar": function () { avancarAte(function () { return fase === "moldar"; }, 400); apertarTecla("m"); avancarAte(function () { return faseDaMare === "preamar"; }, 600); quadro(40); },
+                "vazante": function () { avancarAte(function () { return fase === "moldar"; }, 400); apertarTecla("m"); avancarAte(function () { return fase === "contar"; }, 1200); quadro(8); },
+                "baixa depois da maré": function () { avancarAte(function () { return fase === "moldar"; }, 400); apertarTecla("m"); avancarAte(function () { return fase === "contar" && faseDaMare === "baixa"; }, 2000); quadro(30); },
+                "fim": function () { jogarODia([], "para chegar ao fim"); },
+            };
+            Object.keys(alcancar).forEach(function (onde) {
+                voltarAoComeco();
+                alcancar[onde]();
+                const antes = fase + "/" + faseDaMare;
+                const relogioAntes = relogioDaFase;
+                apertarTecla("n");
+                const depois = fase + "/" + faseDaMare;
+                conferirIgual("N a partir de " + onde + " (" + antes + ") volta a ler/baixa", depois, "ler/baixa");
+                conferirIgual("  e a primeira ficha está de volta", indiceDaMare + "/" + passoDaMare, "0/0");
+                conferirIgual("  o terreno é o original", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+                conferirIgual("  o estoque é o da 1ª ficha", estadoAtual.blocos, BLOCOS_INICIAIS_ESPERADOS + TABUA_DE_MARES[0].blocos);
+                conferirIgual("  nenhuma casa perdida", casasDaMatriz(perdidas).length, 0);
+                conferirIgual("  sem história para desfazer", historico.length, 0);
+                conferirIgual("  a água volta à baixa-mar", primeiraDiferenca(agua.alagado, alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR)), "");
+                conferirIgual("  o relógio da fase zera (estava em " + relogioAntes.toFixed(2) + ")", relogioDaFase, 0);
+                const quadrosAteMoldar = avancarAte(function () { return fase === "moldar"; }, 400);
+                conferir("  a leitura dura a duração inteira (" + quadrosAteMoldar + " quadros, esperado " + quadrosDe(TEMPO_DE_LEITURA) + " ±1)", Math.abs(quadrosAteMoldar - quadrosDe(TEMPO_DE_LEITURA)) <= 1);
+            });
+            const problemas = [];
+            vigia.mudancas.forEach(function (mudanca) {
+                const nome = mudanca.maquina + " " + mudanca.de + "→" + mudanca.para + " (" + mudanca.motivo + ", " + mudanca.via + ")";
+                if (TRANSICOES[mudanca.maquina][mudanca.de] === undefined || TRANSICOES[mudanca.maquina][mudanca.de].indexOf(mudanca.para) === -1) problemas.push("fora da tabela: " + nome);
+                else if (BASE_DAS_MAQUINAS[mudanca.maquina][mudanca.de].indexOf(mudanca.para) === -1 && mudanca.para !== ALVO_DO_REINICIAR[mudanca.maquina]) problemas.push("não é do GDD nem reiniciar: " + nome);
+            });
+            chamadasDeIrPara.forEach(function (chamada) {
+                const naTabela = TRANSICOES[chamada.maquina][chamada.de].indexOf(chamada.para) !== -1;
+                if (chamada.mudou !== naTabela) problemas.push("irPara(" + chamada.maquina + ", " + chamada.para + ") a partir de " + chamada.de + " devolveu " + chamada.mudou + " com a tabela dizendo " + naTabela);
+            });
+            const diretos = vigia.mudancas.filter(function (mudanca) { return mudanca.via === "direto"; });
+            conferir(vigia.mudancas.length + " mudanças de fase vigiadas, " + chamadasDeIrPara.length + " chamadas de irPara: todas dentro da tabela. " + problemas.slice(0, 3).join(" | "), problemas.length === 0 && vigia.mudancas.length > 80);
+            conferir("e nenhuma mudança fora do irPara (o reiniciar passa pela tabela): " + diretos.slice(0, 3).map(function (d) { return d.maquina + " " + d.de + "→" + d.para + " em " + d.motivo; }).join(" | "), diretos.length === 0);
+            voltarAoComeco();
+        });
+
+        testar("mexer durante a leitura pula a leitura (ler → moldar pela tabela), e a maré só pode ser liberada em 'moldar'; durante a água, M avisa; no fim, M avisa", function () {
+            voltarAoComeco();
+            conferirIgual("o dia começa lendo a ficha", fase, "ler");
+            cursor = { x: 4, y: 3 };
+            apertarTecla("1");
+            apertarTecla("Enter");
+            conferirIgual("aplicar durante a leitura pula a leitura", fase, "moldar");
+            conferirIgual("e a jogada vale (4,3): altura 2", alturas[3][4], 2);
+            apertarTecla("m");
+            conferirIgual("M libera a maré", fase + "/" + faseDaMare, "mare/enchente");
+            apertarTecla("m");
+            conferir("M durante a água avisa: " + aviso.textContent, /espere a água/i.test(aviso.textContent));
+            conferirIgual("e a água segue na enchente", fase + "/" + faseDaMare, "mare/enchente");
+            apertarTecla("Enter");
+            conferir("aplicar durante a maré avisa: " + aviso.textContent, /agora não/i.test(aviso.textContent));
+            apertarTecla("z");
+            conferir("desfazer durante a maré avisa: " + aviso.textContent, /maré não se desfaz/i.test(aviso.textContent));
+            voltarAoComeco();
+        });
+
+        testar("A FAIXA DA TÁBUA mostra o volume real por passo (na chuva, o volume + 2), a ficha de agora entre colchetes, e acompanha a ficha", function () {
+            voltarAoComeco();
+            desenharVerdadeiro();
+            const lidas = lerATabua();
+            conferirIgual("a faixa lista " + TABUA_DE_MARES.length + " fichas", lidas.length, TABUA_DE_MARES.length);
+            TABUA_DE_MARES.forEach(function (ficha, i) {
+                const lida = lidas[i];
+                conferir("ficha " + (i + 1) + ": n" + ficha.nivel + " " + ficha.passos + "×" + volumeDoPassoEsperado(ficha) + " +" + ficha.blocos + (ficha.chuva ? " ☂" : "") + " (faixa: " + (lida ? JSON.stringify(lida) : "faltou") + ")",
+                    lida && lida.nivel === ficha.nivel && lida.passos === ficha.passos && lida.volume === volumeDoPassoEsperado(ficha) && lida.blocos === ficha.blocos && lida.chuva === ficha.chuva);
+            });
+            conferir("só a ficha de agora está entre colchetes (a 1ª)", lidas.map(function (lida) { return lida.atual; }).join() === "true" + ",false".repeat(TABUA_DE_MARES.length - 1));
+            apertarTecla("m");
+            avancarAte(function () { return fase === "contar" && faseDaMare === "baixa"; }, 2000);
+            apertarTecla("m");
+            desenharVerdadeiro();
+            conferirIgual("depois de Seguir, os colchetes vão para a 2ª ficha", lerATabua().map(function (lida) { return lida.atual; }).join(), "false,true" + ",false".repeat(TABUA_DE_MARES.length - 2));
+            voltarAoComeco();
+        });
+
+        testar("cada botão [data-acao] responde a um clique de verdade: ferramentas, aplicar, desfazer, Maré/Seguir, refazer, giro, zoom, ver e as 4 setas (pela TELA, nos 4 giros)", function () {
+            voltarAoComeco();
+            const clicadas = new Set();
+            function clicarEAnotar(acao) {                  // só a primeira vez de cada ação vira linha de resultado
+                const existe = clicar(acao);
+                if (!clicadas.has(acao) || !existe) conferir("o botão " + acao + " existe e recebe o clique", existe);
+                clicadas.add(acao);
+            }
+            function pressionado(ferramentaDoBotao) {
+                return document.querySelector('[data-ferramenta="' + ferramentaDoBotao + '"]').getAttribute("aria-pressed");
+            }
+
+            cursor = { x: 4, y: 3 };
+            clicarEAnotar("escolherCavar");
+            conferirIgual("Cavar escolhe a ferramenta", ferramenta, "cavar");
+            conferirIgual("Cavar fica aria-pressed", pressionado("cavar") + "/" + pressionado("erguer"), "true/false");
+            clicarEAnotar("aplicar");
+            conferirIgual("Aplicar cava (4,3): altura 1 → 0", alturas[3][4], 0);
+            conferirIgual("e devolve um bloco (1 + 1)", estadoAtual.blocos, 2);
+            clicarEAnotar("desfazer");
+            conferirIgual("Desfazer devolve a altura 1", alturas[3][4], 1);
+            conferirIgual("e o estoque 1", estadoAtual.blocos, 1);
+            clicarEAnotar("escolherErguer");
+            conferirIgual("Erguer escolhe a ferramenta", ferramenta, "erguer");
+            conferirIgual("Erguer fica aria-pressed", pressionado("erguer") + "/" + pressionado("cavar"), "true/false");
+            clicarEAnotar("aplicar");
+            conferirIgual("Aplicar ergue (4,3): altura 1 → 2", alturas[3][4], 2);
+            conferirIgual("e gasta o bloco (0)", estadoAtual.blocos, 0);
+            clicarEAnotar("reiniciar");
+            conferirIgual("Refazer volta ao terreno original", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("e ao estoque da 1ª ficha", estadoAtual.blocos, 1);
+            clicarEAnotar("avancar");
+            conferirIgual("Maré libera a maré (fase 'mare', enchente)", fase + "/" + faseDaMare, "mare/enchente");
+            avancarAte(function () { return fase === "contar" && faseDaMare === "baixa"; }, 2000);
+            desenharVerdadeiro();
+            conferirIgual("depois da maré o botão diz Seguir", botaoDaMare.textContent, "Seguir");
+            clicarEAnotar("avancar");
+            conferirIgual("Seguir chama a próxima ficha", indiceDaMare + "/" + fase, "1/ler");
+            desenharVerdadeiro();
+            conferirIgual("e o botão volta a dizer Maré", botaoDaMare.textContent, "Maré");
+            clicarEAnotar("reiniciar");
+            conferirIgual("Refazer volta de dentro do dia à 1ª ficha", indiceDaMare + "/" + fase, "0/ler");
+
+            semearSorteio(4403);
+            const partidas = [{ x: 0, y: 0 }, { x: 9, y: 9 }, { x: 0, y: 9 }, { x: 9, y: 0 }];
+            for (let i = 0; i < 16; i++) partidas.push({ x: Math.floor(Math.random() * TAMANHO), y: Math.floor(Math.random() * TAMANHO) });
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, paradas = 0, continuouMarcada = 0;
+                partidas.forEach(function (partida) {
+                    SETAS_DA_TELA.forEach(function (seta) {
+                        cursor = { x: partida.x, y: partida.y };
+                        marcada = true;
+                        clicarEAnotar(seta[0]);
+                        const centro = girarComTamanho(partida.x + 0.5, partida.y + 0.5, giro, TAMANHO);
+                        const alvo = casaDoCentroGiradoNoApoio(centro[0] + seta[1], centro[1] + seta[2], giro, TAMANHO);
+                        if (!alvo) paradas++;
+                        const esperada = alvo || partida;
+                        if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                            erros++;
+                            if (primeiro === null) primeiro = seta[0] + " a partir de (" + partida.x + "," + partida.y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                        }
+                        if (marcada) continuouMarcada++;
+                    });
+                });
+                conferir("giro " + giro * 90 + "°: " + partidas.length * 4 + " cliques nas setas andam uma casa pela tela (ou ficam na borda: " + paradas + ")", erros === 0 && paradas > 0, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: mexer o cursor desmarca", continuouMarcada, 0);
+            });
+
+            clicarEAnotar("girarDireita");
+            conferirIgual("⟳ gira 90°", rotacao, 1);
+            clicarEAnotar("girarEsquerda");
+            clicarEAnotar("girarEsquerda");
+            conferirIgual("⟲ duas vezes: 270°", rotacao, 3);
+            irParaOGiro(0);
+            clicarEAnotar("aproximar");
+            conferirIgual("Perto aproxima", camera.zoom, 1.5);
+            clicarEAnotar("afastar");
+            conferirIgual("Longe afasta", camera.zoom, 1);
+            clicarEAnotar("alternarVer");
+            conferirIgual("Ver liga o H", depuracaoLigada, true);
+            clicarEAnotar("alternarVer");
+            conferirIgual("e outro clique desliga", depuracaoLigada, false);
+
+            conferirIgual("nenhum botão ficou sem teste: as ações da página = as clicadas", acoesDosBotoes().sort().join(" "), Array.from(clicadas).sort().join(" "));
+            voltarAoComeco();
+        });
+
+        testar("segurar Enter (repeat) age uma vez só", function () {
+            voltarAoComeco();
+            cursor = { x: 2, y: 3 };                       // altura 3
+            apertarTecla("2");
+            apertarTecla("Enter");
+            conferirIgual("Enter cava uma vez: 3 → 2", alturas[3][2], 2);
+            let semPreventDefault = 0;
+            for (let i = 0; i < 5; i++) if (!apertarTecla("Enter", { repeat: true }).defaultPrevented) semPreventDefault++;
+            conferirIgual("Enter segurado (5 repetições) não cava mais", alturas[3][2], 2);
+            conferirIgual("e o navegador não age na repetição", semPreventDefault, 0);
+            apertarTecla(" ");
+            conferirIgual("Espaço novo cava de novo: 2 → 1", alturas[3][2], 1);
+            voltarAoComeco();
+        });
+
+        testar("ÁGUA COM PAREDE (mar e chuva): onde a água se ergue sobre uma vizinha da frente mais baixa, seca ou com água mais baixa, uma parede translúcida desce; nos outros lados, nenhuma", function () {
+            voltarAoComeco();
+            const nascentesGuardadas = NASCENTES.slice();
+            let esperadasNoTotal = 0, faltando = [], sobrando = [], curtas = [], quadros = 0;
+            function conferirAgua(rotulo, terreno, ficha, passos, giro) {
+                const alagado = aguaEsperada(terreno, ficha, passos, NASCENTES), niveis = niveisEsperados(terreno, ficha, passos, NASCENTES);
+                definirAgua(ficha.nivel, casasDaMatriz(alagado).map(function (casa) { return { x: casa.x, y: casa.y, nivel: niveis[casa.y][casa.x] }; }));
+                const resultado = conferirParedesDaAgua(rotulo, alagado, function (x, y) { return niveis[y][x]; }, giro, desenharVerdadeiro);
+                quadros++;
+                esperadasNoTotal += resultado.esperadas;
+                faltando = faltando.concat(resultado.faltando);
+                sobrando = sobrando.concat(resultado.sobrando);
+                curtas = curtas.concat(resultado.curtas);
+            }
+            try {
+                const fichaSeca = { nivel: 2, passos: 3, volume: 5, chuva: false, blocos: 0 }, fichaChuvosa = { nivel: 2, passos: 2, volume: 5, chuva: true, blocos: 0 };
+                rodarNosQuatroGiros(function (giro) {
+                    [1, 2, 3].forEach(function (passos) { conferirAgua("mapa seco passo " + passos + " giro " + giro * 90 + "°", alturas, fichaSeca, passos, giro); });
+                    [1, 2].forEach(function (passos) { conferirAgua("mapa chuva passo " + passos + " giro " + giro * 90 + "°", alturas, fichaChuvosa, passos, giro); });
+                });
+                semearSorteio(1313);
+                for (let sorteado = 0; sorteado < 8; sorteado++) {
+                    const terreno = sortearTerrenoDaIlha(MAR, true), giro = sorteado % 4;
+                    NASCENTES.splice(0, NASCENTES.length, ...sortearFontesNaTerra(2, MAR));
+                    alturas = terreno;
+                    irParaOGiro(giro);
+                    conferirAgua("terreno " + sorteado + " seco giro " + giro * 90 + "°", terreno, { nivel: 2 + sorteado % 2, passos: 3, volume: 4, chuva: false, blocos: 0 }, 2, giro);
+                    conferirAgua("terreno " + sorteado + " chuva giro " + giro * 90 + "°", terreno, { nivel: 2 + sorteado % 2, passos: 3, volume: 4, chuva: true, blocos: 0 }, 2, giro);
+                }
+                irParaOGiro(0);
+            } finally {
+                NASCENTES.splice(0, NASCENTES.length, ...nascentesGuardadas);
+            }
+            conferir("a amostra tem " + esperadasNoTotal + " paredes esperadas em " + quadros + " quadros", esperadasNoTotal > 200);
+            conferir("toda parede esperada foi pintada (faltam " + faltando.length + ": " + faltando.slice(0, 3).join(" | ") + ")", faltando.length === 0);
+            conferir("nenhuma parede onde a vizinha da frente é igual ou mais alta (sobram " + sobrando.length + ": " + sobrando.slice(0, 3).join(" | ") + ")", sobrando.length === 0);
+            conferir("a parede desce do nível até a vizinha ou até o terreno da própria casa, o que for mais alto", curtas.length === 0, curtas.slice(0, 3).join(" | "));
+            voltarAoComeco();
+        });
+
+        // ------------------------------------------------------------
+        // O passo inteiro em iframes (apoio-dique.js): movimento reduzido e layout
+        // ------------------------------------------------------------
+        const ANTES_DO_MOVIMENTO_REDUZIDO = "window.matchMedia = function (consulta) { return { matches: /reduce/.test(consulta), media: consulta, addEventListener: function () {}, removeEventListener: function () {} }; };";
+
+        async function conferirMovimentoReduzido() {
+            const quadroDoJogo = await abrirPassoNoIframe("06-fichas", MARCACAO_DO_PASSO, ANTES_DO_MOVIMENTO_REDUZIDO, 390, 750);
+            try {
+                const janela = quadroDoJogo.contentWindow;
+                pararODesenhoDaJanela(janela);
+                const ler = function (expressao) { return janela.eval(expressao); };
+                const estado = function () { return ler("fase") + "/" + ler("faseDaMare") + "/" + ler("passoDaMare") + "/" + ler("agua.alagado").reduce(function (soma, linha) { return soma + linha.filter(Boolean).length; }, 0); };
+                conferirIgual("o iframe vê prefers-reduced-motion", ler("movimentoReduzido"), true);
+                let instante = 16;
+                darQuadro(janela, instante);
+                instante += 16; darQuadro(janela, instante);
+                conferir("antes do M a maré não começa sozinha (dia em '" + ler("fase") + "', maré em '" + ler("faseDaMare") + "')", (ler("fase") === "ler" || ler("fase") === "moldar") && ler("faseDaMare") === "baixa");
+                const ficha = ler("TABUA_DE_MARES[0]");
+                teclaNaJanela(janela, "m");
+                const depoisDaPrimeira = estado();
+                conferir("a primeira tecla M libera a maré e não a leva ao fim (" + depoisDaPrimeira + ")", ler("fase") === "mare" && ler("faseDaMare") === "enchente" && ler("passoDaMare") <= 1);
+                instante = passarTempoNaJanela(janela, instante, 10);
+                conferirIgual("10 s de quadros depois, a água não andou sozinha", estado(), depoisDaPrimeira);
+                const passosVistos = [ler("passoDaMare")];
+                let teclas = 1, problemas = [];
+                while (!(ler("fase") === "contar" && ler("faseDaMare") === "baixa") && ler("fase") !== "fim" && teclas < 40) {
+                    const antes = estado(), faseAntes = ler("faseDaMare"), passoAntes = ler("passoDaMare");
+                    teclaNaJanela(janela, "m");
+                    teclas++;
+                    instante += 16; darQuadro(janela, instante);
+                    const logoDepois = estado();
+                    if (logoDepois === antes) problemas.push("a tecla " + teclas + " não fez nada (" + antes + ")");
+                    if (faseAntes === "enchente" && ler("passoDaMare") !== passoAntes + 1) problemas.push("a tecla " + teclas + " na enchente devia dar um passo (" + passoAntes + " → " + ler("passoDaMare") + ")");
+                    if (faseAntes === "enchente" && ler("passoDaMare") <= ficha.passos) {
+                        const esperada = aguaEsperada(JSON.parse(ALTURAS_ORIGINAIS), ficha, ler("passoDaMare"));
+                        const diferenca = primeiraDiferenca(ler("agua.alagado"), esperada);
+                        if (diferenca) problemas.push("a água do passo " + ler("passoDaMare") + " não é a minha " + diferenca);
+                    }
+                    instante = passarTempoNaJanela(janela, instante, 1.5);
+                    if (estado() !== logoDepois) problemas.push("1,5 s depois da tecla " + teclas + " a maré andou sozinha (" + logoDepois + " → " + estado() + ")");
+                    passosVistos.push(ler("passoDaMare"));
+                }
+                conferir("cada tecla dá UM passo e a maré nunca anda sem tecla: " + problemas.slice(0, 3).join(" | "), problemas.length === 0);
+                conferir("a maré só chega ao fim depois de várias teclas (" + teclas + "; passos vistos " + passosVistos.join(",") + ")", teclas >= ficha.passos + 2 && ler("fase") === "contar");
+            } finally {
+                quadroDoJogo.remove();
+            }
+        }
+
+        const CONFIGURACAO_DO_LAYOUT = {
+            pasta: "06-fichas",
+            corpo: MARCACAO_DO_PASSO,
+            quantidadeDeBotoes: 15,
+            proporcaoDoCanvas: 384 / 252,
+            mensagens: ["", "Zoom: perto", "Maré 1 passou, 3 casas a salvo. M chama a próxima ficha", "Vista girada para 270 graus. Casas escondidas: 2",
+                "Maré 3 de 3: nível 2, 2 passos de 7 casas, com chuva, chegam 0 blocos",
+                "Dia perdido: 1 de 3 casas salvas, meta 2. N recomeça. Marcada: casa 7, 7, altura 1, escondida atrás de um bloco"],
+        };
+
+        async function principal() {
+            await testarNoIframe("movimento reduzido", conferirMovimentoReduzido);
+            await testarNoIframe("layout 390×750", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 390, 750); });
+            await testarNoIframe("layout 360×640", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 360, 640); });
+            testar("sem erro de console e com o estado restaurado", function () {
+                voltarAoComeco();
+                conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+                conferirIgual("o terreno de partida nunca foi mexido", JSON.stringify(ALTURAS_INICIAIS), ALTURAS_ORIGINAIS);
+                conferirIgual("a nascente do jogo voltou ao texto", textoDasCasas(NASCENTES), textoDasCasas(NASCENTES_DO_TEXTO));
+                conferirIgual("o mar do jogo voltou ao texto", textoDasCasas(CASAS_DO_MAR), textoDasCasas(FONTES_DO_MAR));
+                conferirIgual("o giro final é 0", rotacao, 0);
+                conferirIgual("nenhum aviso de erro sobrou", errosDeConsole.join(" | "), "");
+                conferir("o laço segue vivo", avancarQuadro(16));
+            });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

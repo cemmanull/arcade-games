@@ -24,6 +24,7 @@
     <pre id="leitura" aria-live="off"></pre>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
 
     <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
     <script>
@@ -301,8 +302,7 @@
         function fichasEsperadas(escondido) {
             const fichas = [];
             listaDeDesenho.forEach(function (casa) {
-                fichas.push("C " + casa.x + "," + casa.y);
-                if (casa.altura < NIVEL_DA_AGUA) fichas.push("A " + casa.x + "," + casa.y);
+                fichas.push((casa.altura < NIVEL_DA_AGUA ? "A " : "C ") + casa.x + "," + casa.y);      // a casa alagada pinta leito e água, não caixa
                 if (casa.x === cursor.x && casa.y === cursor.y) fichas.push("K");
             });
             if (escondido) fichas.push("k");
@@ -566,11 +566,11 @@
                 const fichas = fichasDoQuadro(registro).filter(function (ficha) { return ficha !== "K" && ficha !== "k"; });
                 const esperadas = [];
                 listaDeDesenho.forEach(function (casa) {
-                    esperadas.push("C " + casa.x + "," + casa.y);
-                    if (casa.altura < NIVEL_DA_AGUA) esperadas.push("A " + casa.x + "," + casa.y);
+                    esperadas.push((casa.altura < NIVEL_DA_AGUA ? "A " : "C ") + casa.x + "," + casa.y);
                 });
-                conferirIgual("giro " + giro * 90 + "°: caixa da casa, depois a água dela, e só então a casa seguinte", fichas.join("|"), esperadas.join("|"));
-                conferirIgual("giro " + giro * 90 + "°: 100 caixas, uma por casa (a água não passa por desenharCaixa)", registro.filter(function (operacao) { return operacao.tipo === "caixa"; }).length, TAMANHO * TAMANHO);
+                const secas = alturas.reduce(function (soma, linha) { return soma + linha.filter(function (altura) { return altura >= NIVEL_DA_AGUA; }).length; }, 0);
+                conferirIgual("giro " + giro * 90 + "°: cada casa pinta uma vez na sua vez: a seca como caixa, a alagada como leito e água", fichas.join("|"), esperadas.join("|"));
+                conferirIgual("giro " + giro * 90 + "°: uma caixa por casa seca (" + secas + "); a alagada não passa por desenharCaixa", registro.filter(function (operacao) { return operacao.tipo === "caixa"; }).length, secas);
             });
         });
 
@@ -579,7 +579,7 @@
             const caixas = gravarQuadros(1).filter(function (operacao) { return operacao.tipo === "caixa"; });
             const erradas = caixas.filter(function (caixa) { return caixa.de !== 0 || caixa.ate !== alturas[caixa.y][caixa.x] || caixa.contorno !== COR_DO_CONTORNO; });
             conferirIgual("caixas fora de 0 até a altura, ou sem o contorno escuro", erradas.length, 0);
-            conferirIgual("100 caixas", caixas.length, 100);
+            conferirIgual("uma caixa por casa seca (52 de 100: as 48 alagadas pintam leito e água)", caixas.length, 52);
         });
 
         // Confere a água de UM quadro gravado contra a conta feita aqui (casas, topo, bordas).
@@ -1038,6 +1038,19 @@
             conferir("o aviso explica que o mapa é inválido", /Mapa inválido/.test(ultimo.ultimoAviso), ultimo.ultimoAviso);
             conferirIgual("depois dos testes o mapa de verdade ainda é válido", verificarMapa(), true);
             errosDeConsole.length = avisosAntes;
+        });
+
+        testar("o LEITO da água também é plano (passos 2 a 4 não têm parede): um só preenchimento por casa alagada, o topo no nível da água, nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const chamadas = espiarPreenchimentosPorChamada("desenharLeito", function () { avancarQuadro(16); });
+                const alagadas = alturas.reduce(function (soma, linha) { return soma + linha.filter(function (altura) { return altura < NIVEL_DA_AGUA; }).length; }, 0);
+                conferirIgual("giro " + giro * 90 + "°: uma chamada de desenharLeito por casa alagada", chamadas.length, alagadas);
+                const erradas = chamadas.filter(function (chamada) {
+                    const esperado = meusCantos(chamada.args[0].x, chamada.args[0].y, NIVEL_DA_AGUA, giro, TAMANHO);
+                    return chamada.preenchimentos.length !== 1 || chamada.preenchimentos[0].pontos.length !== 4 || !chamada.preenchimentos[0].pontos.every(function (ponto, i) { return mesmoPonto(ponto, esperado[i]); });
+                });
+                conferirIgual("giro " + giro * 90 + "°: cada leito é um único losango no nível da água (sem laterais)", erradas.length, 0);
+            });
         });
 
         testar("sem erro de console na carga e nos quadros", function () {
