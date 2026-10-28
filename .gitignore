@@ -10,3 +10,7 @@
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Progresso local do trabalho (decisão do usuário): nunca versionar
+TODO.md
+HANDOFF.md
