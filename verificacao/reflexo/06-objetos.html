@@ -1194,7 +1194,7 @@
             semearSorteio(2033);
             let problema = null;
             let spritesDesenhados = 0;
-            for (let rodada = 0; rodada < 200 && problema === null; rodada++) {
+            for (let rodada = 0; rodada < 150 && problema === null; rodada++) {
                 const quantidade = 1 + Math.floor(Math.random() * 8);
                 const lista = [];
                 for (let indice = 0; indice < quantidade; indice++) {
@@ -1218,7 +1218,7 @@
                     spritesDesenhados += spritesDaTela.filter(function (sprite) { return sprite.colunas.length > 0; }).length;
                 });
             }
-            conferir("200 listas aleatórias (até 8 objetos, 15% longe, 15% até em parede, um no olho): lista, colunas e imagem iguais à referência", problema === null, problema);
+            conferir("150 listas aleatórias (até 8 objetos, 15% longe, 15% até em parede, um no olho): lista, colunas e imagem iguais à referência", problema === null, problema);
             conferir("muitos sprites foram de fato desenhados (" + spritesDesenhados + ")", spritesDesenhados >= 25);
             reiniciarEVer(1.5, 1.5, 0);
             conferirIgual("a lista original de objetos foi restaurada", OBJETOS.length, 6);

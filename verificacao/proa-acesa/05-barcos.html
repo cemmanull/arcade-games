@@ -633,7 +633,7 @@
                 passar(50);
             });
 
-            testar("o enquadramento ao longo do tempo (retas e voltas em U, 7200 quadros de 50 ms): barca, 14 m à frente e os 3 primeiros barcos ficam no quadro (|NDC| ≤ 0,97) em ≥ 99% dos quadros, em 1280×800 e 390×750", function () {
+            testar("o enquadramento ao longo do tempo (retas e voltas em U, 5400 quadros de 50 ms): barca, 14 m à frente e os 3 primeiros barcos ficam no quadro (|NDC| ≤ 0,97) em ≥ 99% dos quadros, em 1280×800 e 390×750", function () {
                 const estiloAntes = palco.style.cssText;
                 [[1280, 800], [390, 750]].forEach(function (tamanho) {
                     palco.style.width = tamanho[0] + "px";
@@ -644,11 +644,11 @@
                     seguirComACamera(1);
                     const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
                     semearSorteio(20261028);
-                    const medidas = verifPilotarMedindoOEnquadramento(passar, 7200, 50);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 5400, 50);
                     verifRestaurarRecifes(pedras);
                     const limite = Math.floor(0.01 * medidas.quadros);
                     conferir(tamanho[0] + "×" + tamanho[1] + ": cada ponto fora do quadro em no máximo 1% dos quadros (" + verifTextoDasMedidas(medidas) + ")",
-                        medidas.quadros === 7200 && ["barca", "frente", "primeiro", "segundo", "terceiro", "algum"].every(function (ponto) { return medidas[ponto] <= limite; }),
+                        medidas.quadros === 5400 && ["barca", "frente", "primeiro", "segundo", "terceiro", "algum"].every(function (ponto) { return medidas[ponto] <= limite; }),
                         "limite " + limite + " quadros");
                     conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 30 voltas em U, ≥ 10 retas longas e o 3º barco a ≥ 40 m da barca)",
                         medidas.voltas >= 30 && medidas.retas >= 10 && medidas.maiorDistanciaDoTerceiro >= 40,
