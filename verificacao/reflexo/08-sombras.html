@@ -66,6 +66,54 @@
             return this.id === "jogo" ? contextoDaPlanta : obterContextoDeVerdade.call(this, tipo, opcoes);
         };
     </script>
+    <!-- O setTimeout é falso e anda com o relógio do teste: os avisos em fila (avisar) saem por ele, sem esperar tempo real.
+         Tudo que chega ao #aviso é gravado (cada escrita, inclusive o vazio entre dois avisos): é isso que o leitor de tela recebe. -->
+    <script>
+        const temporizadoresFalsos = [];
+        let relogioDosTemporizadores = 0;
+        let numeroDoProximoTemporizador = 1;
+
+        window.setTimeout = function (funcao, espera) {
+            const numero = numeroDoProximoTemporizador++;
+            temporizadoresFalsos.push({ numero: numero, vence: relogioDosTemporizadores + (espera || 0), funcao: funcao });
+            return numero;
+        };
+
+        // Dispara, na ordem em que vencem, o que vence dentro do intervalo (o que o disparo agenda também entra, se couber).
+        function passarTempoDosAvisos(milissegundos) {
+            const fim = relogioDosTemporizadores + milissegundos;
+            for (;;) {
+                const vencidos = temporizadoresFalsos.filter(function (temporizador) { return temporizador.vence <= fim; });
+                if (vencidos.length === 0) {
+                    break;
+                }
+                const proximo = vencidos.reduce(function (menor, temporizador) { return temporizador.vence < menor.vence ? temporizador : menor; });
+                temporizadoresFalsos.splice(temporizadoresFalsos.indexOf(proximo), 1);
+                relogioDosTemporizadores = Math.max(relogioDosTemporizadores, proximo.vence);
+                proximo.funcao();
+            }
+            relogioDosTemporizadores = fim;
+        }
+
+        // Cada quadro do teste também faz passar o tempo dos avisos (primeiro o que vence, depois o quadro).
+        const avancarQuadroDoApoio = avancarQuadro;
+        avancarQuadro = function (milissegundos) {
+            passarTempoDosAvisos(milissegundos);
+            return avancarQuadroDoApoio(milissegundos);
+        };
+
+        const escritasNoAviso = [];
+        const descritorDoTexto = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+        Object.defineProperty(document.getElementById("aviso"), "textContent", {
+            configurable: true,
+            get: function () { return descritorDoTexto.get.call(this); },
+            set: function (texto) {
+                descritorDoTexto.set.call(this, texto);
+                escritasNoAviso.push({ texto: texto, instante: relogioDosTemporizadores });
+            }
+        });
+    </script>
+
     <script src="../../reflexo/08-sombras/script.js"></script>
 
     <script>
@@ -156,19 +204,39 @@
             return document.getElementById("aviso").textContent;
         }
 
+        function marcarAvisos() {
+            return escritasNoAviso.length;
+        }
+
+        // Os textos que chegaram ao #aviso depois da marca (o vazio entre dois avisos não conta).
+        function anunciadosDesde(marca) {
+            return escritasNoAviso.slice(marca).filter(function (escrita) { return escrita.texto !== ""; });
+        }
+
+        function textosAnunciadosDesde(marca) {
+            return anunciadosDesde(marca).map(function (escrita) { return escrita.texto; });
+        }
+
+        // Deixa a fila de avisos acabar sozinha, pelo relógio falso (cabem 1 + 4 avisos, um por segundo).
+        function esvaziarAvisos() {
+            passarTempoDosAvisos(10000);
+        }
+
         // Estado limpo pelas portas do jogo: sala inicial, 3 vidas, nenhum ponto, nenhuma sombra e NENHUM nascimento marcado.
+        // Deixa também a fila de avisos acabar (o "Sala reiniciada" não fica ocupando o painel para o aviso do teste).
         function limpar() {
             fimDeJogo = false;
             vidas = VIDAS_ESPERADAS;
             pontos = 0;
             receptoresPontuados.clear();
             reiniciarSala();
+            esvaziarAvisos();
             proximoNascimento = Infinity;
             avancarQuadro(16);
         }
 
         function novaSombra(x, y, estado) {
-            const sombra = { tipo: "sombra", x: x, y: y, estado: estado, desde: tempoDeJogo, exposicao: 0, escala: 1, alvoX: x, alvoY: y, anterior: -1 };
+            const sombra = { tipo: "sombra", x: x, y: y, estado: estado, desde: tempoDeJogo, exposicao: 0, escala: 1, alvoX: x, alvoY: y, anterior: -1, vindaDe: -1 };
             sombras.push(sombra);
             return sombra;
         }
@@ -661,6 +729,7 @@
             conferirIgual("antes do R: 2 vidas", vidas, VIDAS_ESPERADAS - 1);
             conferirIgual("e a porta aberta", portasAbertas.size, 1);
 
+            esvaziarAvisos();
             teclar("r");
             conferirIgual("vidas guardadas", vidas, VIDAS_ESPERADAS - 1);
             conferirIgual("pontos guardados", pontos, PONTOS_DO_RECEPTOR_ESPERADOS);
@@ -671,12 +740,402 @@
             conferirIgual("o zelador volta ao J", jogador.x + "," + jogador.y, "1.5,1.5");
             conferirIgual("invulnerabilidade zerada", tempoDeJogo < invulneravelAte, false);
             conferirIgual("a luz é a do começo", luz.segmentos.length + "," + luz.acesos.size, "3,0");
-            conferirIgual("o aviso diz Sala reiniciada", textoDoAviso(), "Sala reiniciada");
+            conferirIgual("o aviso diz Sala reiniciada (na hora: a fila já tinha acabado)", textoDoAviso(), "Sala reiniciada");
             botaoDe("reiniciar").click();
             conferirIgual("o botão Reiniciar faz o mesmo", sala === salaInicial && vidas === VIDAS_ESPERADAS - 1 && pontos === PONTOS_DO_RECEPTOR_ESPERADOS, true);
 
             resolverOQuebraCabeca();
             conferirIgual("resolver de novo depois do R não paga o receptor outra vez", pontos, PONTOS_DO_RECEPTOR_ESPERADOS);
+        });
+
+        // A fila de avisos (avisar): dois avisos no mesmo instante fariam o leitor de tela ler só o último, e o mesmo texto
+        // de novo não muda nada para ele. Então: o primeiro na hora, os outros um por segundo, o painel vazio no intervalo.
+        testar("fila de avisos: o primeiro aparece na hora, os outros um por segundo com o painel vazio entre eles; o repetido é anunciado de novo", function () {
+            esvaziarAvisos();
+            const marca = marcarAvisos();
+            avisar("Espelho girado");
+            conferirIgual("o primeiro aparece na hora", textoDoAviso(), "Espelho girado");
+            avisar("Espelho girado");
+            avisar("Porta aberta");
+            conferirIgual("os outros dois esperam: o painel ainda mostra o primeiro", textoDoAviso(), "Espelho girado");
+            passarTempoDosAvisos(500);
+            conferirIgual("e meio segundo depois também", textoDoAviso(), "Espelho girado");
+            esvaziarAvisos();
+
+            const anunciados = anunciadosDesde(marca);
+            conferirIgual("os três foram anunciados, na ordem, inclusive o texto repetido", anunciados.map(function (escrita) { return escrita.texto; }).join(" | "), "Espelho girado | Espelho girado | Porta aberta");
+            const intervalos = anunciados.slice(1).map(function (escrita, posicao) { return escrita.instante - anunciados[posicao].instante; });
+            conferir("entre um aviso e o seguinte passa pelo menos 1 s, e só um pouco mais (" + intervalos + " ms)", intervalos.length === 2 && intervalos.every(function (intervalo) { return intervalo >= 1000 && intervalo <= 1200; }));
+            const escritas = escritasNoAviso.slice(marca).map(function (escrita) { return escrita.texto === "" ? "vazio" : "texto"; }).join(",");
+            conferirIgual("o painel é esvaziado entre dois avisos (é o que faz o repetido ser lido de novo) e no fim", escritas, "texto,vazio,texto,vazio,texto,vazio");
+            conferirIgual("no fim o painel está vazio", textoDoAviso(), "");
+
+            const marcaDepois = marcarAvisos();
+            avisar("Porta fechada");
+            conferirIgual("com a fila vazia, um aviso novo volta a aparecer na hora", textoDoAviso(), "Porta fechada");
+            esvaziarAvisos();
+            conferirIgual("e foi o único", textosAnunciadosDesde(marcaDepois).join(" | "), "Porta fechada");
+        });
+
+        testar("fila de avisos: guarda no máximo 4 à espera, os mais recentes; o resto é descartado", function () {
+            esvaziarAvisos();
+            const marca = marcarAvisos();
+            for (let numero = 0; numero <= 10; numero++) {
+                avisar("Aviso " + numero);
+            }
+            esvaziarAvisos();
+            conferirIgual("o que estava no painel mais os 4 últimos (os 6 do meio se perdem)", textosAnunciadosDesde(marca).join(" | "), "Aviso 0 | Aviso 7 | Aviso 8 | Aviso 9 | Aviso 10");
+            conferirIgual("a fila esvaziou: nada mais é anunciado depois", textoDoAviso(), "");
+
+            const marcaDoQuatro = marcarAvisos();
+            for (let numero = 0; numero <= 4; numero++) {
+                avisar("Aviso " + numero);
+            }
+            esvaziarAvisos();
+            conferirIgual("1 no painel e 4 à espera: nenhum se perde", textosAnunciadosDesde(marcaDoQuatro).join(" | "), "Aviso 0 | Aviso 1 | Aviso 2 | Aviso 3 | Aviso 4");
+        });
+
+        // ---- o corpo faz sombra (GDD 4.7 e 11): ficar no feixe nunca é abrigo ----
+
+        function tentarAteContato(sombra, tetoEmSegundos) {
+            const vidasAntes = vidas;
+            const gasto = ate(function () { return vidas < vidasAntes || sombra.estado === "dissolve"; }, tetoEmSegundos);
+            return { gasto: gasto, tocou: vidas < vidasAntes, dissolveu: sombra.estado === "dissolve" };
+        }
+
+        // A sombra fica parada no ponto durante `duracao` segundos; devolve se dissolveu e quanto de luz acumulou.
+        function expostaParada(sombra, duracao) {
+            let dissolveuEm = null;
+            const inicio = tempoDeJogo;
+            const x = sombra.x;
+            const y = sombra.y;
+            for (let contador = 0; contador < Math.round(duracao * 1000 / 16) && dissolveuEm === null; contador++) {
+                sombra.x = sombra.alvoX = x;
+                sombra.y = sombra.alvoY = y;
+                avancarQuadro(16);
+                dissolveuEm = sombra.estado === "dissolve" ? tempoDeJogo - inicio : null;
+            }
+            return { dissolveuEm: dissolveuEm, exposicao: sombra.exposicao };
+        }
+
+        testar("o corpo faz sombra: com o zelador NO feixe, a sombra que chega ao longo do feixe pelo lado de trás dele TOCA em vez de se desfazer", function () {
+            [["do sul", 3.5, 9.5], ["do norte", 3.5, 3.5]].forEach(function (origem) {
+                limpar();
+                posar(3.5, 6.5, 0);   // em cima do trecho vertical do feixe (x = 3,5, de y = 5,5 a 8,5)
+                const sombra = novaSombra(origem[1], origem[2], "persegue");
+                const resultado = tentarAteContato(sombra, 8);
+                conferir("vinda " + origem[0] + ": tocou, sem se dissolver (" + JSON.stringify(resultado) + ")", resultado.tocou && !resultado.dissolveu);
+                conferirIgual("vinda " + origem[0] + ": uma vida a menos e nenhum ponto de sombra", vidas + "," + pontos, (VIDAS_ESPERADAS - 1) + ",0");
+            });
+        });
+
+        testar("o corpo faz sombra: o zelador um pouco fora do eixo do feixe (x = 3,8), em três alturas, também não protege a sombra que chega pelo escuro", function () {
+            [5.9, 6.5, 7.2].forEach(function (altura) {
+                [["do sul", 3.5, 9.5], ["do norte", 3.5, 3.5]].forEach(function (origem) {
+                    if (altura === 7.2 && origem[0] === "do norte") {
+                        return;   // aí o trecho aceso antes do zelador tem mais de meia casa: a luz tem tempo de queimar, de propósito
+                    }
+                    limpar();
+                    posar(3.8, altura, 0);
+                    const sombra = novaSombra(origem[1], origem[2], "persegue");
+                    const resultado = tentarAteContato(sombra, 8);
+                    conferir("zelador em (3,8; " + altura + "), sombra " + origem[0] + ": tocou, sem se dissolver (" + JSON.stringify(resultado) + ")", resultado.tocou && !resultado.dissolveu);
+                });
+            });
+        });
+
+        testar("o corpo faz sombra: depois do zelador a cadeia está no escuro; antes dele e longe dele, o feixe continua sendo a arma", function () {
+            limpar();
+            posar(3.5, 6.5, 0);   // o feixe: (1,5; 5,5) → (3,5; 5,5) → (3,5; 8,5) → (1; 8,5). O zelador está no segundo trecho.
+            const atras = expostaParada(novaSombra(3.5, 8.0, "ronda"), 3);
+            conferirIgual("parada 3 s no trecho depois do zelador: sem exposição e viva", atras.dissolveuEm === null && atras.exposicao === 0, true);
+
+            limpar();
+            posar(3.5, 6.5, 0);
+            const noUltimoTrecho = expostaParada(novaSombra(2.0, 8.5, "ronda"), 3);
+            conferirIgual("parada no último trecho da cadeia (o terceiro, também depois do zelador): sem exposição", noUltimoTrecho.dissolveuEm === null && noUltimoTrecho.exposicao === 0, true);
+
+            limpar();
+            posar(3.5, 6.5, 0);
+            const antes = expostaParada(novaSombra(3.5, 5.2, "ronda"), 3);
+            conferir("parada no trecho aceso antes do zelador, a 1,3 casa dele: dissolve (" + antes.dissolveuEm + " s)", antes.dissolveuEm !== null && antes.dissolveuEm >= SEGUNDOS_DE_EXPOSICAO_ESPERADOS - 1e-9 && antes.dissolveuEm <= SEGUNDOS_DE_EXPOSICAO_ESPERADOS + 0.03);
+            conferirIgual("e valeu os 50 pontos", pontos, PONTOS_DA_SOMBRA_ESPERADOS);
+
+            limpar();
+            posar(3.5, 6.5, 0);
+            const noPrimeiro = expostaParada(novaSombra(2.0, 5.5, "ronda"), 3);
+            conferir("parada no primeiro trecho, longe do zelador (1,8 casa): dissolve (" + noPrimeiro.dissolveuEm + " s)", noPrimeiro.dissolveuEm !== null);
+        });
+
+        testar("o corpo faz sombra: a menos de 1 casa do zelador (que está na luz) nada queima; a 1 casa ou mais, queima", function () {
+            [[3.5, 5.7, 0.8], [3.3, 5.6, 0.92], [3.5, 5.85, 0.65]].forEach(function (ponto) {
+                limpar();
+                posar(3.5, 6.5, 0);
+                const resultado = expostaParada(novaSombra(ponto[0], ponto[1], "ronda"), 3);
+                conferirIgual("a " + ponto[2] + " casa dele, em cima do feixe: sem exposição, viva", resultado.dissolveuEm === null && resultado.exposicao === 0, true);
+            });
+            limpar();
+            posar(3.5, 6.5, 0);
+            const aUmaCasa = expostaParada(novaSombra(3.5, 5.4, "ronda"), 3);
+            conferir("a 1,1 casa dele, em cima do feixe: dissolve (" + aUmaCasa.dissolveuEm + " s)", aUmaCasa.dissolveuEm !== null);
+        });
+
+        testar("o corpo só faz sombra com o zelador na luz: fora do feixe, a sombra a menos de 1 casa dele queima normalmente", function () {
+            limpar();
+            posar(4.4, 7.0, 0);   // a 0,9 do feixe (x = 3,5): fora da luz (meia casa)
+            const sombra = novaSombra(3.5, 7.0, "ronda");   // a 0,9 do zelador, no feixe
+            const resultado = expostaParada(sombra, 3);
+            conferir("dissolve em 0,5 s de luz (" + resultado.dissolveuEm + " s)", resultado.dissolveuEm !== null && resultado.dissolveuEm <= SEGUNDOS_DE_EXPOSICAO_ESPERADOS + 0.03);
+            conferirIgual("e pontua", pontos, PONTOS_DA_SOMBRA_ESPERADOS);
+        });
+
+        testar("o corpo faz sombra só na arma: receptor e porta continuam vendo o feixe INTEIRO com o zelador em cima dele", function () {
+            limpar();
+            resolverOQuebraCabeca();
+            conferirIgual("resolvido: o receptor aceso e a porta aberta", luz.acesos.size + "," + portasAbertas.size, "1,1");
+            const pontosDoReceptor = pontos;
+            const trechosAntes = JSON.stringify(luz.segmentos);
+            posar(3.5, 4.0, 0);   // em cima do trecho vertical da luz resolvida (x = 3,5, de y = 5,5 a 2,5)
+            segundos(2);
+            conferirIgual("2 s de zelador no feixe: o receptor segue aceso e a porta aberta", luz.acesos.size + "," + portasAbertas.size, "1,1");
+            conferirIgual("a luz é a mesma, trecho a trecho", JSON.stringify(luz.segmentos), trechosAntes);
+            conferirIgual("e nenhum ponto a mais nem a menos", pontos, pontosDoReceptor);
+
+            const nasCostas = expostaParada(novaSombra(4.3, 2.5, "ronda"), 3);   // no trecho que leva ao receptor, depois do zelador
+            conferirIgual("a sombra no trecho que vai ao receptor, atrás do zelador, não queima", nasCostas.dissolveuEm === null && nasCostas.exposicao === 0, true);
+            const antesDele = expostaParada(novaSombra(2.5, 5.5, "ronda"), 3);   // no trecho horizontal, antes dele
+            conferir("a sombra no trecho antes do zelador queima (" + antesDele.dissolveuEm + " s)", antesDele.dissolveuEm !== null);
+            conferirIgual("o receptor continua aceso", luz.acesos.size, 1);
+        });
+
+        // ---- o Espaço e o botão que tem o foco ----
+
+        testar("Espaço com o foco num botão: depois de um clique gira o espelho (e não aperta o botão); depois do Tab aperta o botão", function () {
+            limpar();
+            posar(2.5, 5.5, 0);
+            const botao = botaoDe("reiniciar");
+            const comoOTecladoFaz = function (tecla, tipo) {
+                const evento = new KeyboardEvent(tipo, { key: tecla, bubbles: true, cancelable: true });
+                botao.dispatchEvent(evento);
+                return evento;
+            };
+
+            botao.dispatchEvent(new Event("pointerdown", { bubbles: true }));   // o clique do mouse que deu o foco ao botão
+            const salaAntes = sala;
+            const descida = comoOTecladoFaz(" ", "keydown");
+            const subida = comoOTecladoFaz(" ", "keyup");
+            conferirIgual("depois de um clique no botão, o Espaço gira o espelho à frente", sala !== salaAntes, true);
+            conferirIgual("o zelador não saiu do lugar", jogador.x + "," + jogador.y, "2.5,5.5");
+            conferirIgual("o Espaço ao descer cancela o padrão do navegador (não rola a página)", descida.defaultPrevented, true);
+            conferirIgual("e ao SOLTAR também (é aí que o navegador apertaria o botão focado pelo mouse)", subida.defaultPrevented, true);
+
+            apertarTecla("Tab");   // o jogador passou a navegar pelo teclado
+            const salaDoTab = sala;
+            const descidaNoTab = comoOTecladoFaz(" ", "keydown");
+            const subidaNoTab = comoOTecladoFaz(" ", "keyup");
+            conferirIgual("com o foco vindo do Tab o jogo NÃO gira o espelho", sala === salaDoTab, true);
+            conferirIgual("e deixa o navegador apertar o botão: não cancela o Espaço (descer nem soltar)", descidaNoTab.defaultPrevented || subidaNoTab.defaultPrevented, false);
+
+            botao.dispatchEvent(new Event("pointerdown", { bubbles: true }));   // um clique novo desliga o "veio do Tab"
+            comoOTecladoFaz(" ", "keydown");
+            conferirIgual("um clique novo e o Espaço volta a girar", sala !== salaDoTab, true);
+
+            const antesDoTeclado = sala;
+            apertarTecla(" ");
+            conferirIgual("e, fora de botão, o Espaço sempre gira", sala !== antesDoTeclado, true);
+
+            apertarTecla("Tab");   // deixa a página como o teclado a deixaria
+            limpar();
+        });
+
+        // ---- o feixe é luz: o que está na frente dele o esconde ----
+
+        testar("uma sombra NA FRENTE do feixe não é coberta por ele; uma sombra ATRÁS do feixe é", function () {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const colunaDoMeio = larguraDaVisao / 2;
+            const ehFeixe = function (pixel) { return CORES_DO_FEIXE.indexOf(pixel) !== -1; };
+            limpar();
+            posar(2.5, 7.0, -Math.PI / 2);   // olhando para o norte: o trecho horizontal do feixe (y = 5,5) está a 1,5 casa
+            const daFrente = novaSombra(2.5, 6.0, "ronda");   // a 1 casa: entre o zelador e o feixe
+            quadrosComSombraParada(daFrente, 2);
+            const doSprite = spritesDaTela.filter(function (sprite) { return sprite.objeto === daFrente; })[0];
+            conferir("a sombra da frente cobre a coluna do meio, a 1,0 casa", doSprite !== undefined && doSprite.colunas.indexOf(colunaDoMeio) !== -1 && perto(doSprite.profundidade, 1.0, 0.1));
+            const pixelDaFrente = pixels[olhos * larguraDaVisao + colunaDoMeio];
+            conferir("à frente do feixe: o pixel do meio, na altura dos olhos, NÃO tem cor de feixe (0x" + pixelDaFrente.toString(16) + ")", !ehFeixe(pixelDaFrente));
+
+            limpar();
+            posar(2.5, 7.0, -Math.PI / 2);
+            const deTras = novaSombra(2.5, 4.5, "ronda");   // a 2,5 casas: depois do feixe
+            quadrosComSombraParada(deTras, 2);
+            const pixelDeTras = pixels[olhos * larguraDaVisao + colunaDoMeio];
+            conferir("atrás do feixe: o pixel do meio É cor de feixe (0x" + pixelDeTras.toString(16) + ")", ehFeixe(pixelDeTras));
+        });
+
+        // ---- portas: a sombra nunca fica dentro de uma casa sólida ----
+
+        function fecharAPorta() {
+            sala = salaComEspelhoGirado(sala, 3, 5);   // o espelho (3, 5) volta a descer: o feixe não chega mais ao receptor
+            refazerLuz();
+        }
+
+        // Anda a sombra, quadro a quadro, até `condicao`; devolve true se chegou lá a tempo (no máximo 6 s de jogo).
+        function andarAte(condicao) {
+            for (let contador = 0; contador < 400; contador++) {
+                avancarQuadro(16);
+                if (condicao()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function naCasaSolida(sombra) {
+            return ehSolida(Math.floor(sombra.x), Math.floor(sombra.y));
+        }
+
+        testar("portas: a porta fecha com a sombra DENTRO dela e a sombra volta ao lado de onde vinha; nenhum quadro a deixa em casa sólida", function () {
+            limpar();
+            resolverOQuebraCabeca();
+            conferirIgual("a porta (5, 4) abriu", portasAbertas.has(indice(5, 4)), true);
+            posar(8.5, 4.5, 0);   // do lado leste: a sombra vem do oeste, pela porta
+            const sombra = novaSombra(4.5, 4.5, "persegue");
+            let dentroDaSolidaAntes = false;
+            const chegouNaPorta = andarAte(function () { dentroDaSolidaAntes = dentroDaSolidaAntes || naCasaSolida(sombra); return sombra.x >= 5.6 && sombra.x < 5.9; });
+            conferir("a sombra entrou na porta aberta (x = " + sombra.x.toFixed(2) + ")", chegouNaPorta);
+            conferirIgual("até aqui nunca esteve em casa sólida", dentroDaSolidaAntes, false);
+
+            fecharAPorta();
+            let emCasaSolida = false;
+            let passouParaLeste = false;
+            avancarQuadro(16);
+            conferirIgual("a porta fechou", portasAbertas.size, 0);
+            conferir("no quadro em que a porta fechou a sombra já está fora da casa sólida (" + sombra.x.toFixed(2) + ", " + sombra.y.toFixed(2) + ")", !naCasaSolida(sombra));
+            conferirIgual("e do lado de onde vinha: a coluna 4 (oeste)", Math.floor(sombra.x), 4);
+            for (let contador = 0; contador < 300; contador++) {
+                avancarQuadro(16);
+                emCasaSolida = emCasaSolida || naCasaSolida(sombra);
+                passouParaLeste = passouParaLeste || sombra.x >= 5;
+            }
+            conferirIgual("nos 5 s seguintes nenhum quadro a deixa em casa sólida", emCasaSolida, false);
+            conferirIgual("e a porta fechada não a deixa passar para o leste", passouParaLeste, false);
+        });
+
+        testar("portas: a porta fecha antes de a sombra entrar nela (o alvo era a porta aberta): a sombra não entra em casa sólida nem atravessa", function () {
+            limpar();
+            resolverOQuebraCabeca();
+            posar(8.5, 4.5, 0);
+            const sombra = novaSombra(4.5, 4.5, "persegue");
+            const caminhando = andarAte(function () { return sombra.x >= 4.7 && sombra.x < 4.9; });
+            conferir("a sombra caminha para a porta (x = " + sombra.x.toFixed(2) + ")", caminhando);
+            fecharAPorta();
+            let emCasaSolida = false;
+            let passouDaPorta = false;
+            for (let contador = 0; contador < 400; contador++) {
+                avancarQuadro(16);
+                emCasaSolida = emCasaSolida || naCasaSolida(sombra);
+                passouDaPorta = passouDaPorta || sombra.x >= 5;
+            }
+            conferirIgual("a porta fechou", portasAbertas.size, 0);
+            conferirIgual("nenhum quadro a deixa em casa sólida", emCasaSolida, false);
+            conferirIgual("e ela não passa para o leste", passouDaPorta, false);
+        });
+
+        // ---- fim de jogo ----
+
+        testar("fim de jogo: sem contorno nem 'invulnerável', as outras sombras não tiram mais vida e o espelho não gira até o R", function () {
+            limpar();
+            vidas = 1;
+            posar(1.5, 1.5, 0.8);
+            novaSombra(1.8, 1.5, "persegue");
+            novaSombra(1.2, 1.5, "persegue");
+            novaSombra(1.5, 1.8, "persegue");
+            quadros(3);
+            conferirIgual("fim de jogo", fimDeJogo, true);
+            conferirIgual("0 vidas, não negativas (as outras sombras coladas não tiraram mais nada)", vidas, 0);
+            conferirIgual("o contorno de invulnerabilidade não está ligado", palco.classList.contains("invulneravel"), false);
+            conferir("o painel diz o fim, não 'Invulnerável': " + JSON.stringify(montarPainel().split("\n")[2]), montarPainel().indexOf("Invulner") === -1 && montarPainel().indexOf("Fim de jogo") !== -1);
+            alternarPlanta(true);
+            quadros(1);
+            conferir("a leitura do H diz 'vulnerável', não 'invulnerável': " + JSON.stringify(leitura.textContent.split("\n")[4]), leitura.textContent.indexOf("invulnerável") === -1 && leitura.textContent.indexOf("vulnerável") !== -1);
+            alternarPlanta(false);
+            quadros(1);
+            conferirIgual("e a invulnerabilidade de verdade também acabou (o jogo não está congelado dentro dela)", tempoDeJogo < invulneravelAte, false);
+
+            const salaAntes = sala;
+            const pontosAntes = pontos;
+            posar(2.5, 5.5, 0);
+            conferirIgual("o zelador ao alcance do espelho (3, 5)", alvo !== null && alvo.coluna === 3 && alvo.linha === 5, true);
+            esvaziarAvisos();
+            const marca = marcarAvisos();
+            teclar("e");
+            conferirIgual("E não gira o espelho", sala, salaAntes);
+            conferirIgual("e o aviso diz por quê, na hora", textoDoAviso(), "Fim de jogo: R recomeça");
+            apertarTecla(" ");
+            conferirIgual("o Espaço também não", sala, salaAntes);
+            botaoDe("espelho").click();
+            conferirIgual("nem o botão Espelho", sala, salaAntes);
+            esvaziarAvisos();
+            conferirIgual("cada tentativa é anunciada (a fila guarda as três)", textosAnunciadosDesde(marca).join(" | "), "Fim de jogo: R recomeça | Fim de jogo: R recomeça | Fim de jogo: R recomeça");
+            posar(2.5, 2.5, 0);
+            teclar("e");
+            conferirIgual("nenhum ponto de receptor", pontos, pontosAntes);
+            conferirIgual("a luz continua a do começo", luz.segmentos.length + "," + luz.acesos.size, "3,0");
+
+            teclar("r");
+            conferir("R recomeça: 3 vidas, 0 pontos, sem fim", vidas === VIDAS_ESPERADAS && pontos === 0 && fimDeJogo === false);
+            posar(2.5, 5.5, 0);
+            teclar("e");
+            conferirIgual("e o espelho volta a girar", sala !== salaInicial, true);
+        });
+
+        // ---- a primeira sombra da sala ----
+
+        testar("a primeira sombra da sala nasce na fenda que o campo alcança; as seguintes podem nascer atrás da porta", function () {
+            let todasNaAlcancavel = true;
+            const desvios = [];
+            for (let semente = 1; semente <= 40; semente++) {
+                semearSorteio(semente * 7919);
+                limpar();
+                posar(1.5, 1.5, 0.8);
+                proximoNascimento = tempoDeJogo;
+                avancarQuadro(16);
+                const primeira = sombras[0];
+                if (primeira === undefined || primeira.x !== 4.5 || primeira.y !== 9.5 || campoDeDistancia[indice(4, 9)] <= 0) {
+                    todasNaAlcancavel = false;
+                    desvios.push(semente + ":" + (primeira === undefined ? "nenhuma" : primeira.x + "," + primeira.y));
+                }
+            }
+            conferir("em 40 sorteios a primeira nasce sempre em (4,5; 9,5), que o campo alcança. Fora disso: " + desvios.join(" "), todasNaAlcancavel);
+
+            let nasceuNoLeste = false;
+            for (let semente = 1; semente <= 40 && !nasceuNoLeste; semente++) {
+                semearSorteio(semente * 104729);
+                limpar();
+                posar(1.5, 1.5, 0.8);
+                proximoNascimento = tempoDeJogo;
+                avancarQuadro(16);
+                const primeira = sombras[0];
+                proximoNascimento = tempoDeJogo;
+                primeira.x = primeira.alvoX = 4.5;
+                primeira.y = primeira.alvoY = 9.5;
+                avancarQuadro(16);
+                nasceuNoLeste = sombras.some(function (sombra) { return sombra.x === 14.5 && sombra.y === 1.5; });
+            }
+            conferir("a segunda sombra ainda pode nascer na fenda do leste, atrás da porta fechada", nasceuNoLeste);
+
+            let primeirasDepoisDoR = 0;
+            for (let rodada = 0; rodada < 10; rodada++) {
+                semearSorteio(rodada * 31 + 5);
+                teclar("r");
+                posar(1.5, 1.5, 0.8);
+                proximoNascimento = tempoDeJogo;
+                avancarQuadro(16);
+                const nascida = sombras[0];
+                primeirasDepoisDoR += sombras.length === 1 && nascida.x === 4.5 && nascida.y === 9.5 ? 1 : 0;
+                proximoNascimento = tempoDeJogo;
+                avancarQuadro(16);   // a segunda: o R seguinte a descarta
+            }
+            conferirIgual("depois de reiniciar a sala (R) a primeira da sala nova volta a nascer onde o campo alcança, 10 vezes em 10", primeirasDepoisDoR, 10);
         });
 
         testar("nascimento: a primeira aos 2 s numa fenda longe do zelador, no máximo 2 vivas, 12 s entre uma e outra", function () {
@@ -707,9 +1166,25 @@
                 avancarQuadro(16);
             }
             conferirIgual("2 vivas e nascimento vencido há 1 s: continuam 2", sombras.length, MAXIMO_DE_SOMBRAS);
+
+            // No teto o relógio de nascimento não corre: a reposição vem 12 s DEPOIS da baixa, não no quadro seguinte.
             sombras.splice(sombras.indexOf(b), 1);
-            avancarQuadro(16);
+            const baixa = tempoDeJogo;
+            let nasceuAntesDeHora = false;
+            while (tempoDeJogo - baixa < INTERVALO_ENTRE_NASCIMENTOS - 0.1) {
+                a.x = a.alvoX = 13.5; a.y = a.alvoY = 5.5;
+                avancarQuadro(16);
+                nasceuAntesDeHora = nasceuAntesDeHora || sombras.length > 1;
+            }
+            conferirIgual("11,9 s depois da baixa ainda não nasceu a que estava esperando", nasceuAntesDeHora, false);
+            conferirIgual("e continua só uma viva", sombras.length, MAXIMO_DE_SOMBRAS - 1);
+            while (tempoDeJogo - baixa < INTERVALO_ENTRE_NASCIMENTOS + 1 && sombras.length < MAXIMO_DE_SOMBRAS) {
+                a.x = a.alvoX = 13.5; a.y = a.alvoY = 5.5;
+                avancarQuadro(16);
+            }
+            const esperaDaReposicao = tempoDeJogo - baixa;
             conferirIgual("abriu uma vaga: nasce a que estava esperando", sombras.length, MAXIMO_DE_SOMBRAS);
+            conferir("a reposição veio 12 s depois da baixa (" + esperaDaReposicao.toFixed(3) + " s)", esperaDaReposicao >= INTERVALO_ENTRE_NASCIMENTOS && esperaDaReposicao <= INTERVALO_ENTRE_NASCIMENTOS + 0.05);
             const nascidaAgora = tempoDeJogo;
 
             // O intervalo: depois de nascer, a próxima só vem 12 s depois.

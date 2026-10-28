@@ -882,12 +882,23 @@
             });
         });
 
+        // O sprite tem algum pixel na imagem? A regra do pixel: uma coluna é dele se o CENTRO dela (coluna + 0,5) cai dentro
+        // do retângulo. Um sprite menos de meio pixel para dentro da borda da imagem não tem coluna nenhuma.
+        function algumCentroDeColunaDentro(projecao) {
+            for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
+                if (projecao.esquerda <= coluna + 0.5 && coluna + 0.5 < projecao.direita) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // Quantos sprites aparecem, ficam fora do campo e ficam tapados por parede: contados à mão sobre a projeção de referência.
-        // Fora do campo = o retângulo inteiro está à esquerda ou à direita da imagem; tapado = dentro do campo, mas nenhuma coluna passa.
+        // Fora do campo = nenhum pixel dele cai na imagem (pela regra do centro da coluna); tapado = tem pixel na imagem, mas nenhuma coluna passa.
         function categoriasDeReferencia() {
             const projecoes = projecoesDeReferencia(paredesDeReferencia());
             const aparecem = projecoes.filter(function (projecao) { return projecao.colunas.length > 0; }).length;
-            const foraDoCampo = projecoes.filter(function (projecao) { return projecao.colunas.length === 0 && (projecao.direita <= 0 || projecao.esquerda >= larguraDaVisao); }).length;
+            const foraDoCampo = projecoes.filter(function (projecao) { return !algumCentroDeColunaDentro(projecao); }).length;
             return { naFrente: projecoes.length, aparecem: aparecem, foraDoCampo: foraDoCampo, tapados: projecoes.length - aparecem - foraDoCampo };
         }
 
@@ -964,6 +975,64 @@
             conferir("o sorteio exercitou as três categorias", posesComFora >= 10 && posesComTapados >= 3);
             conferirIgual("H desligado: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
             conferirIgual("e a imagem volta", visao.hidden, false);
+        });
+
+
+        // Uma pose em que as colunas das duas bordas da imagem enxergam a mais de 1,7 casa (nada tapa um sprite a 1,5).
+        function poseComAsBordasLivres() {
+            for (let linha = 1; linha < 11; linha++) {
+                for (let coluna = 1; coluna < 15; coluna++) {
+                    for (const angulo of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+                        const x = coluna + 0.5;
+                        const y = linha + 0.5;
+                        reiniciarEVer(x, y, angulo);
+                        if (!casaSolidaNoTexto(coluna, linha) && zBuffer[0] > 1.7 && zBuffer[larguraDaVisao - 1] > 1.7) {
+                            return { x: x, y: y, angulo: angulo };
+                        }
+                    }
+                }
+            }
+            throw new Error("não achei pose com as bordas livres");
+        }
+
+        // Um objeto a `profundidade` casas à frente, posto de modo que o retângulo dele fique a `distancia` pixels para DENTRO da borda
+        // da imagem: a direita dele na borda esquerda (borda = "esquerda") ou a esquerda dele na borda direita (borda = "direita").
+        function objetoComOBordaDentro(borda, distancia, profundidade) {
+            const tamanho = CATALOGO_DE_SPRITES.cristal.tamanho;
+            const umaCasa = constanteK(larguraDaVisao) / profundidade;
+            const lado = tamanho * umaCasa;
+            const lateral = borda === "esquerda"
+                ? (distancia - larguraDaVisao / 2 - lado / 2) / umaCasa
+                : (larguraDaVisao - distancia - larguraDaVisao / 2 + lado / 2) / umaCasa;
+            return { tipo: "cristal", x: jogador.x + profundidade * jogador.dx - lateral * jogador.dy, y: jogador.y + profundidade * jogador.dy + lateral * jogador.dx };
+        }
+
+        // "Fora do campo" e as colunas visíveis usam a MESMA regra do pixel (o centro da coluna dentro do sprite): um sprite menos de
+        // meio pixel para dentro da borda da imagem não tem pixel nenhum, então está fora do campo, não "tapado" por parede.
+        testar("a leitura do H e as colunas visíveis usam a mesma regra do centro do pixel: menos de meio pixel dentro da borda é fora do campo", function () {
+            const pose = poseComAsBordasLivres();
+            const casos = [
+                { nome: "direita a 0,3 px dentro da borda esquerda", borda: "esquerda", distancia: 0.3, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "direita a 0,45 px dentro da borda esquerda", borda: "esquerda", distancia: 0.45, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "direita a 0,7 px dentro da borda esquerda (o centro da coluna 0 cai nele)", borda: "esquerda", distancia: 0.7, colunas: [0], leitura: "aparecem 1 · fora do campo 0 · tapados 0" },
+                { nome: "esquerda a 0,3 px dentro da borda direita", borda: "direita", distancia: 0.3, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "esquerda a 0,45 px dentro da borda direita", borda: "direita", distancia: 0.45, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "esquerda a 0,7 px dentro da borda direita (o centro da última coluna cai nele)", borda: "direita", distancia: 0.7, colunas: [larguraDaVisao - 1], leitura: "aparecem 1 · fora do campo 0 · tapados 0" }
+            ];
+            casos.forEach(function (caso) {
+                const objeto = objetoComOBordaDentro(caso.borda, caso.distancia, 1.5);
+                comObjetos([objeto], function () {
+                    reiniciarEVer(pose.x, pose.y, pose.angulo);
+                    const projecao = projecaoDeReferencia(objeto);
+                    const bordaMedida = caso.borda === "esquerda" ? projecao.direita : larguraDaVisao - projecao.esquerda;
+                    conferir(caso.nome + ": a montagem do teste está certa (a borda do retângulo está a " + bordaMedida.toFixed(3) + " px)", perto(bordaMedida, caso.distancia, 1e-6), bordaMedida);
+                    const sprite = spritesDaTela.filter(function (candidato) { return candidato.objeto === objeto; })[0];
+                    conferirIgual(caso.nome + ": as colunas desenhadas", JSON.stringify(sprite.colunas), JSON.stringify(caso.colunas));
+                    const linhas = leituraComH().split("\n");
+                    conferirIgual(caso.nome + ": a leitura", linhas[4], caso.leitura);
+                    conferirIgual(caso.nome + ": a leitura bate com a referência", motivoDaLeituraErrada(linhas.join("\n"), categoriasDeReferencia(), 1), null);
+                });
+            });
         });
 
         testar("a arte da sombra é a do catálogo e é a usada pelo tipo 'sombra'", function () {

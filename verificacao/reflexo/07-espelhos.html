@@ -66,6 +66,54 @@
             return this.id === "jogo" ? contextoDaPlanta : obterContextoDeVerdade.call(this, tipo, opcoes);
         };
     </script>
+    <!-- O setTimeout é falso e anda com o relógio do teste: os avisos em fila (avisar) saem por ele, sem esperar tempo real.
+         Tudo que chega ao #aviso é gravado (cada escrita, inclusive o vazio entre dois avisos): é isso que o leitor de tela recebe. -->
+    <script>
+        const temporizadoresFalsos = [];
+        let relogioDosTemporizadores = 0;
+        let numeroDoProximoTemporizador = 1;
+
+        window.setTimeout = function (funcao, espera) {
+            const numero = numeroDoProximoTemporizador++;
+            temporizadoresFalsos.push({ numero: numero, vence: relogioDosTemporizadores + (espera || 0), funcao: funcao });
+            return numero;
+        };
+
+        // Dispara, na ordem em que vencem, o que vence dentro do intervalo (o que o disparo agenda também entra, se couber).
+        function passarTempoDosAvisos(milissegundos) {
+            const fim = relogioDosTemporizadores + milissegundos;
+            for (;;) {
+                const vencidos = temporizadoresFalsos.filter(function (temporizador) { return temporizador.vence <= fim; });
+                if (vencidos.length === 0) {
+                    break;
+                }
+                const proximo = vencidos.reduce(function (menor, temporizador) { return temporizador.vence < menor.vence ? temporizador : menor; });
+                temporizadoresFalsos.splice(temporizadoresFalsos.indexOf(proximo), 1);
+                relogioDosTemporizadores = Math.max(relogioDosTemporizadores, proximo.vence);
+                proximo.funcao();
+            }
+            relogioDosTemporizadores = fim;
+        }
+
+        // Cada quadro do teste também faz passar o tempo dos avisos (primeiro o que vence, depois o quadro).
+        const avancarQuadroDoApoio = avancarQuadro;
+        avancarQuadro = function (milissegundos) {
+            passarTempoDosAvisos(milissegundos);
+            return avancarQuadroDoApoio(milissegundos);
+        };
+
+        const escritasNoAviso = [];
+        const descritorDoTexto = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+        Object.defineProperty(document.getElementById("aviso"), "textContent", {
+            configurable: true,
+            get: function () { return descritorDoTexto.get.call(this); },
+            set: function (texto) {
+                descritorDoTexto.set.call(this, texto);
+                escritasNoAviso.push({ texto: texto, instante: relogioDosTemporizadores });
+            }
+        });
+    </script>
+
     <script src="../../reflexo/07-espelhos/script.js"></script>
 
     <script>
@@ -144,15 +192,34 @@
             return document.getElementById("aviso").textContent;
         }
 
+        function marcarAvisos() {
+            return escritasNoAviso.length;
+        }
+
+        // Os textos que chegaram ao #aviso depois da marca (o vazio entre dois avisos não conta).
+        function anunciadosDesde(marca) {
+            return escritasNoAviso.slice(marca).filter(function (escrita) { return escrita.texto !== ""; });
+        }
+
+        function textosAnunciadosDesde(marca) {
+            return anunciadosDesde(marca).map(function (escrita) { return escrita.texto; });
+        }
+
+        // Deixa a fila de avisos acabar sozinha, pelo relógio falso (cabem 1 + 4 avisos, um por segundo).
+        function esvaziarAvisos() {
+            passarTempoDosAvisos(10000);
+        }
+
         function copiaDasLinhas(umaSala) {
             return Array.from(umaSala.celulas);
         }
 
         const SALA_INICIAL_ESPERADA = MAPA_EM_TEXTO.map(function (linha) { return linha.replace("J", "."); });
 
-        // Volta ao começo pela porta do jogo e limpa o aviso.
+        // Volta ao começo pela porta do jogo e deixa a fila de avisos acabar (o "Sala reiniciada" não fica ocupando o painel).
         function comecarDoZero() {
             reiniciarSala();
+            esvaziarAvisos();
             avancarQuadro(16);
         }
 
@@ -511,10 +578,12 @@
 
         testar("a porta nunca fecha sobre o zelador: fica aberta enquanto o corpo toca a casa, e fecha quando ele sai", function () {
             comLayout(PORTA_E_ESPELHO.grade, PORTA_E_ESPELHO.emissores, PORTA_E_ESPELHO.portas, function () {
+                esvaziarAvisos();
+                const marca = marcarAvisos();
                 posar(9.5, 9.5, 0);
                 conferirIgual("o receptor está aceso", luz.acesos.has(indice(4, 3)), true);
                 conferirIgual("a porta abre com a luz", portasAbertas.has(indice(6, 6)), true);
-                conferirIgual("o aviso diz Porta aberta", textoDoAviso(), "Porta aberta");
+                conferirIgual("o aviso diz Porta aberta (na hora: o painel estava livre)", textoDoAviso(), "Porta aberta");
 
                 posar(6.5, 6.5, Math.PI);   // dentro da casa da porta, olhando o espelho (4, 6) a 1,5 casa
                 conferir("estando na porta, o espelho a 1,5 casa é o alvo", alvo !== null && alvo.coluna === 4 && alvo.linha === 6 && perto(alvo.distancia, 1.5), JSON.stringify(alvo));
@@ -524,14 +593,17 @@
                 segundos(2);
                 conferirIgual("2 s sem luz com o corpo na casa: a porta continua aberta", portasAbertas.has(indice(6, 6)), true);
                 conferirIgual("e continua passável", ehSolida(6, 6), false);
-                conferir("o aviso não disse Porta fechada", textoDoAviso() !== "Porta fechada", textoDoAviso());
+                esvaziarAvisos();
+                conferirIgual("em nenhum momento o jogo anunciou Porta fechada (só Porta aberta e o giro)", textosAnunciadosDesde(marca).join(" | "), "Porta aberta | Espelho girado");
                 conferir("o zelador não foi empurrado nem esmagado: ainda em (6,5; 6,5)", perto(jogador.x, 6.5) && perto(jogador.y, 6.5));
 
                 posar(7.24, 6.5, 0);   // o corpo (raio 0,25) ainda encosta na casa: a quina está a 0,24
                 conferirIgual("a 0,24 da porta o corpo ainda toca: aberta", portasAbertas.has(indice(6, 6)), true);
+                const marcaDoFechamento = marcarAvisos();
                 posar(7.26, 6.5, 0);   // a 0,26: já não toca
                 conferirIgual("a 0,26 da porta o corpo não toca mais: ela fecha", portasAbertas.has(indice(6, 6)), false);
-                conferirIgual("o aviso diz Porta fechada", textoDoAviso(), "Porta fechada");
+                conferirIgual("o aviso diz Porta fechada (na hora: a fila já tinha acabado)", textoDoAviso(), "Porta fechada");
+                conferirIgual("e foi o único aviso desde então", textosAnunciadosDesde(marcaDoFechamento).join(" | "), "Porta fechada");
                 conferirIgual("e voltou a ser sólida", ehSolida(6, 6), true);
                 conferirIgual("o zelador nunca ficou dentro de casa sólida", ehSolida(Math.floor(jogador.x), Math.floor(jogador.y)), false);
 
@@ -659,6 +731,7 @@
             conferirIgual("e saída alcançada", saidaAlcancada, true);
             conferirIgual("e a sala é outra", JSON.stringify(copiaDasLinhas(sala)) !== JSON.stringify(SALA_INICIAL_ESPERADA), true);
 
+            esvaziarAvisos();
             teclar("r");
             conferirIgual("depois do R: a sala é a cópia inicial (mesmo objeto)", sala === salaInicial, true);
             conferirIgual("e é igual, em profundidade, ao texto do mapa com o J virado chão", JSON.stringify(copiaDasLinhas(sala)), JSON.stringify(SALA_INICIAL_ESPERADA));
@@ -667,7 +740,7 @@
             conferirIgual("portas fechadas", portasAbertas.size, 0);
             conferirIgual("saída não alcançada", saidaAlcancada, false);
             conferirIgual("a luz volta a ser a do começo (3 trechos, nada aceso)", luz.segmentos.length + "," + luz.acesos.size, "3,0");
-            conferirIgual("o aviso diz Sala reiniciada", textoDoAviso(), "Sala reiniciada");
+            conferirIgual("o aviso diz Sala reiniciada (na hora: a fila já tinha acabado)", textoDoAviso(), "Sala reiniciada");
             quadros(3);
             conferirIgual("e depois de alguns quadros nada reabre", portasAbertas.size, 0);
 
@@ -721,27 +794,86 @@
             conferirIgual("e o aviso diz que não há espelho", textoDoAviso(), "Nenhum espelho ao alcance");
         });
 
-        testar("os avisos para o leitor de tela (#aviso, role=status) aparecem nos eventos certos", function () {
+        testar("os avisos para o leitor de tela (#aviso, role=status) aparecem nos eventos certos, um de cada vez", function () {
             comecarDoZero();
+            const marca = marcarAvisos();
             teclar("e");
             conferirIgual("sem espelho", textoDoAviso(), "Nenhum espelho ao alcance");
+            esvaziarAvisos();
             posar(2.5, 5.5, 0);
             teclar("e");
             conferirIgual("espelho girado", textoDoAviso(), "Espelho girado");
+            esvaziarAvisos();
             posar(2.5, 2.5, 0);
             teclar("e");
-            conferirIgual("o segundo giro também avisa", textoDoAviso(), "Espelho girado");
+            conferirIgual("o segundo giro também avisa, com o mesmo texto de antes", textoDoAviso(), "Espelho girado");
             avancarQuadro(16);
+            conferirIgual("a porta abre no quadro seguinte, mas o aviso dela espera a vez: o painel ainda diz o giro", textoDoAviso(), "Espelho girado");
+            passarTempoDosAvisos(1200);
             conferirIgual("porta aberta", textoDoAviso(), "Porta aberta");
+            esvaziarAvisos();
             teclar("e");
+            conferirIgual("girar de volta: o giro é anunciado na hora", textoDoAviso(), "Espelho girado");
             avancarQuadro(16);
+            passarTempoDosAvisos(1200);
             conferirIgual("a luz some e a porta (o zelador está longe) fecha: Porta fechada", textoDoAviso(), "Porta fechada");
+            esvaziarAvisos();
             teclar("r");
             conferirIgual("reiniciar", textoDoAviso(), "Sala reiniciada");
+            esvaziarAvisos();
             posar(12.5, 10.5, 0);
             conferirIgual("a saída", textoDoAviso(), "Saída alcançada");
             conferirIgual("e o painel diz Saída alcançada!", leitura.textContent.indexOf("Saída alcançada!") !== -1, true);
+            conferirIgual("a história inteira, na ordem em que aconteceu", textosAnunciadosDesde(marca).join(" | "),
+                "Nenhum espelho ao alcance | Espelho girado | Espelho girado | Porta aberta | Espelho girado | Porta fechada | Sala reiniciada | Saída alcançada");
             conferir("o aviso fica fora da vista mas existe para o leitor de tela (role=status no esqueleto)", document.getElementById("aviso").getAttribute("role") === "status");
+        });
+
+        // A fila de avisos (avisar): dois avisos no mesmo instante fariam o leitor de tela ler só o último, e o mesmo texto
+        // de novo não muda nada para ele. Então: o primeiro na hora, os outros um por segundo, o painel vazio no intervalo.
+        testar("fila de avisos: o primeiro aparece na hora, os outros um por segundo com o painel vazio entre eles; o repetido é anunciado de novo", function () {
+            esvaziarAvisos();
+            const marca = marcarAvisos();
+            avisar("Espelho girado");
+            conferirIgual("o primeiro aparece na hora", textoDoAviso(), "Espelho girado");
+            avisar("Espelho girado");
+            avisar("Porta aberta");
+            conferirIgual("os outros dois esperam: o painel ainda mostra o primeiro", textoDoAviso(), "Espelho girado");
+            passarTempoDosAvisos(500);
+            conferirIgual("e meio segundo depois também", textoDoAviso(), "Espelho girado");
+            esvaziarAvisos();
+
+            const anunciados = anunciadosDesde(marca);
+            conferirIgual("os três foram anunciados, na ordem, inclusive o texto repetido", anunciados.map(function (escrita) { return escrita.texto; }).join(" | "), "Espelho girado | Espelho girado | Porta aberta");
+            const intervalos = anunciados.slice(1).map(function (escrita, posicao) { return escrita.instante - anunciados[posicao].instante; });
+            conferir("entre um aviso e o seguinte passa pelo menos 1 s, e só um pouco mais (" + intervalos + " ms)", intervalos.length === 2 && intervalos.every(function (intervalo) { return intervalo >= 1000 && intervalo <= 1200; }));
+            const escritas = escritasNoAviso.slice(marca).map(function (escrita) { return escrita.texto === "" ? "vazio" : "texto"; }).join(",");
+            conferirIgual("o painel é esvaziado entre dois avisos (é o que faz o repetido ser lido de novo) e no fim", escritas, "texto,vazio,texto,vazio,texto,vazio");
+            conferirIgual("no fim o painel está vazio", textoDoAviso(), "");
+
+            const marcaDepois = marcarAvisos();
+            avisar("Porta fechada");
+            conferirIgual("com a fila vazia, um aviso novo volta a aparecer na hora", textoDoAviso(), "Porta fechada");
+            esvaziarAvisos();
+            conferirIgual("e foi o único", textosAnunciadosDesde(marcaDepois).join(" | "), "Porta fechada");
+        });
+
+        testar("fila de avisos: guarda no máximo 4 à espera, os mais recentes; o resto é descartado", function () {
+            esvaziarAvisos();
+            const marca = marcarAvisos();
+            for (let numero = 0; numero <= 10; numero++) {
+                avisar("Aviso " + numero);
+            }
+            esvaziarAvisos();
+            conferirIgual("o que estava no painel mais os 4 últimos (os 6 do meio se perdem)", textosAnunciadosDesde(marca).join(" | "), "Aviso 0 | Aviso 7 | Aviso 8 | Aviso 9 | Aviso 10");
+            conferirIgual("a fila esvaziou: nada mais é anunciado depois", textoDoAviso(), "");
+
+            const marcaDoQuatro = marcarAvisos();
+            for (let numero = 0; numero <= 4; numero++) {
+                avisar("Aviso " + numero);
+            }
+            esvaziarAvisos();
+            conferirIgual("1 no painel e 4 à espera: nenhum se perde", textosAnunciadosDesde(marcaDoQuatro).join(" | "), "Aviso 0 | Aviso 1 | Aviso 2 | Aviso 3 | Aviso 4");
         });
 
         testar("botões e teclas são a mesma intenção (Espaço, E, maiúscula, repeat, Espaço em botão)", function () {
@@ -764,12 +896,88 @@
             apertarTecla("E");
             conferirIgual("E maiúsculo gira", sala !== antes, true);
             const depoisDoE = sala;
+            apertarTecla("Tab");   // o foco chegou ao botão pelo teclado
             apertarTecla(" ", botaoDe("espelho"));
-            conferirIgual("Espaço com o foco num botão não gira (o botão já conta o Espaço: evita girar duas vezes)", sala === depoisDoE, true);
+            conferirIgual("Espaço num botão que o Tab alcançou não gira (o botão já conta o Espaço: evita girar duas vezes)", sala === depoisDoE, true);
             const evento = apertarTecla(" ");
             conferirIgual("Espaço fora de botão gira o espelho", sala !== depoisDoE, true);
             conferirIgual("e não rola a página (preventDefault)", evento.defaultPrevented, true);
             comecarDoZero();
+        });
+
+        // O Espaço gira o espelho, MENOS num botão que o jogador alcançou com o Tab (aí aperta o botão, como em qualquer página).
+        // Depois de um clique (mouse ou dedo) o botão fica com o foco, mas ninguém o escolheu pelo teclado: o Espaço gira.
+        testar("Espaço com o foco num botão: depois de um clique gira o espelho (e não aperta o botão); depois do Tab aperta o botão", function () {
+            comecarDoZero();
+            posar(2.5, 5.5, 0);
+            const botao = botaoDe("reiniciar");
+            let cliques = 0;
+            botao.addEventListener("click", function () { cliques++; });
+            const comoOTecladoFaz = function (tecla, tipo) {
+                const evento = new KeyboardEvent(tipo, { key: tecla, bubbles: true, cancelable: true });
+                botao.dispatchEvent(evento);
+                return evento;
+            };
+
+            botao.dispatchEvent(new Event("pointerdown", { bubbles: true }));   // o clique do mouse que deu o foco ao botão
+            const salaAntes = sala;
+            const descida = comoOTecladoFaz(" ", "keydown");
+            const subida = comoOTecladoFaz(" ", "keyup");
+            conferirIgual("depois de um clique no botão, o Espaço gira o espelho à frente", sala !== salaAntes, true);
+            conferirIgual("o zelador não saiu do lugar nem reiniciou nada", jogador.x + "," + jogador.y, "2.5,5.5");
+            conferirIgual("o Espaço ao descer cancela o padrão do navegador (não rola a página)", descida.defaultPrevented, true);
+            conferirIgual("e ao SOLTAR também (é aí que o navegador apertaria o botão focado pelo mouse)", subida.defaultPrevented, true);
+
+            apertarTecla("Tab");   // o jogador passou a navegar pelo teclado
+            const salaDoTab = sala;
+            const descidaNoTab = comoOTecladoFaz(" ", "keydown");
+            const subidaNoTab = comoOTecladoFaz(" ", "keyup");
+            conferirIgual("com o foco vindo do Tab o jogo NÃO gira o espelho", sala === salaDoTab, true);
+            conferirIgual("e deixa o navegador apertar o botão: não cancela o Espaço (descer nem soltar)", descidaNoTab.defaultPrevented || subidaNoTab.defaultPrevented, false);
+
+            botao.dispatchEvent(new Event("pointerdown", { bubbles: true }));   // um clique novo desliga o "veio do Tab"
+            comoOTecladoFaz(" ", "keydown");
+            conferirIgual("um clique novo e o Espaço volta a girar", sala !== salaDoTab, true);
+
+            const antesDoTeclado = sala;
+            apertarTecla(" ");
+            conferirIgual("e, fora de botão, o Espaço sempre gira", sala !== antesDoTeclado, true);
+
+            apertarTecla("Tab");   // deixa a página como o teclado a deixaria
+            comecarDoZero();
+        });
+
+        // O feixe é luz, não entra no z-buffer: o que o esconde é o que está na frente dele. Um objeto entre o olho e o feixe
+        // não pode ficar pintado por cima; um objeto atrás do feixe fica coberto por ele.
+        testar("um objeto NA FRENTE do feixe não é coberto por ele; um objeto ATRÁS do feixe é", function () {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const colunaDoMeio = larguraDaVisao / 2;
+            const ehFeixe = function (pixel) { return CORES_DO_FEIXE.indexOf(pixel) !== -1; };
+            const objetoOriginal = OBJETOS.slice();
+            try {
+                comecarDoZero();
+                posar(2.5, 7.0, -Math.PI / 2);   // olhando para o norte: o trecho horizontal do feixe (y = 5,5) está a 1,5 casa
+                OBJETOS.length = 0;
+                OBJETOS.push({ tipo: "cristal", x: 2.5, y: 6.0 });   // a 1 casa: à frente do feixe
+                quadros(2);
+                const daFrente = spritesDaTela.filter(function (sprite) { return sprite.colunas.indexOf(colunaDoMeio) !== -1; });
+                conferirIgual("o cristal da frente cobre a coluna do meio", daFrente.length, 1);
+                conferir("o feixe está a 1,5 e o cristal a 1,0 (o teste monta o que diz)", daFrente.length === 1 && perto(daFrente[0].profundidade, 1.0, 1e-9) && luz.segmentos.some(function (trecho) { return trecho.y0 === 5.5 && trecho.y1 === 5.5; }));
+                const pixelDaFrente = pixels[olhos * larguraDaVisao + colunaDoMeio];
+                conferir("à frente do feixe: o pixel do meio, na altura dos olhos, NÃO tem cor de feixe (0x" + pixelDaFrente.toString(16) + ")", !ehFeixe(pixelDaFrente));
+
+                comecarDoZero();
+                posar(2.5, 7.0, -Math.PI / 2);
+                OBJETOS.length = 0;
+                OBJETOS.push({ tipo: "cristal", x: 2.5, y: 4.5 });   // a 2,5 casas: atrás do feixe
+                quadros(2);
+                const pixelDeTras = pixels[olhos * larguraDaVisao + colunaDoMeio];
+                conferir("atrás do feixe: o pixel do meio É cor de feixe (0x" + pixelDeTras.toString(16) + ")", ehFeixe(pixelDeTras));
+            } finally {
+                OBJETOS.length = 0;
+                objetoOriginal.forEach(function (objeto) { OBJETOS.push(objeto); });
+                comecarDoZero();
+            }
         });
 
         testar("a leitura do H (6 linhas curtas) e o painel (2 linhas curtas) não têm NaN", function () {
