@@ -1,0 +1,87 @@
+<!--
+  CURRÍCULO — PASSO 1: A ESTRUTURA
+
+  Uma página de currículo só com HTML semântico: sem layout, sem JavaScript. A ordem é a que um recrutador lê
+  em 30 segundos: quem é, o que sabe, o que já fez, como falar com a pessoa. Aperte Tab: o primeiro foco é o
+  link "Pular para o conteúdo". Todos os dados são fictícios.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alex Exemplo — Programação web e game design</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <a class="pular" href="#principal">Pular para o conteúdo</a>
+
+    <header>
+        <h1>Alex Exemplo</h1>
+        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.</p>
+
+        <nav aria-label="Seções do currículo">
+            <ul>
+                <li><a href="#habilidades">Habilidades</a></li>
+                <li><a href="#projetos">Projetos</a></li>
+                <li><a href="#contato">Contato</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="principal">
+        <section id="habilidades" aria-labelledby="titulo-habilidades">
+            <h2 id="titulo-habilidades">Habilidades</h2>
+            <p>Cada habilidade vem com a prova: um projeto que a usa.</p>
+            <ul>
+                <li><strong>HTML semântico, CSS responsivo e acessibilidade.</strong> Prova: esta própria página.</li>
+                <li><strong>Canvas e laço de jogo.</strong> Prova: <a href="#projeto-cobrinha">Jogo da Cobrinha</a>.</li>
+                <li><strong>Matrizes e rotação de peças.</strong> Prova: <a href="#projeto-tetris">Tetris</a>.</li>
+                <li><strong>Regras e algoritmos de busca.</strong> Prova: <a href="#projeto-xadrez">Xadrez</a>.</li>
+                <li><strong>Dados separados do código.</strong> Prova: <a href="#projeto-xenomorph">Xenomorph</a>.</li>
+            </ul>
+        </section>
+
+        <section id="projetos" aria-labelledby="titulo-projetos">
+            <h2 id="titulo-projetos">Projetos</h2>
+
+            <article id="projeto-cobrinha">
+                <h3>Jogo da Cobrinha</h3>
+                <p>A cobra clássica em canvas: anda numa grade, cresce ao comer e acaba quando bate.</p>
+                <p><a href="../../jogo-da-cobrinha/final/index.html">Abrir o Jogo da Cobrinha</a></p>
+            </article>
+
+            <article id="projeto-tetris">
+                <h3>Tetris</h3>
+                <p>Peças que giram e travam num poço, linhas que somem, níveis, som e botões de toque.</p>
+                <p><a href="../../tetris/final/index.html">Abrir o Tetris</a></p>
+            </article>
+
+            <article id="projeto-xadrez">
+                <h3>Xadrez</h3>
+                <p>Tabuleiro feito de elementos HTML, com todas as regras e um computador que joga contra você.</p>
+                <p><a href="../../xadrez/final/index.html">Abrir o Xadrez</a></p>
+            </article>
+
+            <article id="projeto-xenomorph">
+                <h3>Xenomorph</h3>
+                <p>Jogo de plataforma com criaturas, armas e campanha salva no navegador, tudo descrito em fichas.</p>
+                <p><a href="../../xenomorph/final/index.html">Abrir o Xenomorph</a></p>
+            </article>
+        </section>
+
+        <section id="contato" aria-labelledby="titulo-contato">
+            <h2 id="titulo-contato">Contato</h2>
+            <p>E-mail: <a href="mailto:alex@exemplo.invalid">alex@exemplo.invalid</a></p>
+            <p>Cidade Exemplo, UF</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>Feito seguindo o curso <a href="../../README.md">Do zero ao jogo</a>. Dados fictícios.</p>
+    </footer>
+</body>
+
+</html>

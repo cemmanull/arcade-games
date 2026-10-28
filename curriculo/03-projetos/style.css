@@ -1,0 +1,148 @@
+/*
+  PASSO 2: LAYOUT MOBILE FIRST
+  As regras fora de qualquer media query valem para o celular (390 px). O que muda em tela grande fica
+  no fim, em @media (min-width: 48rem). Cores e espaços são variáveis: troque aqui e muda em tudo.
+*/
+:root {
+    --fundo: #f7f7fb;
+    --superficie: #ffffff;
+    --texto: #1b1b26;
+    --texto-suave: #4a4a5c;
+    --destaque: #3b3bb3;
+    --borda: #8a8aa0;
+    --foco: #b34700;
+    --espaco: 1rem;
+    --raio: 0.75rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0 auto;
+    padding: 0 var(--espaco);
+    max-width: 70rem;
+    font-family: system-ui, sans-serif;
+    font-size: 1.125rem;
+    line-height: 1.5;
+    color: var(--texto);
+    background: var(--fundo);
+}
+
+h1, h2, h3 { margin: 0 0 0.5rem; line-height: 1.2; }
+h1 { margin-top: var(--espaco); font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+
+a { color: var(--destaque); }
+a:focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }
+
+.pular {
+    position: absolute;
+    left: 0.5rem;
+    top: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--superficie);
+    transform: translateY(-200%);
+}
+
+.pular:focus { transform: none; }
+
+/* O MENU: uma linha que quebra para a seguinte quando falta espaço. Cada alvo tem 3rem (48 px) de altura. */
+nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+nav a, .cartao a, #contato a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 3rem;
+}
+
+nav a {
+    padding: 0 var(--espaco);
+    border: 2px solid var(--borda);
+    border-radius: var(--raio);
+    background: var(--superficie);
+}
+
+section { margin: 2rem 0; }
+
+/* A GRADE: tantas colunas de pelo menos 16rem quantas couberem. Em 390 px cabe 1; em 1280 px, 4. */
+.habilidades, .projetos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--espaco);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.habilidades li, .cartao {
+    padding: var(--espaco);
+    border: 2px solid var(--borda);
+    border-radius: var(--raio);
+    background: var(--superficie);
+}
+
+.cartao { display: flex; flex-direction: column; }
+.cartao p { margin: 0 0 0.5rem; color: var(--texto-suave); }
+.cartao a { margin-top: auto; }
+
+/* A MINIATURA: um bloco 16:9 que enche a largura do cartão (SVG ou, no final, uma <img>). */
+.miniatura {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-bottom: var(--espaco);
+    border-radius: calc(var(--raio) / 2);
+    object-fit: cover;
+    object-position: top;
+}
+
+/* As técnicas são texto em etiquetas: o significado está nas palavras, não na cor. */
+.tecnicas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0 var(--espaco);
+    padding: 0;
+    list-style: none;
+    font-size: 0.875rem;
+}
+
+.tecnicas li {
+    padding: 0.125rem 0.75rem;
+    border: 1px solid var(--borda);
+    border-radius: 1rem;
+}
+
+/* O aviso só ocupa espaço quando os dados têm erro (quem edita projetos.js vê o que arrumar). */
+#avisos:not(:empty) {
+    margin-bottom: var(--espaco);
+    padding: var(--espaco);
+    border: 2px dashed var(--foco);
+    border-radius: var(--raio);
+    background: var(--superficie);
+}
+footer { padding: var(--espaco) 0 2rem; color: var(--texto-suave); }
+
+/* TELAS GRANDES: o título e o menu dividem a primeira linha do cabeçalho. */
+@media (min-width: 48rem) {
+    body { padding: 0 2rem; }
+
+    header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "titulo menu" "frase frase";
+        align-items: center;
+    }
+
+    h1 { grid-area: titulo; font-size: 2.75rem; }
+    header p { grid-area: frase; }
+    nav { grid-area: menu; }
+}
