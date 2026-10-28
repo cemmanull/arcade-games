@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 1: sem internet</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+
+    <!--
+      A ponte do passo, mas com um endereço que nunca resolve (".invalid" é reservado pela RFC 2606):
+      é o mesmo que estar sem internet. O navegador registra o erro de rede; isso é esperado.
+    -->
+    <script type="importmap">
+    { "imports": {
+        "three": "https://three-fora-do-ar.invalid/build/three.module.min.js",
+        "three/addons/": "https://three-fora-do-ar.invalid/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/01-cena/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 1: sem internet</h1>
+    <pre id="resultado"></pre>
+
+    <main id="palco"></main>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        // Um erro não tratado do jogo viraria linha FALHA pelo apoio.js; aqui conferimos o comportamento.
+        window.addEventListener("load", function () {
+
+            testar("sem three.js o jogo avisa em vez de quebrar", function () {
+                conferirIgual("THREE não existe", typeof THREE, "undefined");
+                conferir("o aviso está visível", aviso.hidden === false);
+                conferir("o aviso diz que o three.js não baixou", aviso.textContent.includes("three.js"), aviso.textContent);
+                conferir("o aviso orienta a conferir a internet", aviso.textContent.includes("internet"), aviso.textContent);
+                conferirIgual("o aviso é um alerta para leitor de tela", aviso.getAttribute("role"), "alert");
+            });
+
+            testar("nada do jogo foi montado", function () {
+                conferirIgual("não há renderizador", renderizador, null);
+                conferirIgual("não há cena", cena, null);
+                conferirIgual("não há canvas no palco", palco.querySelectorAll("canvas").length, 0);
+                conferirIgual("o loop não foi iniciado", avancarQuadro(16), false);
+            });
+
+            testar("redimensionar sem three.js não estoura", function () {
+                window.dispatchEvent(new Event("resize"));
+                conferirIgual("o aviso continua lá", aviso.hidden, false);
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

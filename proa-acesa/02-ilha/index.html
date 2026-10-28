@@ -1,0 +1,30 @@
+<!--
+  PASSO 2: A ILHA
+
+  A ponte entre o three.js (um módulo ES) e o nosso script clássico.
+  A ORDEM importa: import map, depois o módulo inline, depois o jogo.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proa Acesa — passo 2</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Proa Acesa</h1>
+    <main id="palco"></main>
+    <p id="aviso" role="alert" hidden></p>
+</body>
+</html>

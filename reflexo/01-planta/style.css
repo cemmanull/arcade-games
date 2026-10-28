@@ -1,0 +1,60 @@
+/*
+  REFLEXO — PASSO 1: estilo
+
+  A planta tem 384x288 pixels de desenho (16x12 casas de 24). Em telas
+  estreitas o canvas encolhe junto com a janela.
+*/
+
+:root {
+    --cor-fundo: #08080e;      /* o azul-noite do observatório */
+    --cor-feixe: #bbffff;
+    --cor-texto: #e8ecff;
+    --cor-apagada: #7f8aa8;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    margin: 0;
+    padding: 16px;
+
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: var(--cor-feixe);
+    text-shadow: 0 0 12px var(--cor-feixe);
+}
+
+canvas {
+    display: block;
+    width: min(384px, 100%);
+    height: auto;
+    border: 2px solid var(--cor-apagada);
+}
+
+p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--cor-apagada);
+}
+
+#leitura {
+    min-height: 2.6em;   /* reserva o lugar: ligar o H não empurra a página */
+    white-space: pre;
+    color: var(--cor-texto);
+}

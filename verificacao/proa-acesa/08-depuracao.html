@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 8: a depuração</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        [hidden] { display: none !important; }
+    </style>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
+
+    <!-- O sistema NÃO pede menos movimento: o padrão do teste não pode depender da máquina que o roda. -->
+    <script>
+        (function () {
+            const original = window.matchMedia.bind(window);
+            window.matchMedia = function (consulta) {
+                if (/prefers-reduced-motion/.test(consulta)) {
+                    return { matches: false, media: consulta, addEventListener: function () { }, removeEventListener: function () { } };
+                }
+                return original(consulta);
+            };
+        }());
+    </script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">
+        import * as THREE from "three";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+        window.THREE = THREE;
+        window.OrbitControls = OrbitControls;
+    </script>
+    <script src="../../proa-acesa/08-depuracao/regras.js" defer></script>
+    <script src="../../proa-acesa/08-depuracao/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 8: a depuração</h1>
+    <pre id="resultado"></pre>
+
+    <header>
+        <button id="botao-clarao" type="button" aria-pressed="false">Reduzir clarões</button>
+    </header>
+    <div id="hud">
+        <p id="relogio"></p>
+        <p id="calor"></p>
+        <meter id="medidor" min="0" max="1" low="0.6" high="0.85" optimum="0" aria-label="Calor da lanterna"></meter>
+    </div>
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <p id="mensagem" aria-live="polite"></p>
+    <pre id="depuracao" hidden></pre>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <div id="acoes">
+            <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+            <button id="botao-foco" type="button">Foco: largo</button>
+        </div>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const MARGEM = 1e-9;
+            const FILHOS_FIXOS_DA_CENA = 8;   // os 7 do passo 7 (luz, mar, ilha, barca, porto, chuva, recifes) + o grupo de depuração
+            const GOTAS_ESPERADAS = 2000;
+            const THREE_REAL = window.THREE;
+            const renderizadorReal = renderizador.render.bind(renderizador);
+
+            // O teste confere regras, não pixels: só os casos que medem draw calls desenham de verdade.
+            renderizador.render = function () { };
+            function desenharDeVerdade(ligado) {
+                renderizador.render = ligado ? renderizadorReal : function () { };
+            }
+
+            // ============================================================
+            // Ajudantes
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? 1e-9 : tolerancia);
+            }
+
+            function todosFinitos(lista) {
+                return lista.every(function (numero) { return Number.isFinite(numero); });
+            }
+
+            function sortear(lista) {
+                return lista[Math.floor(Math.random() * lista.length)];
+            }
+
+            function luminancia(cor) {
+                return 0.2126 * cor.r + 0.7152 * cor.g + 0.0722 * cor.b;
+            }
+
+            function passar(milissegundos) {
+                if (!avancarQuadro(milissegundos)) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+            }
+
+            function passarSegundos(segundos, milissegundos) {
+                const passo = milissegundos === undefined ? 50 : milissegundos;
+                for (let i = 0, quadros = Math.round(segundos * 1000 / passo); i < quadros; i++) {
+                    passar(passo);
+                }
+            }
+
+            function tecla(tipo, nome, opcoes) {
+                window.dispatchEvent(new KeyboardEvent(tipo, Object.assign({ key: nome }, opcoes)));
+            }
+
+            function apertar(nome) {
+                tecla("keydown", nome);
+            }
+
+            function soltarTecla(nome) {
+                tecla("keyup", nome);
+            }
+
+            function tocar(botao, detalhe) {
+                botao.dispatchEvent(new MouseEvent("click", { detail: detalhe === undefined ? 1 : detalhe, bubbles: true }));
+            }
+
+            /* Começa uma noite do jeito que o jogo faz (a regra monta, o script redesenha no próximo quadro) e deixa a barca quieta. */
+            function irParaNoite(indice) {
+                comecarNoite(indice);
+                barcaNoMundo.segundosEncalhada = 1e9;
+                passar(50);
+            }
+
+            function filhosDaCenaEsperados() {
+                return FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length;
+            }
+
+            function ligarReducao(ligada) {
+                if ((botaoClarao.getAttribute("aria-pressed") === "true") !== ligada) {
+                    tocar(botaoClarao);
+                }
+            }
+
+            /* Roda um clarão da noite 2 (1º aos 15 s) em quadros de 16 ms e mede o fundo da cena quadro a quadro. */
+            function medirClarao() {
+                irParaNoite(1);
+                noite.segundos = 14.9;
+                const brilhos = [];
+                passar(16);
+                const base = luminancia(cena.background);
+                for (let quadro = 0; quadro < 100; quadro++) {
+                    passar(16);
+                    brilhos.push(luminancia(cena.background));
+                }
+                let maiorSalto = 0;
+                brilhos.forEach(function (brilho, i) { maiorSalto = Math.max(maiorSalto, Math.abs(brilho - (i === 0 ? base : brilhos[i - 1]))); });
+                return { maiorSalto: maiorSalto, pico: Math.max.apply(null, brilhos) - base, base: base, quadrosClaros: brilhos.filter(function (b) { return b - base > 0.001; }).length };
+            }
+
+            function posicoesDasGotas() {
+                const matrizes = chuva.instanciada.instanceMatrix.array;
+                const posicoes = [];
+                for (let i = 0; i < GOTAS_ESPERADAS; i++) {
+                    posicoes.push({ x: matrizes[i * 16 + 12], y: matrizes[i * 16 + 13], z: matrizes[i * 16 + 14] });
+                }
+                return posicoes;
+            }
+
+
+            function visivelNoMundo(objeto) {
+                for (let atual = objeto; atual !== null; atual = atual.parent) {
+                    if (atual.visible === false) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function ligarDepuracao() {
+                if (!depurando) {
+                    apertar("h");
+                }
+            }
+
+            function desligarDepuracao() {
+                if (depurando) {
+                    apertar("h");
+                }
+            }
+
+            function distanciaDaCameraABarca() {
+                return camera.position.distanceTo(barca.position);
+            }
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("o OrbitControls chega pela ponte (import map three/addons/) e a cena tem 8 filhos fixos (os 7 do passo 7 + a depuração)", function () {
+                conferir("o jogo carregou, sem aviso", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
+                conferirIgual("window.OrbitControls existe e é uma função (o addon foi achado pelo import map)", typeof window.OrbitControls, "function");
+                conferir("o jogo criou os controles com ele, desligados, sem pan e com limites de zoom 8–70 m",
+                    controles instanceof window.OrbitControls && controles.enabled === false && controles.enablePan === false && controles.minDistance === 8 && controles.maxDistance === 70);
+                passar(50);
+                conferirIgual("8 fixos + 2 barcos da noite 1", cena.children.length, filhosDaCenaEsperados());
+                conferir("o grupo de depuração é um deles e nasce escondido, com o painel também", cena.children.indexOf(desenhosDeDepuracao) !== -1 && desenhosDeDepuracao.visible === false && painel.hidden === true);
+                conferir("e todo o desenho invisível está ligado ao recife: um anel de colisão por recife, escondido", recifes.every(function (recife) { return recife.malha.children[0].children[0].visible === false; }));
+            });
+
+            testar("H liga o invisível: anéis dos recifes, anel da ilha, linhas barco→alvo e o painel (draw calls, triângulos, ms, memória)", function () {
+                irParaNoite(0);
+                desligarDepuracao();
+                passarSegundos(4);
+                apertar("h");
+                desenharDeVerdade(true);
+                passar(50);
+                passar(50);
+                desenharDeVerdade(false);
+                cena.updateMatrixWorld(true);
+
+                conferir("H: controles ligados, grupo de depuração visível, painel à mostra",
+                    depurando === true && controles.enabled === true && desenhosDeDepuracao.visible === true && painel.hidden === false);
+                const aneis = recifes.map(function (recife) { return recife.malha.children[0].children[0]; });
+                conferir("um anel de colisão por recife (" + aneis.length + "), todos visíveis na cena, mesmo com o recife esquecido (opacidade da pedra " +
+                    recifes[0].malha.children[0].material.opacity + ")", aneis.length === recifes.length && aneis.every(function (anel) { return anel.geometry.type === "RingGeometry" && visivelNoMundo(anel); }));
+
+                const anelDaIlha = desenhosDeDepuracao.children.find(function (filho) { return filho.geometry && filho.geometry.type === "RingGeometry"; });
+                conferir("o anel de colisão da ilha: centrado nela (−5, −12) e com raio externo 5,5 + 1,2 m",
+                    anelDaIlha !== undefined && visivelNoMundo(anelDaIlha) && proximo(anelDaIlha.position.x, ilha.x) && proximo(anelDaIlha.position.z, ilha.z) &&
+                    proximo(anelDaIlha.geometry.parameters.outerRadius, ilha.raio + RAIO_DO_BARCO));
+
+                const posicoes = linhasDosAlvos.geometry.attributes.position;
+                conferir("uma linha por barco, do barco ao alvo (o da frente ou a barca): drawRange = 2 vértices por barco",
+                    linhasDosAlvos.geometry.drawRange.count === 2 * barcosDePesca.length && visivelNoMundo(linhasDosAlvos) && barcosDePesca.length === 2);
+                conferir("e as pontas das linhas são as posições do mundo", barcosDePesca.every(function (barco, i) {
+                    const alvo = alvoDoBarco(barco);
+                    return proximo(posicoes.getX(2 * i), barco.x, 1e-5) && proximo(posicoes.getZ(2 * i), barco.z, 1e-5) &&
+                        proximo(posicoes.getX(2 * i + 1), alvo.x, 1e-5) && proximo(posicoes.getZ(2 * i + 1), alvo.z, 1e-5);
+                }));
+
+                // o leque desenhado É o leque da regra: as duas bordas ficam em lente + alcance × direção (proa + guinada ± meio-ângulo)
+                const lente = lanterna.getWorldPosition(new THREE_REAL.Vector3());
+                const direcao = barcaNoMundo.proa + guinada.angulo;
+                function bordasDoLeque() {
+                    const leque = leques[lanternaDaBarca.foco];
+                    const vertices = leque.geometry.attributes.position;
+                    return [1, vertices.count - 1].map(function (indice) {
+                        return new THREE_REAL.Vector3().fromBufferAttribute(vertices, indice).applyMatrix4(leque.matrixWorld);
+                    });
+                }
+                function conferirLeque(rotulo) {
+                    const foco = FOCOS[lanternaDaBarca.foco];
+                    const esperadas = [direcao + foco.meioAngulo, direcao - foco.meioAngulo].map(function (rumo) {
+                        return { x: lente.x - lanternaDaBarca.alcance * Math.sin(rumo), z: lente.z - lanternaDaBarca.alcance * Math.cos(rumo) };
+                    });
+                    const bordas = bordasDoLeque();
+                    const batem = bordas.every(function (borda) {
+                        return esperadas.some(function (esperada) { return Math.abs(borda.x - esperada.x) < 1e-3 && Math.abs(borda.z - esperada.z) < 1e-3; });
+                    });
+                    conferir(rotulo + ": as bordas do leque desenhado (" + bordas.map(function (b) { return "(" + b.x.toFixed(2) + ", " + b.z.toFixed(2) + ")"; }).join(" e ") +
+                        ") são as da regra, a " + lanternaDaBarca.alcance.toFixed(2) + " m", batem);
+                }
+                conferir("só o leque do foco de agora aparece", leques[lanternaDaBarca.foco].visible === true && leques[lanternaDaBarca.foco === "largo" ? "estreito" : "largo"].visible === false);
+                conferirLeque("foco largo (16°, 24 m × névoa)");
+                tocar(botaoFoco);
+                passar(50);
+                cena.updateMatrixWorld(true);
+                conferirLeque("foco estreito (7°, 46 m × névoa)");
+                conferir("trocar o foco troca o leque", leques.estreito.visible === true && leques.largo.visible === false);
+                lanternaDaBarca.calor = 0.99;
+                passar(50);
+                conferir("lanterna apagada: o leque some (a regra não vê nada)", lanternaDaBarca.segundosApagada > 0 && leques.estreito.visible === false && leques.largo.visible === false);
+                passarSegundos(4.2);
+                tocar(botaoFoco);
+                passar(50);
+
+                const texto = painel.textContent;
+                const partes = /^Draw calls (\d+) · triângulos (\d+)\nJS ([\d.]+) ms · desenho ([\d.]+) ms\nMemória: (\d+) geometrias · (\d+) texturas\nChuva: (\w+) \(C troca\)$/.exec(texto);
+                conferir("o painel tem o formato: calls, triângulos, ms de JS e de desenho, memória e chuva (\"" + texto.replace(/\n/g, " / ") + "\")", partes !== null);
+                if (partes !== null) {
+                    conferir("calls > 0, triângulos > 0, geometrias > 0 e ms finitos (as medidas vêm de um desenho de verdade)",
+                        Number(partes[1]) > 0 && Number(partes[2]) > 0 && Number(partes[5]) > 0 && todosFinitos([Number(partes[3]), Number(partes[4])]) && partes[7] === "instanciada");
+                }
+                desligarDepuracao();
+                passar(50);
+                conferir("H de novo: painel e desenhos somem e os controles desligam", painel.hidden === true && desenhosDeDepuracao.visible === false && controles.enabled === false &&
+                    aneis.every(function (anel) { return visivelNoMundo(anel) === false; }));
+            });
+
+            testar("com H a câmera é do OrbitControls: segue a barca, respeita 8–70 m, o zoom funciona e o ponteiro não mira; sem H a câmera de perseguição volta", function () {
+                irParaNoite(0);
+                desligarDepuracao();
+                passarSegundos(2);
+                const perseguicao = verifPontoEsperadoDaCamera();
+                conferir("sem H a câmera está no ponto de perseguição da fórmula (âncora no meio entre 14 m à frente e o 3º barco, escala ×" + perseguicao.escala.toFixed(2) + "): a " +
+                    camera.position.distanceTo(perseguicao.ponto).toFixed(3) + " m", camera.position.distanceTo(perseguicao.ponto) < 0.3);
+
+                // ponteiro sem H mira; com H não
+                miraDoPonteiro = null;
+                palco.dispatchEvent(new PointerEvent("pointermove", { clientX: palco.getBoundingClientRect().left + 10, clientY: palco.getBoundingClientRect().top + 10, pointerType: "mouse" }));
+                conferir("(controle) sem H, mover o ponteiro assume a mira", miraDoPonteiro !== null);
+                miraDoPonteiro = null;
+                apertar("h");
+                passar(50);
+                palco.dispatchEvent(new PointerEvent("pointermove", { clientX: palco.getBoundingClientRect().left + 10, clientY: palco.getBoundingClientRect().top + 10, pointerType: "mouse" }));
+                conferirIgual("com H o ponteiro é do OrbitControls: a mira não é assumida", miraDoPonteiro, null);
+
+                // o alvo acompanha a barca: a câmera anda junto, mantendo o mesmo afastamento
+                camera.position.set(barca.position.x + 20, 25, barca.position.z + 20);
+                passar(50);
+                const afastamento = camera.position.clone().sub(barca.position);
+                barcaNoMundo.segundosEncalhada = 0;
+                barcaNoMundo.x = 14;
+                barcaNoMundo.z = 42;
+                barcaNoMundo.proa = 0;
+                passarSegundos(1);
+                const depois = camera.position.clone().sub(barca.position);
+                conferir("a barca andou " + (42 - barcaNoMundo.z).toFixed(1) + " m e a câmera orbital foi junto (o afastamento mudou só " + depois.distanceTo(afastamento).toFixed(3) + " m)",
+                    barcaNoMundo.z < 38 && depois.distanceTo(afastamento) < 0.05);
+                conferir("e o alvo dos controles é a barca", controles.target.distanceTo(barca.position) < 0.01);
+                barcaNoMundo.segundosEncalhada = 1e9;
+
+                // limites de zoom
+                camera.position.set(barca.position.x + 300, 60, barca.position.z);
+                passar(50);
+                conferir("longe demais (300 m): o quadro seguinte traz a câmera a ≤ 70 m (" + distanciaDaCameraABarca().toFixed(2) + ")", distanciaDaCameraABarca() <= 70 + 1e-6);
+                camera.position.set(barca.position.x + 1, barca.position.y + 1, barca.position.z);
+                passar(50);
+                conferir("perto demais (1,4 m): a câmera recua a ≥ 8 m (" + distanciaDaCameraABarca().toFixed(2) + ")", distanciaDaCameraABarca() >= 8 - 1e-6);
+                camera.position.set(barca.position.x + 20, 20, barca.position.z + 10);
+                passar(50);
+                const antesDoZoom = distanciaDaCameraABarca();
+                renderizador.domElement.dispatchEvent(new WheelEvent("wheel", { deltaY: 300, bubbles: true, cancelable: true }));
+                passar(50);
+                conferir("a roda do mouse afasta a câmera (" + antesDoZoom.toFixed(2) + " → " + distanciaDaCameraABarca().toFixed(2) + " m)", distanciaDaCameraABarca() > antesDoZoom + 0.5);
+
+                // H de novo: a câmera de perseguição volta
+                apertar("h");
+                passarSegundos(3);
+                const pontoDePerseguicao = verifPontoEsperadoDaCamera();
+                camera.updateMatrixWorld(true);
+                const meioNaTela = new THREE_REAL.Vector3(pontoDePerseguicao.meio.x, 0, pontoDePerseguicao.meio.z).project(camera);
+                conferir("H desligado: depois de 3 s a câmera voltou ao ponto de perseguição, ancorado no meio entre 14 m à frente e o 3º barco (escala ×" + pontoDePerseguicao.escala.toFixed(2) + "; a " +
+                    camera.position.distanceTo(pontoDePerseguicao.ponto).toFixed(3) + " m) e os controles estão desligados",
+                    controles.enabled === false && camera.position.distanceTo(pontoDePerseguicao.ponto) < 0.3,
+                    "câmera " + camera.position.toArray().map(function (n) { return n.toFixed(2); }) + ", esperado " + pontoDePerseguicao.ponto.toArray().map(function (n) { return n.toFixed(2); }));
+                conferir("e olha para esse meio: ele aparece no centro da tela (NDC " + meioNaTela.x.toFixed(3) + ", " + meioNaTela.y.toFixed(3) + ")", Math.abs(meioNaTela.x) < 0.05 && Math.abs(meioNaTela.y) < 0.05);
+                miraDoPonteiro = null;
+            });
+
+            testar("a memória da GPU fica ESTÁVEL em 20 recomeços de noite: o grupo de recifes velho é descartado (dispose)", function () {
+                irParaNoite(0);
+                ligarDepuracao();   // com H todo recife é desenhado: sem isso as pedras esquecidas nem sobem para a GPU e o vazamento ficaria invisível
+                const amostras = [];
+                const texturas = [];
+                desenharDeVerdade(true);
+                for (let recomeco = 0; recomeco <= 20; recomeco++) {
+                    if (recomeco > 0) {
+                        apertar("r");
+                    }
+                    passar(50);
+                    passar(50);
+                    amostras.push(renderizador.info.memory.geometries);
+                    texturas.push(renderizador.info.memory.textures);
+                }
+                desenharDeVerdade(false);
+                desligarDepuracao();
+                const menor = Math.min.apply(null, amostras), maior = Math.max.apply(null, amostras);
+                // Tolerância de ±1: o anel de espuma de um recife só sobe para a GPU no quadro em que a lanterna o ilumina; a lanterna é a mesma a cada
+                // recomeço, mas esse é o único desenho que depende do quadro. Sem o dispose o número sobe ~16 por recomeço (8 recifes × pedra + anel de depuração).
+                conferir("geometrias na GPU depois de cada recomeço: " + amostras.join(", ") + " (variação " + (maior - menor) + " ≤ 1)", maior - menor <= 1);
+                conferir("e o último é igual ao primeiro, ± 1 (" + amostras[20] + " × " + amostras[0] + ")", Math.abs(amostras[20] - amostras[0]) <= 1);
+                conferir("as texturas também ficam estáveis (o jogo não cria nenhuma; o three.js mantém " + texturas[0] + " interna): " + texturas.join(","), texturas.every(function (n) { return n === texturas[0]; }));
+                conferirIgual("a cena continua com 8 fixos + barcos depois de 20 recomeços", cena.children.length, filhosDaCenaEsperados());
+            });
+
+            testar("descartar: todo recife velho emite dispose (geometrias e materiais) a cada noite; o que é compartilhado ou fixo NÃO", function () {
+                irParaNoite(0);
+                const protegidos = [mar.geometry, mar.material, partes.casco, partes.mastro, partes.luz, partes.madeira, partes.brilho, chuva.geometria, chuva.material, cone.geometry, cone.material,
+                    linhasDosAlvos.geometry, leques.largo.geometry];
+                const protegidosDescartados = [];
+                protegidos.forEach(function (item, indice) { item.addEventListener("dispose", function () { protegidosDescartados.push(indice); }); });
+
+                for (let noiteIndice = 0; noiteIndice < 5; noiteIndice++) {
+                    const velhos = [];
+                    const descartados = new Set();
+                    const velhoGrupo = grupoDeRecifes;
+                    velhoGrupo.traverse(function (objeto) {
+                        [objeto.geometry, objeto.material].forEach(function (item) {
+                            if (item) {
+                                velhos.push(item);
+                                item.addEventListener("dispose", function () { descartados.add(item); });
+                            }
+                        });
+                    });
+                    comecarNoite(noiteIndice);
+                    barcaNoMundo.segundosEncalhada = 1e9;
+                    passar(50);
+                    conferir("noite " + (noiteIndice + 1) + ": as " + velhos.length + " geometrias e materiais do grupo anterior emitiram dispose, e o grupo saiu da cena",
+                        velhos.length > 0 && velhos.every(function (item) { return descartados.has(item); }) && cena.children.indexOf(velhoGrupo) === -1 && cena.children.indexOf(grupoDeRecifes) !== -1,
+                        descartados.size + " de " + velhos.length);
+                }
+                conferir("o mar, as partes dos barcos, a chuva, o cone e os desenhos de depuração NUNCA foram descartados (são reaproveitados)", protegidosDescartados.length === 0,
+                    "descartados: " + protegidosDescartados.join(", "));
+                conferir("e os barcos continuam desenháveis depois de 5 noites (as partes compartilhadas estão vivas)", barcosDePesca.every(function (barco) { return barco.malha !== undefined && barco.malha.parent === cena; }));
+            });
+
+            testar("as medidas do passo 8: ultimoTempoDeQuadro, de Atualização e de Desenho são finitas e ≥ 0, e quadro = atualização + desenho", function () {
+                irParaNoite(0);
+                ligarDepuracao();
+                for (let i = 0; i < 5; i++) {
+                    passar(50);
+                }
+                conferir("com o relógio falso do apoio.js: " + [ultimoTempoDeQuadro, ultimoTempoDeAtualizacao, ultimoTempoDeDesenho].join(" / "),
+                    [ultimoTempoDeQuadro, ultimoTempoDeAtualizacao, ultimoTempoDeDesenho].every(function (valor) { return Number.isFinite(valor) && valor >= 0; }));
+
+                // um relógio que anda 0,5 ms a cada leitura: a aritmética fica exata e o painel mostra os mesmos números
+                const relogioFalso = performance.now;
+                let leituras = 0;
+                performance.now = function () { leituras += 0.5; return leituras; };
+                try {
+                    passar(50);
+                } finally {
+                    performance.now = relogioFalso;
+                }
+                conferir("com um relógio de 0,5 ms por leitura: atualização 0,5, desenho 0,5 e quadro 1,0",
+                    proximo(ultimoTempoDeAtualizacao, 0.5) && proximo(ultimoTempoDeDesenho, 0.5) && proximo(ultimoTempoDeQuadro, 1), [ultimoTempoDeAtualizacao, ultimoTempoDeDesenho, ultimoTempoDeQuadro].join(" / "));
+                conferir("e o painel (H) mostra \"JS 0.5 ms · desenho 0.5 ms\"", painel.textContent.indexOf("JS 0.5 ms · desenho 0.5 ms") !== -1, painel.textContent);
+                desligarDepuracao();
+            });
+
+            testar("a deriva, o calor e as noites continuam as do passo 7 (a depuração é só desenho): ficha, calor e vitória", function () {
+                irParaNoite(2);
+                conferir("noite 3: 4 barcos, 16 recifes (3 colunas), deriva 0,6, meta 3", barcosDePesca.length === 4 && recifes.length === 16 && recifes.filter(function (r) { return r.alta; }).length === 3 &&
+                    noite.ficha.deriva === 0.6 && noite.ficha.meta === 3);
+                lanternaDaBarca.foco = "estreito";
+                lanternaDaBarca.calor = 0;
+                passarSegundos(1);
+                conferir("estreito encalhada 1 s: +0,22", proximo(lanternaDaBarca.calor, 0.22, 1e-6));
+                lanternaDaBarca.foco = "largo";
+                noite.salvos = 3;
+                noite.segundos = noite.ficha.duracao - 0.05;
+                passar(50);
+                conferirIgual("meta batida ao amanhecer: vitória", [noite.resultado, noite.proxima].join(","), "vitoria,3");
+                passarSegundos(4.1);
+                conferirIgual("a noite 4 começa (relógio 3:00)", relogio.textContent, "Noite 4 · 3:00");
+            });
+
+            testar("haCaminhoAtePorto (busca em largura): há caminho da PARTIDA ao porto nas cinco noites; fechando o porto com pedras, deixa de haver", function () {
+                const semCaminho = [];
+                fichas.forEach(function (ficha, indice) {
+                    comecarNoite(indice);
+                    if (haCaminhoAtePorto() !== true) { semCaminho.push("noite " + (indice + 1)); }
+                });
+                conferir("as " + fichas.length + " noites têm caminho da PARTIDA ao porto, a 6 m de qualquer pedra", fichas.length === 5 && semCaminho.length === 0, "sem caminho: " + semCaminho.join(", "));
+
+                comecarNoite(4);
+                const pedrasDaNoite = recifes.length;
+                function fecharComPedras(novas) {
+                    novas.forEach(function (pedra) { recifes.push(Object.assign({ alta: false, brasa: 0, iluminado: false }, pedra)); });
+                    const caminho = haCaminhoAtePorto();
+                    recifes.length = pedrasDaNoite;   // sem nenhum quadro no meio: o jogo não vê as pedras sem malha
+                    return caminho;
+                }
+                const anel = [];
+                for (let i = 0; i < 12; i++) {
+                    anel.push({ x: porto.x + 14 * Math.sin(i * Math.PI / 6), z: porto.z + 14 * Math.cos(i * Math.PI / 6), raio: 4 });
+                }
+                conferirIgual("uma pedra enorme em cima do porto fecha o caminho", fecharComPedras([{ x: porto.x, z: porto.z, raio: 15 }]), false);
+                conferirIgual("um anel de 12 pedras a 14 m do centro do porto fecha o caminho", fecharComPedras(anel), false);
+                const anelDaPartida = [];
+                for (let i = 0; i < 12; i++) {
+                    anelDaPartida.push({ x: PARTIDA.x + 9 * Math.sin(i * Math.PI / 6), z: PARTIDA.z + 9 * Math.cos(i * Math.PI / 6), raio: 3 });
+                }
+                conferirIgual("um anel de pedras em volta da PARTIDA também fecha (a barca não sai)", fecharComPedras(anelDaPartida), false);
+                conferirIgual("controle: tiradas as pedras de teste, o caminho volta (noite 5)", [recifes.length === pedrasDaNoite, haCaminhoAtePorto()].join(","), "true,true");
+                conferir("e uma pedra pequena longe do porto e do caminho não o fecha", fecharComPedras([{ x: 70, z: 70, raio: 2 }]) === true);
+                irParaNoite(0);
+            });
+
+            testar("haCaminhoAtePorto(listaDeRecifes = recifes) só LÊ: recifesDaFicha(ficha) monta os recifes de uma noite como dados e fichas.every(f => haCaminhoAtePorto(recifesDaFicha(f))) deixa o jogo byte a byte igual", function () {
+                function semMalhas(chave, valor) {   // o jogo guarda a malha do three.js em barcos e recifes: fora da fotografia
+                    return valor !== null && typeof valor === "object" && (valor.isObject3D || valor.isMaterial || valor.isBufferGeometry) ? undefined : valor;
+                }
+                function camposDoRecife(recife) {
+                    return [recife.x, recife.z, recife.raio, recife.alta, recife.brasa, recife.iluminado].join(",");
+                }
+                function fotografarOJogo() {
+                    return JSON.stringify({
+                        recifes: recifes, fila: barcosDePesca, afundando: barcosAfundando, removidos: barcosRemovidos, barca: barcaNoMundo, noite: noite, lanterna: lanternaDaBarca,
+                        placar: [salvos, naufragios, proximoIdDeBarco], reducao: reduzirClaroes, ilha: ilha, porto: porto, partida: PARTIDA
+                    }, semMalhas);
+                }
+                irParaNoite(2);
+                passarSegundos(3);
+                const antes = fotografarOJogo();
+                const recifesAntes = recifes.slice();
+                const todasTemCaminho = fichas.every(function (ficha) { return haCaminhoAtePorto(recifesDaFicha(ficha)); });
+                conferir("a checagem documentada, fichas.every(f => haCaminhoAtePorto(recifesDaFicha(f))), é true para as " + fichas.length + " noites", fichas.length === 5 && todasTemCaminho === true);
+                conferir("e o jogo ficou byte a byte igual (recifes, fila, barca, noite, lanterna, placar, ids): nenhuma noite foi montada", fotografarOJogo() === antes && recifes.length === recifesAntes.length && recifes.every(function (recife, i) { return recife === recifesAntes[i]; }));
+
+                const diferencas = [];
+                fichas.forEach(function (ficha, indice) {
+                    const dados = recifesDaFicha(ficha);
+                    const dadosDeNovo = recifesDaFicha(ficha);
+                    comecarNoite(indice);
+                    if (dados.map(camposDoRecife).join(";") !== recifes.map(camposDoRecife).join(";")) { diferencas.push("noite " + (indice + 1) + ": recifesDaFicha difere dos recifes que comecarNoite monta"); }
+                    if (dados.length !== ficha.recifes || dados.filter(function (recife) { return recife.alta; }).length !== ficha.colunas) { diferencas.push("noite " + (indice + 1) + ": " + dados.length + " recifes, " + dados.filter(function (recife) { return recife.alta; }).length + " altos"); }
+                    if (dados.some(function (recife, i) { return recife === dadosDeNovo[i] || recife === recifes[i]; })) { diferencas.push("noite " + (indice + 1) + ": os recifes devolvidos são os mesmos objetos (não são cópias)"); }
+                    dados[0].raio = 999;
+                    dados[0].brasa = 5;
+                    if (recifesDaFicha(ficha).map(camposDoRecife).join(";") !== dadosDeNovo.map(camposDoRecife).join(";")) { diferencas.push("noite " + (indice + 1) + ": mexer no resultado mexeu nos dados das noites"); }
+                });
+                conferir("recifesDaFicha(ficha) devolve cópias novas, iguais aos recifes que comecarNoite monta (em número, altos e campos), e mexer nelas não suja os dados das cinco noites",
+                    diferencas.length === 0, diferencas.slice(0, 3).join("; "));
+
+                irParaNoite(4);
+                const noiteCinco = recifesDaFicha(fichas[4]);
+                const fechado = noiteCinco.concat([{ x: porto.x, z: porto.z, raio: 15, alta: false, brasa: 0, iluminado: false }]);
+                const abertoNoJogo = recifes.slice();
+                conferirIgual("com a lista do argumento fechando o porto, devolve false mesmo com os recifes do jogo abertos", haCaminhoAtePorto(fechado), false);
+                conferirIgual("e sem argumento lê os recifes do jogo (abertos): true", haCaminhoAtePorto(), true);
+                recifes.push({ x: porto.x, z: porto.z, raio: 15, alta: false, brasa: 0, iluminado: false });
+                conferirIgual("com o porto fechado só nos recifes do jogo, sem argumento é false", haCaminhoAtePorto(), false);
+                conferirIgual("e uma lista aberta no argumento vence os recifes fechados do jogo: true", haCaminhoAtePorto(noiteCinco), true);
+                conferirIgual("a lista vazia deixa o caminho livre: true", haCaminhoAtePorto([]), true);
+                recifes.length = abertoNoJogo.length;
+                conferir("os recifes do jogo voltaram ao que eram", recifes.every(function (recife, i) { return recife === abertoNoJogo[i]; }));
+                const pedraDeTeste = { x: 40, z: 40, raio: 2, alta: false, brasa: 0, iluminado: false };
+                conferir("recifeTocadoPor(coisa, folga, lista) olha a lista dada: acha a pedra dela e não vê as do jogo",
+                    recifeTocadoPor({ x: 40, z: 40 }, 0, [pedraDeTeste]) === pedraDeTeste && recifeTocadoPor({ x: recifes[0].x, z: recifes[0].z }, 0, []) === null && recifeTocadoPor({ x: recifes[0].x, z: recifes[0].z }) === recifes[0]);
+                irParaNoite(0);
+            });
+
+            testar("a trava de clarões (WCAG 2.3.1) nas regras do passo 8: 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 começos em QUALQUER janela fechada de 1 s (intervalo mínimo 0,4 s)", function () {
+                verifTravaDeClaroes();
+                irParaNoite(0);
+                ligarReducao(false);
+            });
+
+            testar("o modo vale para o clarão inteiro (`noite.relampagoReduzido` grava a opção no começo de cada clarão): opção trocada a cada quadro durante os clarões, nunca um salto de 0 a 1 num clarão reduzido", function () {
+                verifModoTravadoPorClarao();
+                irParaNoite(0);
+                ligarReducao(false);
+            });
+
+            testar("Espaço depois de um clique do mouse ou do dedo (detail ≥ 1) é da lanterna; Tab + Espaço / Enter (detail 0) continua sendo do botão", function () {
+                desligarDepuracao();
+                irParaNoite(0);
+                ligarReducao(false);
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                verifEspacoDepoisDoClique();
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                ligarReducao(false);
+            });
+
+            testar("a chuva vem da ficha da noite (400 a 2.000 gotas) e o buffer das instâncias só sobe no modo instanciado", function () {
+                for (let indice = 0; indice < 5; indice++) {
+                    verifChuvaDaNoite(passar, irParaNoite, indice);
+                }
+                irParaNoite(2);
+                verifSubidaDoBufferDaChuva(passar);
+                irParaNoite(0);
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado: 48 giros × recuos, o anel a 10 e 20 m e a PARTIDA por último; sem lugar vivo, não nasce nada (filaLivre(PARTIDA) é true nas cinco noites)", function () {
+                verifNascimentoDoComboio();
+                irParaNoite(0);
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                desligarDepuracao();
+                irParaNoite(4);
+                verifCameraNoPontoDaFormula();
+                irParaNoite(0);
+            });
+
+            testar("o enquadramento ao longo do tempo (noite 5, retas e voltas em U): barca, 14 m à frente e os 3 primeiros barcos dentro do quadro (|NDC| ≤ 0,97) em TODOS os quadros, em 1280×800 e 390×750", function () {
+                desligarDepuracao();
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    irParaNoite(4);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    barcaNoMundo.segundosEncalhada = 0;
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 3400, 50);
+                    verifRestaurarRecifes(pedras);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": nenhum quadro com algum dos 5 pontos fora (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.algum === 0 && medidas.quadros === 3400);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 15 voltas em U, ≥ 8 retas longas, o 3º barco a ≥ 40 m da barca) e a noite 5 seguiu viva",
+                        medidas.voltas >= 15 && medidas.retas >= 8 && medidas.maiorDistanciaDoTerceiro >= 40 && noite.indice === 4 && noite.resultado === "" && barcosDePesca.length >= 3,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m, noite " + noite.indice + ", resultado " + noite.resultado + ", barcos " + barcosDePesca.length);
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                irParaNoite(0);
+            });
+
+            testar("robô semeado: H, R, C, foco, leme e dedos aleatórios; o estado de depuração fica coerente e a cena não vaza (2 sementes × 1500 quadros)", function () {
+                const teclas = ["a", "d", "s", "q", "e", "ArrowUp", "ArrowDown", " ", "h", "H", "h", "r", "c", "Shift"];
+                const duracoes = [0, 1, 16, 16, 33, 50, 50, 120, 1000];
+                [4, 20261026].forEach(function (semente) {
+                    semearSorteio(semente);
+                    const violacoes = {};
+                    function registrar(categoria, mensagemDaViolacao) {
+                        if (!(categoria in violacoes)) { violacoes[categoria] = mensagemDaViolacao; }
+                    }
+                    irParaNoite(0);
+                    barcaNoMundo.segundosEncalhada = 0;
+                    for (let quadro = 0; quadro < 1500; quadro++) {
+                        const quantos = Math.floor(Math.random() * 3);
+                        for (let i = 0; i < quantos; i++) {
+                            const tipo = Math.floor(Math.random() * 4);
+                            if (tipo === 0) { apertar(sortear(teclas)); }
+                            else if (tipo === 1) { soltarTecla(sortear(teclas)); }
+                            else if (tipo === 2) { tocar(botaoFoco, sortear([0, 1])); }
+                            else { palco.dispatchEvent(new PointerEvent(sortear(["pointermove", "pointerdown", "pointerup", "pointerleave"]), { clientX: Math.random() * 400, clientY: Math.random() * 200, pointerType: sortear(["mouse", "touch"]) })); }
+                        }
+                        passar(sortear(duracoes));
+                        if (cena.children.length !== filhosDaCenaEsperados()) { registrar("a cena não vaza malhas", "filhos " + cena.children.length + " × " + filhosDaCenaEsperados()); }
+                        if (controles.enabled !== depurando || painel.hidden !== !depurando || desenhosDeDepuracao.visible !== depurando) { registrar("H liga/desliga controles, painel e desenhos juntos", "depurando " + depurando); }
+                        if (!todosFinitos([camera.position.x, camera.position.y, camera.position.z, barca.position.x, lanternaDaBarca.calor])) { registrar("NaN", "câmera, barca ou calor"); }
+                        if (depurando && linhasDosAlvos.geometry.drawRange.count !== 2 * barcosDePesca.length) { registrar("uma linha por barco", linhasDosAlvos.geometry.drawRange.count + " × " + barcosDePesca.length); }
+                        if (grupoDeRecifes.children.length !== recifes.length) { registrar("o desenho dos recifes é o da noite", grupoDeRecifes.children.length + " × " + recifes.length); }
+                        if (!todosFinitos([ultimoTempoDeQuadro, ultimoTempoDeAtualizacao, ultimoTempoDeDesenho]) || ultimoTempoDeQuadro < 0) { registrar("medidas finitas", "" + ultimoTempoDeQuadro); }
+                    }
+                    const categorias = Object.keys(violacoes);
+                    conferir("semente " + semente + ": nenhuma regra quebrada em nenhum quadro", categorias.length === 0,
+                        categorias.map(function (categoria) { return categoria + " (" + violacoes[categoria] + ")"; }).join("; "));
+                });
+                desligarDepuracao();
+                ligarReducao(false);
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

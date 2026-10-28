@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 4: paredes</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 4: paredes</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids e os botões [data-acao]. -->
+    <div id="palco">
+        <canvas id="visao" width="320" height="200"></canvas>
+        <canvas id="jogo" width="384" height="288" hidden></canvas>
+    </div>
+    <p id="leitura"></p>
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda">girarEsquerda</button>
+        <button type="button" data-acao="frente">frente</button>
+        <button type="button" data-acao="girarDireita">girarDireita</button>
+        <button type="button" data-acao="esquerda">esquerda</button>
+        <button type="button" data-acao="tras">tras</button>
+        <button type="button" data-acao="direita">direita</button>
+    </div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- A janela do teste é falsa e mutável (1280×720): o jogo lê innerWidth/innerHeight ao carregar. -->
+    <script>
+        const janelaFalsa = { largura: 1280, altura: 720 };
+        Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
+        Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+    </script>
+
+    <!-- O teste confere regras, não pixels: a planta ignora o desenho; a imagem em primeira pessoa
+         GRAVA os fillRect, porque a altura de cada coluna é o que se vê. -->
+    <script>
+        const retangulosDaVisao = [];
+
+        function criarContextoQueGrava() {
+            return new Proxy({}, {
+                get: function (propriedades, nome) {
+                    if (nome === "fillRect") {
+                        return function (x, y, largura, altura) {
+                            retangulosDaVisao.push({ estilo: propriedades.fillStyle, x: x, y: y, largura: largura, altura: altura });
+                        };
+                    }
+                    return nome in propriedades ? propriedades[nome] : function () { };
+                },
+                set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+            });
+        }
+
+        // A planta ignora o desenho, mas anota cada fillRect e fillText com a cor vigente: é como
+        // se confere a cor de fundo sob cada letra (contraste do GDD, seção 7).
+        const operacoesDaPlanta = [];
+
+        function criarContextoQueAnotaAPlanta() {
+            return new Proxy({}, {
+                get: function (propriedades, nome) {
+                    if (nome === "fillRect") {
+                        return function (x, y, largura, altura) {
+                            operacoesDaPlanta.push({ tipo: "retangulo", estilo: propriedades.fillStyle, x: x, y: y, largura: largura, altura: altura });
+                        };
+                    }
+                    if (nome === "fillText") {
+                        return function (texto, x, y) {
+                            operacoesDaPlanta.push({ tipo: "texto", estilo: propriedades.fillStyle, texto: texto, x: x, y: y });
+                        };
+                    }
+                    return nome in propriedades ? propriedades[nome] : function () { };
+                },
+                set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+            });
+        }
+
+        const contextoDaPlanta = criarContextoQueAnotaAPlanta();
+        const contextoDaImagem = criarContextoQueGrava();
+        HTMLCanvasElement.prototype.getContext = function () {
+            return this.id === "visao" ? contextoDaImagem : contextoDaPlanta;
+        };
+    </script>
+    <script src="../../reflexo/04-paredes/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const VOLTA_COMPLETA = 2 * Math.PI;
+        const SIMBOLOS_SOLIDOS_ESPERADOS = "#%DER";
+        const PLANO_ESPERADO = Math.tan(33 * Math.PI / 180);   // campo de visão de 66°
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertarTecla(tecla) {
+            const evento = new KeyboardEvent("keydown", { key: tecla, cancelable: true });
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function botaoDaAcao(acao) {
+            return document.querySelector('[data-acao="' + acao + '"]');
+        }
+
+        function dispararPonteiro(botao, tipo, identificador) {
+            botao.dispatchEvent(new PointerEvent(tipo, { bubbles: true, pointerId: identificador === undefined ? 0 : identificador }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        // Põe o jogador numa pose conhecida, sem ações ativas, e roda UM quadro sem entrada
+        // (é ele que lança os raios e desenha). Devolve só os retângulos de parede e de sombra.
+        function reiniciarEVer(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+            return verUmQuadro();
+        }
+
+        function verUmQuadro() {
+            retangulosDaVisao.length = 0;
+            avancarQuadro(16);
+            const paredes = retangulosDaVisao.filter(function (retangulo) { return retangulo.largura === 1 && retangulo.estilo !== SOMBRA_DO_LADO_Y; });
+            const sombras = retangulosDaVisao.filter(function (retangulo) { return retangulo.largura === 1 && retangulo.estilo === SOMBRA_DO_LADO_Y; });
+            return { paredes: paredes, sombras: sombras, todos: retangulosDaVisao.slice() };
+        }
+
+        function perto(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        function pertoRelativo(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? 1e-9 : tolerancia) * Math.max(1, Math.abs(esperado));
+        }
+
+        function constanteK(largura) {
+            return largura / (2 * PLANO_ESPERADO);
+        }
+
+        // Altura que a planta (H) ocupa na tela, lida da largura que o jogo deu ao canvas dela
+        // (+ 4 px das duas bordas) e da proporção do canvas: não repete a conta do jogo.
+        function alturaDaPlantaNaTela() {
+            const larguraNaTela = parseFloat(tela.style.width);
+            return (larguraNaTela - 4) * tela.height / tela.width + 4;
+        }
+
+        // Contraste WCAG 2.1 entre duas cores "#rrggbb".
+        function luminanciaRelativa(cor) {
+            const canais = [1, 3, 5].map(function (inicio) {
+                const canal = parseInt(cor.slice(inicio, inicio + 2), 16) / 255;
+                return canal <= 0.03928 ? canal / 12.92 : Math.pow((canal + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
+        }
+
+        function razaoDeContraste(corA, corB) {
+            const claro = Math.max(luminanciaRelativa(corA), luminanciaRelativa(corB));
+            const escuro = Math.min(luminanciaRelativa(corA), luminanciaRelativa(corB));
+            return (claro + 0.05) / (escuro + 0.05);
+        }
+
+        // Liga a planta, roda um quadro e devolve, para cada letra desenhada, a cor do fundo da casa dela.
+        function letrasDaPlantaComFundo() {
+            const estavaLigada = depuracaoLigada;
+            if (!estavaLigada) {
+                apertarTecla("h");
+            }
+            operacoesDaPlanta.length = 0;
+            avancarQuadro(16);
+            const operacoes = operacoesDaPlanta.slice();
+            if (!estavaLigada) {
+                apertarTecla("h");
+                avancarQuadro(16);
+            }
+
+            const letras = [];
+            operacoes.forEach(function (operacao, indice) {
+                if (operacao.tipo !== "texto") {
+                    return;
+                }
+                const casaX = operacao.x - 0.5;
+                const casaY = operacao.y - 0.5;
+                let fundo = null;
+                for (let anterior = indice - 1; anterior >= 0 && fundo === null; anterior--) {
+                    const candidata = operacoes[anterior];
+                    if (candidata.tipo === "retangulo" && candidata.x === casaX && candidata.y === casaY && candidata.largura === 1 && candidata.altura === 1) {
+                        fundo = candidata.estilo;
+                    }
+                }
+                letras.push({ letra: operacao.texto, cor: operacao.estilo, fundo: fundo, casaX: casaX, casaY: casaY });
+            });
+            return letras;
+        }
+
+        function comJanela(largura, altura, funcao) {
+            janelaFalsa.largura = largura;
+            janelaFalsa.altura = altura;
+            try {
+                window.dispatchEvent(new Event("resize"));
+                funcao();
+            } finally {
+                janelaFalsa.largura = 1280;
+                janelaFalsa.altura = 720;
+                window.dispatchEvent(new Event("resize"));
+                soltarTudo();
+            }
+        }
+
+        // ---- a verdade independente: o texto do mapa e a interseção raio × casa (placas) ----
+
+        function casaSolidaNoTexto(coluna, linha) {
+            const simbolo = MAPA_EM_TEXTO[linha] && MAPA_EM_TEXTO[linha][coluna];
+            return simbolo === undefined || SIMBOLOS_SOLIDOS_ESPERADOS.includes(simbolo);
+        }
+
+        function intervaloNoEixo(origem, direcao, minimo, maximo) {
+            if (direcao === 0) {
+                return origem >= minimo && origem < maximo ? { entra: -Infinity, sai: Infinity } : null;
+            }
+            const aoMinimo = (minimo - origem) / direcao;
+            const aoMaximo = (maximo - origem) / direcao;
+            return { entra: Math.min(aoMinimo, aoMaximo), sai: Math.max(aoMinimo, aoMaximo) };
+        }
+
+        function raioDeReferencia(origemX, origemY, direcaoX, direcaoY) {
+            let melhor = null;
+            for (let linha = 0; linha < MAPA_EM_TEXTO.length; linha++) {
+                for (let coluna = 0; coluna < MAPA_EM_TEXTO[linha].length; coluna++) {
+                    if (!casaSolidaNoTexto(coluna, linha)) {
+                        continue;
+                    }
+                    const noX = intervaloNoEixo(origemX, direcaoX, coluna, coluna + 1);
+                    const noY = intervaloNoEixo(origemY, direcaoY, linha, linha + 1);
+                    if (noX === null || noY === null) {
+                        continue;
+                    }
+                    const entra = Math.max(noX.entra, noY.entra);
+                    const sai = Math.min(noX.sai, noY.sai);
+                    if (!(sai > entra && sai > 0)) {
+                        continue;
+                    }
+                    const distancia = Math.max(entra, 0);
+                    if (melhor === null || distancia < melhor.distancia) {
+                        melhor = {
+                            coluna: coluna, linha: linha, distancia: distancia,
+                            lado: noX.entra > noY.entra ? "x" : "y",
+                            x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia
+                        };
+                    }
+                }
+            }
+            return melhor;
+        }
+
+        function passaPorQuina(resultado) {
+            return resultado.cruzamentos.some(function (cruzamento) {
+                return perto(cruzamento.x, Math.round(cruzamento.x)) && perto(cruzamento.y, Math.round(cruzamento.y));
+            });
+        }
+
+        function profundidade(x, y) {
+            return (x - jogador.x) * jogador.dx + (y - jogador.y) * jogador.dy;
+        }
+
+        // O desvio de cada coluna em relação ao olhar, pela trigonometria (não pela fórmula do jogo).
+        function desvioDaColuna(coluna, largura) {
+            return Math.atan(PLANO_ESPERADO * (2 * (coluna + 0.5) / largura - 1));
+        }
+
+        // Confere TODAS as colunas da pose atual contra a referência. Devolve null ou o motivo.
+        function motivoDeColunasErradas() {
+            const largura = larguraDaVisao;
+            const k = constanteK(largura);
+            if (raiosDaTela.length !== largura) {
+                return "há " + raiosDaTela.length + " raios para " + largura + " colunas";
+            }
+            for (let coluna = 0; coluna < largura; coluna++) {
+                const resultado = raiosDaTela[coluna];
+                const nome = "coluna " + coluna + " de " + largura + " na pose (" + jogador.x.toFixed(3) + ", " + jogador.y.toFixed(3) + ", " + jogador.angulo.toFixed(3) + ")";
+                const anguloDoRaio = jogador.angulo + desvioDaColuna(coluna, largura);
+                const direcaoX = Math.cos(anguloDoRaio);
+                const direcaoY = Math.sin(anguloDoRaio);
+
+                if (!casaSolidaNoTexto(resultado.coluna, resultado.linha)) {
+                    return nome + ": bateu numa casa livre";
+                }
+                const profundidadeDoImpacto = profundidade(resultado.x, resultado.y);
+                if (!(resultado.perpendicular > 0) || !perto(resultado.perpendicular, profundidadeDoImpacto, 1e-8)) {
+                    return nome + ": perpendicular " + resultado.perpendicular + " e profundidade do impacto " + profundidadeDoImpacto;
+                }
+                if (!pertoRelativo(resultado.altura * resultado.perpendicular, k)) {
+                    return nome + ": altura × perpendicular = " + resultado.altura * resultado.perpendicular + " em vez de k = " + k;
+                }
+                if (resultado.lado === "x" ? !perto(resultado.x, Math.round(resultado.x), 1e-8) : !perto(resultado.y, Math.round(resultado.y), 1e-8)) {
+                    return nome + ": lado " + resultado.lado + " mas o impacto (" + resultado.x + ", " + resultado.y + ") não está numa linha dessa direção";
+                }
+                if (passaPorQuina(resultado)) {
+                    continue;
+                }
+                const esperado = raioDeReferencia(jogador.x, jogador.y, direcaoX, direcaoY);
+                if (esperado === null || esperado.coluna !== resultado.coluna || esperado.linha !== resultado.linha || esperado.lado !== resultado.lado) {
+                    return nome + ": casa/lado (" + resultado.coluna + ", " + resultado.linha + ") " + resultado.lado + " em vez de " + JSON.stringify(esperado);
+                }
+                if (!pertoRelativo(resultado.distancia, esperado.distancia, 1e-8)) {
+                    return nome + ": distância " + resultado.distancia + " em vez de " + esperado.distancia;
+                }
+                const alturaEsperada = k / profundidade(esperado.x, esperado.y);
+                if (!pertoRelativo(resultado.altura, alturaEsperada, 1e-7)) {
+                    return nome + ": altura " + resultado.altura + " em vez de " + alturaEsperada;
+                }
+            }
+            return null;
+        }
+
+        // Confere que o desenho de um quadro (H desligado) cabe na imagem. Devolve null ou o motivo.
+        function motivoDeDesenhoErrado(quadro) {
+            if (quadro.paredes.length !== larguraDaVisao) {
+                return quadro.paredes.length + " colunas desenhadas para " + larguraDaVisao;
+            }
+            for (let coluna = 0; coluna < quadro.paredes.length; coluna++) {
+                const faixa = quadro.paredes[coluna];
+                if (faixa.x !== coluna) {
+                    return "a faixa " + coluna + " foi desenhada em x = " + faixa.x;
+                }
+                if (!(faixa.altura >= 0 && faixa.altura <= alturaDaVisao) || !(faixa.y >= 0) || !(faixa.y + faixa.altura <= alturaDaVisao)) {
+                    return "a faixa " + coluna + " sai da imagem: topo " + faixa.y + " altura " + faixa.altura + " de " + alturaDaVisao;
+                }
+                if (Math.abs(faixa.y + faixa.altura / 2 - alturaDaVisao / 2) > 0.5) {
+                    return "a faixa " + coluna + " não está centrada: topo " + faixa.y + " altura " + faixa.altura;
+                }
+                const esperada = Math.min(Math.round(raiosDaTela[coluna].altura), alturaDaVisao);
+                if (faixa.altura !== esperada) {
+                    return "a faixa " + coluna + " tem altura " + faixa.altura + " em vez de " + esperada;
+                }
+            }
+            return null;
+        }
+
+        function sortearPoseLivre() {
+            for (let tentativa = 0; tentativa < 1000; tentativa++) {
+                const x = 1 + Math.random() * (COLUNAS - 2);
+                const y = 1 + Math.random() * (LINHAS - 2);
+                if (!casaSolidaNoTexto(Math.floor(x), Math.floor(y))) {
+                    return { x: x, y: y, angulo: Math.random() * VOLTA_COMPLETA };
+                }
+            }
+            throw new Error("não achei pose livre");
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial", function () {
+            conferirIgual("nenhuma ação ativa ao abrir", acoesAtivas.size, 0);
+            conferirIgual("nenhuma entrada ativa ao abrir", entradasAtivas.size, 0);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            conferirIgual("o J virou chão", mapa[1][1], ".");
+            conferirIgual("com a janela falsa de 1280×720 a imagem é 320 de largura", larguraDaVisao, 320);
+            conferirIgual("e 200 de altura", alturaDaVisao, 200);
+            conferir("o raio do olhar existe antes do primeiro quadro", raio !== null && typeof raio === "object");
+            conferir("a distância perpendicular do raio do olhar é a própria distância (sem desvio)", raio.perpendicular === raio.distancia && raio.distancia > 0,
+                "perpendicular " + raio.perpendicular + ", distância " + raio.distancia);
+            conferir("altura × perpendicular = k também no raio do olhar", pertoRelativo(raio.altura * raio.perpendicular, constanteK(320)));
+            conferir("o raio do olhar carrega o caminho (cruzamentos) para o H", Array.isArray(raio.cruzamentos) && raio.cruzamentos.length > 0, JSON.stringify(raio.cruzamentos));
+            const olhar = raioDeReferencia(jogador.x, jogador.y, jogador.dx, jogador.dy);
+            conferir("o raio do olhar bate onde a referência independente manda (casa, face, distância)",
+                olhar !== null && raio.coluna === olhar.coluna && raio.linha === olhar.linha && raio.lado === olhar.lado && pertoRelativo(raio.distancia, olhar.distancia, 1e-9),
+                JSON.stringify({ raio: [raio.coluna, raio.linha, raio.lado, raio.distancia], referencia: olhar }));
+            conferirIgual("a imagem começa visível", visao.hidden, false);
+            conferirIgual("e a planta escondida", tela.hidden, true);
+
+            // Um "resize" do próprio Chrome pode chegar entre o script do jogo e este e esvaziar as colunas
+            // (o jogo as refaz no quadro seguinte): por isso as colunas só são conferidas depois do 1º quadro.
+            avancarQuadro(16);
+            conferirIgual("um raio por coluna depois do primeiro quadro", raiosDaTela.length, 320);
+            conferir("o raio do olhar é um objeto à parte: nenhuma das 320 colunas é ele", raiosDaTela.indexOf(raio) === -1);
+            conferir("as colunas NÃO carregam o caminho: todas com um array vazio e congelado",
+                raiosDaTela.every(function (resultado) { return Array.isArray(resultado.cruzamentos) && resultado.cruzamentos.length === 0 && Object.isFrozen(resultado.cruzamentos); }));
+            conferir("o raio do olhar segue com o caminho depois do quadro", raio.cruzamentos.length === 3, JSON.stringify(raio.cruzamentos));
+        });
+
+        testar("constantes do campo de visão", function () {
+            conferir("o campo de visão é 66°", perto(CAMPO_DE_VISAO, 66 * Math.PI / 180));
+            conferir("PLANO = tan(33°) ≈ 0,6494", perto(PLANO, PLANO_ESPERADO) && perto(PLANO, 0.6494, 1e-4), "PLANO = " + PLANO);
+        });
+
+        testar("raios fixos do DDA (os mesmos do passo 3)", function () {
+            const casos = [
+                { nome: "para a direita pela linha 9", ox: 1.5, oy: 9.5, dx: 1, dy: 0, coluna: 15, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "para baixo até o emissor", ox: 1.5, oy: 1.5, dx: 0, dy: 1, coluna: 1, linha: 5, lado: "y", distancia: 3.5, passos: 4 },
+                { nome: "quase paralelo ao eixo x (1e-12)", ox: 1.5, oy: 9.5, dx: 1, dy: 1e-12, coluna: 15, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "origem sobre uma linha, indo para a esquerda", ox: 3, oy: 1.5, dx: -1, dy: 0, coluna: 0, linha: 1, lado: "x", distancia: 2, passos: 3 },
+                { nome: "origem dentro de casa sólida", ox: 2.5, oy: 2.5, dx: 1, dy: 0, coluna: 2, linha: 2, lado: null, distancia: 0, passos: 0 }
+            ];
+            casos.forEach(function (caso) {
+                const resultado = lancarRaio(caso.ox, caso.oy, caso.dx, caso.dy);
+                const certo = resultado.coluna === caso.coluna && resultado.linha === caso.linha
+                    && (caso.lado === null || resultado.lado === caso.lado)
+                    && perto(resultado.distancia, caso.distancia) && resultado.cruzamentos.length === caso.passos;
+                conferir(caso.nome, certo, JSON.stringify({ coluna: resultado.coluna, linha: resultado.linha, lado: resultado.lado, distancia: resultado.distancia, passos: resultado.cruzamentos.length }));
+            });
+            conferir("direção nula termina", Number.isInteger(lancarRaio(8.5, 2.5, 0, 0).linha));
+            conferir("direção NaN termina", Number.isInteger(lancarRaio(8.5, 2.5, NaN, NaN).linha));
+        });
+
+        testar("as direções das colunas cobrem o campo de visão", function () {
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            const largura = larguraDaVisao;
+            const anguloDaBorda = Math.atan(PLANO_ESPERADO * (1 - 1 / largura));
+            let primeiroProblema = null;
+            let anterior = -Infinity;
+
+            for (let coluna = 0; coluna < largura && primeiroProblema === null; coluna++) {
+                const resultado = raiosDaTela[coluna];
+                const vetorX = resultado.x - jogador.x;
+                const vetorY = resultado.y - jogador.y;
+                const cruz = jogador.dx * vetorY - jogador.dy * vetorX;
+                const ponto = jogador.dx * vetorX + jogador.dy * vetorY;
+                const desvio = Math.atan2(cruz, ponto);
+                if (!perto(desvio, desvioDaColuna(coluna, largura), 1e-9)) {
+                    primeiroProblema = "coluna " + coluna + ": desvio " + desvio + " em vez de " + desvioDaColuna(coluna, largura);
+                } else if (!(desvio > anterior)) {
+                    primeiroProblema = "coluna " + coluna + ": os desvios não crescem da esquerda para a direita";
+                }
+                anterior = desvio;
+            }
+            conferir("o desvio de cada uma das " + largura + " colunas é atan(PLANO × câmera), crescendo da esquerda para a direita", primeiroProblema === null, primeiroProblema);
+
+            const desvioEsquerda = Math.atan2(jogador.dx * (raiosDaTela[0].y - jogador.y) - jogador.dy * (raiosDaTela[0].x - jogador.x),
+                jogador.dx * (raiosDaTela[0].x - jogador.x) + jogador.dy * (raiosDaTela[0].y - jogador.y));
+            const ultima = raiosDaTela[largura - 1];
+            const desvioDireita = Math.atan2(jogador.dx * (ultima.y - jogador.y) - jogador.dy * (ultima.x - jogador.x),
+                jogador.dx * (ultima.x - jogador.x) + jogador.dy * (ultima.y - jogador.y));
+            conferir("a coluna 0 olha −atan(PLANO·(1−1/W)) para a esquerda", perto(desvioEsquerda, -anguloDaBorda, 1e-9), "desvio = " + desvioEsquerda);
+            conferir("a última coluna olha +atan(PLANO·(1−1/W)) para a direita", perto(desvioDireita, anguloDaBorda, 1e-9), "desvio = " + desvioDireita);
+            conferir("a borda fica um pouco abaixo de 33° (a coluna é um pixel, o plano é de 0 a 1)", anguloDaBorda < 33 * Math.PI / 180 && anguloDaBorda > 32.8 * Math.PI / 180);
+            conferir("o leque inteiro cobre quase 66°", desvioDireita - desvioEsquerda > 65.5 * Math.PI / 180 && desvioDireita - desvioEsquerda < 66 * Math.PI / 180);
+        });
+
+        testar("parede reta de frente: todas as colunas da mesma altura (sem olho de peixe)", function () {
+            const quadro = reiniciarEVer(7.5, 9.5, Math.PI / 2);   // a parede de baixo (y = 11), a 1,5 casa
+            const k = constanteK(larguraDaVisao);
+            let menorAltura = Infinity;
+            let maiorAltura = -Infinity;
+            let menorDistancia = Infinity;
+            let maiorDistancia = -Infinity;
+            let menorAlturaSemCorrecao = Infinity;
+            let maiorAlturaSemCorrecao = -Infinity;
+            let todasNaParedeDeBaixo = true;
+
+            raiosDaTela.forEach(function (resultado) {
+                menorAltura = Math.min(menorAltura, resultado.altura);
+                maiorAltura = Math.max(maiorAltura, resultado.altura);
+                menorDistancia = Math.min(menorDistancia, resultado.distancia);
+                maiorDistancia = Math.max(maiorDistancia, resultado.distancia);
+                menorAlturaSemCorrecao = Math.min(menorAlturaSemCorrecao, k / resultado.distancia);
+                maiorAlturaSemCorrecao = Math.max(maiorAlturaSemCorrecao, k / resultado.distancia);
+                todasNaParedeDeBaixo = todasNaParedeDeBaixo && resultado.linha === 11 && resultado.lado === "y";
+            });
+
+            conferir("os 320 raios batem na parede de baixo, pela face y", todasNaParedeDeBaixo);
+            conferir("a altura é a mesma em todas as colunas (" + menorAltura.toFixed(6) + " a " + maiorAltura.toFixed(6) + ")",
+                maiorAltura - menorAltura < 1e-6 * maiorAltura);
+            conferir("e vale k / 1,5", pertoRelativo(raiosDaTela[0].altura, k / 1.5, 1e-9) && pertoRelativo(raiosDaTela[319].altura, k / 1.5, 1e-9));
+            conferir("a perpendicular é 1,5 em toda coluna", raiosDaTela.every(function (resultado) { return perto(resultado.perpendicular, 1.5, 1e-9); }));
+
+            const bordaDoLeque = desvioDaColuna(0, larguraDaVisao);
+            conferir("a distância CRUA cresce para as bordas: " + maiorDistancia.toFixed(3) + " contra " + menorDistancia.toFixed(3) + " no meio",
+                maiorDistancia > menorDistancia * 1.15);
+            conferir("e vale 1,5 / cos(desvio) na borda", perto(raiosDaTela[0].distancia, 1.5 / Math.cos(bordaDoLeque), 1e-9) && perto(raiosDaTela[319].distancia, 1.5 / Math.cos(bordaDoLeque), 1e-9));
+            conferir("sem a correção, k / distância curvaria a parede (" + menorAlturaSemCorrecao.toFixed(1) + " a " + maiorAlturaSemCorrecao.toFixed(1) + ")",
+                menorAlturaSemCorrecao < maiorAlturaSemCorrecao * 0.85);
+
+            conferir("na imagem, as 320 faixas desenhadas têm a mesma altura", quadro.paredes.length === 320 && quadro.paredes.every(function (faixa) { return faixa.altura === quadro.paredes[0].altura; }),
+                "alturas desenhadas de " + Math.min.apply(null, quadro.paredes.map(function (faixa) { return faixa.altura; })) + " a " + Math.max.apply(null, quadro.paredes.map(function (faixa) { return faixa.altura; })));
+            conferirIgual("e valem round(k / 1,5)", quadro.paredes[0].altura, Math.round(k / 1.5));
+
+            // o mesmo de lado: a parede da direita (x = 15), a 0,5 casa
+            reiniciarEVer(14.5, 9.5, 0);
+            conferir("de frente para a parede da direita também: altura igual em todas as colunas",
+                raiosDaTela.every(function (resultado) { return resultado.lado === "x" && pertoRelativo(resultado.altura, k / 0.5, 1e-9); }));
+        });
+
+        testar("altura × perpendicular = k, e dobrar a distância divide a altura por dois", function () {
+            const k = constanteK(larguraDaVisao);
+            const poses = [
+                [7.5, 10.5, Math.PI / 2, 0.5], [7.5, 10.25, Math.PI / 2, 0.75], [7.5, 10.0, Math.PI / 2, 1],
+                [7.5, 9.5, Math.PI / 2, 1.5], [8.5, 7.25, 3 * Math.PI / 2, 2.25], [8.5, 9.5, 3 * Math.PI / 2, 4.5]
+            ];
+            const alturaDoMeio = {};
+            let primeiroProblema = null;
+
+            poses.forEach(function (pose) {
+                reiniciarEVer(pose[0], pose[1], pose[2]);
+                alturaDoMeio[pose[3]] = raio.altura;
+                if (primeiroProblema === null && !pertoRelativo(raio.perpendicular, pose[3], 1e-9)) {
+                    primeiroProblema = "a " + pose[3] + " casa: perpendicular do meio = " + raio.perpendicular;
+                }
+                if (primeiroProblema === null && !pertoRelativo(raio.altura * raio.perpendicular, k)) {
+                    primeiroProblema = "a " + pose[3] + " casa: altura × perpendicular = " + raio.altura * raio.perpendicular + " em vez de " + k;
+                }
+                if (primeiroProblema === null && !pertoRelativo(raio.altura, k / pose[3])) {
+                    primeiroProblema = "a " + pose[3] + " casa: altura = " + raio.altura + " em vez de " + k / pose[3];
+                }
+            });
+            conferir("a 0,5 · 0,75 · 1 · 1,5 · 2,25 · 4,5 casas, a coluna do meio tem perpendicular, altura e k certos", primeiroProblema === null, primeiroProblema);
+            conferir("0,75 → 1,5: a altura cai pela metade", pertoRelativo(alturaDoMeio[0.75] / alturaDoMeio[1.5], 2));
+            conferir("0,5 → 1: a altura cai pela metade", pertoRelativo(alturaDoMeio[0.5] / alturaDoMeio[1], 2));
+            conferir("2,25 → 4,5: a altura cai pela metade", pertoRelativo(alturaDoMeio[2.25] / alturaDoMeio[4.5], 2));
+            conferir("1 → 4,5: mais longe, mais baixo", alturaDoMeio[1] > alturaDoMeio[1.5] && alturaDoMeio[1.5] > alturaDoMeio[2.25] && alturaDoMeio[2.25] > alturaDoMeio[4.5]);
+            conferir("a 1 casa, uma parede de 1 casa tem k pixels", pertoRelativo(alturaDoMeio[1], k));
+
+            semearSorteio(44);
+            let primeiroProblemaSorteado = null;
+            for (let indice = 0; indice < 60 && primeiroProblemaSorteado === null; indice++) {
+                const pose = sortearPoseLivre();
+                reiniciarEVer(pose.x, pose.y, pose.angulo);
+                primeiroProblemaSorteado = motivoDeColunasErradas();
+            }
+            conferir("60 poses sorteadas × 320 colunas: casa, face, distância, perpendicular e altura contra a referência independente", primeiroProblemaSorteado === null, primeiroProblemaSorteado);
+        });
+
+        testar("duas faces: x e y são distinguidas e a sombra marca a face y", function () {
+            const quadro = reiniciarEVer(13.9, 10.1, Math.PI / 4);   // olhando para o canto interno de baixo à direita
+            const lados = raiosDaTela.map(function (resultado) { return resultado.lado; }).join("");
+            const transicoes = lados.replace(/(.)\1+/g, "$1");
+            conferirIgual("à esquerda do leque (mais para +x) bate na parede da direita (x), à direita na de baixo (y): uma única troca", transicoes, "xy");
+            conferirIgual("a coluna 0 bate na face x", raiosDaTela[0].lado, "x");
+            conferirIgual("a última coluna bate na face y", raiosDaTela[319].lado, "y");
+            conferir("o impacto da face x está numa linha vertical (x = 15)", raiosDaTela.filter(function (resultado) { return resultado.lado === "x"; }).every(function (resultado) { return perto(resultado.x, 15, 1e-8); }));
+            conferir("o impacto da face y está numa linha horizontal (y = 11)", raiosDaTela.filter(function (resultado) { return resultado.lado === "y"; }).every(function (resultado) { return perto(resultado.y, 11, 1e-8); }));
+
+            const colunasY = raiosDaTela.filter(function (resultado) { return resultado.lado === "y"; }).length;
+            conferirIgual("a sombra é desenhada em exatamente as colunas da face y", quadro.sombras.length, colunasY);
+            conferir("e só nelas", quadro.sombras.every(function (sombra) { return raiosDaTela[sombra.x].lado === "y"; }));
+            conferir("a sombra cobre a faixa da parede", quadro.sombras.every(function (sombra) { return quadro.paredes[sombra.x].y === sombra.y && quadro.paredes[sombra.x].altura === sombra.altura; }));
+            conferir("há colunas das duas faces", colunasY > 20 && colunasY < 300, "colunas y = " + colunasY);
+
+            const deFrente = reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferirIgual("de frente para uma parede y, todas as 320 colunas têm sombra", deFrente.sombras.length, 320);
+            const lateral = reiniciarEVer(14.5, 9.5, 0);
+            conferirIgual("de frente para uma parede x, nenhuma coluna tem sombra", lateral.sombras.length, 0);
+        });
+
+        testar("colado à parede a altura é limitada à imagem", function () {
+            const k = constanteK(larguraDaVisao);
+            const colado = reiniciarEVer(7.5, 10.75, Math.PI / 2);   // 0,25 casa da parede de baixo
+            conferir("a altura calculada passa muito da imagem (" + raiosDaTela[160].altura.toFixed(0) + " px)", raiosDaTela[160].altura > alturaDaVisao * 3);
+            conferir("a altura calculada é k / 0,25", pertoRelativo(raiosDaTela[160].altura, k / 0.25, 1e-9));
+            conferir("todas as faixas desenhadas têm exatamente a altura da imagem (200)", colado.paredes.length === 320 && colado.paredes.every(function (faixa) { return faixa.altura === 200; }));
+            conferir("e começam no topo (y = 0)", colado.paredes.every(function (faixa) { return faixa.y === 0; }));
+            conferirIgual("o quadro colado cabe na imagem", motivoDeDesenhoErrado(colado), null);
+
+            const quaseColado = reiniciarEVer(7.5, 10.5, Math.PI / 2);
+            conferirIgual("a 0,5 casa também é limitado (k / 0,5 > 200)", quaseColado.paredes.every(function (faixa) { return faixa.altura === 200; }), true);
+
+            const folgado = reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferir("a 1,5 casa não é limitado: " + folgado.paredes[0].altura + " px de 200", folgado.paredes[0].altura < 200 && folgado.paredes[0].y === Math.floor((200 - folgado.paredes[0].altura) / 2));
+            conferirIgual("o quadro folgado cabe na imagem", motivoDeDesenhoErrado(folgado), null);
+
+            const pixelsDoTeto = folgado.todos[0];
+            const pixelsDoPiso = folgado.todos[1];
+            conferir("teto na metade de cima e piso na de baixo, ocupando a imagem toda",
+                pixelsDoTeto.y === 0 && pixelsDoTeto.altura === 100 && pixelsDoTeto.largura === 320 && pixelsDoPiso.y === 100 && pixelsDoPiso.altura === 100 && pixelsDoPiso.largura === 320);
+        });
+
+        testar("retrato ou paisagem: 195×150 ou 320×200, com escala inteira", function () {
+            comJanela(390, 844, function () {
+                conferirIgual("celular em pé: largura 195", larguraDaVisao, 195);
+                conferirIgual("celular em pé: altura 150", alturaDaVisao, 150);
+                conferirIgual("o canvas tem 195 de largura", visao.width, 195);
+                conferirIgual("o canvas tem 150 de altura", visao.height, 150);
+                conferirIgual("escala inteira 2: 390 px de largura", visao.style.width, "390px");
+                conferirIgual("a altura do palco acompanha (300 px)", palco.style.minHeight, "300px");
+
+                const quadro = reiniciarEVer(7.5, 9.5, Math.PI / 2);
+                conferirIgual("um raio por coluna: 195", raiosDaTela.length, 195);
+                conferirIgual("195 faixas desenhadas", quadro.paredes.length, 195);
+                conferirIgual("o desenho cabe na imagem de 150", motivoDeDesenhoErrado(quadro), null);
+                conferirIgual("a perpendicular continua certa", motivoDeColunasErradas(), null);
+                conferir("altura × perpendicular = 195 / (2·PLANO)", pertoRelativo(raio.altura * raio.perpendicular, 195 / (2 * PLANO_ESPERADO)));
+                const colunaDoMeio = raiosDaTela[97];   // largura ímpar: a coluna 97 é o centro exato
+                conferir("o raio do olhar é um objeto à parte da coluna 97", raio !== colunaDoMeio && raiosDaTela.indexOf(raio) === -1);
+                conferir("mas tem a mesma casa, face, distância e altura da coluna 97",
+                    raio.coluna === colunaDoMeio.coluna && raio.linha === colunaDoMeio.linha && raio.lado === colunaDoMeio.lado
+                    && pertoRelativo(raio.distancia, colunaDoMeio.distancia, 1e-12) && pertoRelativo(raio.altura, colunaDoMeio.altura, 1e-12)
+                    && pertoRelativo(raio.perpendicular, colunaDoMeio.perpendicular, 1e-12),
+                    JSON.stringify({ raio: raio, coluna97: colunaDoMeio }));
+                const colado = reiniciarEVer(7.5, 10.75, Math.PI / 2);
+                conferir("colado à parede, limitado a 150", colado.paredes.every(function (faixa) { return faixa.altura === 150; }));
+            });
+            conferirIgual("de volta à paisagem: 320", larguraDaVisao, 320);
+            conferirIgual("e 200", alturaDaVisao, 200);
+            conferirIgual("o canvas volta a 320", visao.width, 320);
+
+            const casos = [
+                { largura: 585, altura: 1000, esperado: [195, 150], estilo: "585px" },
+                { largura: 150, altura: 300, esperado: [195, 150], estilo: "195px" },
+                { largura: 600, altura: 600, esperado: [320, 200], estilo: null, palcoEmPx: 289 },   // a planta (289) é mais alta que a imagem (200)
+                { largura: 1000, altura: 500, esperado: [320, 200], estilo: null },
+                { largura: 1600, altura: 1200, esperado: [320, 200], estilo: null }
+            ];
+            casos.forEach(function (caso) {
+                comJanela(caso.largura, caso.altura, function () {
+                    const nome = caso.largura + "×" + caso.altura;
+                    conferirIgual(nome + " usa " + caso.esperado.join("×"), larguraDaVisao + "×" + alturaDaVisao, caso.esperado.join("×"));
+                    const escala = parseFloat(visao.style.width) / larguraDaVisao;
+                    conferir(nome + ": a escala é um inteiro ≥ 1 (" + visao.style.width + ")", Number.isInteger(escala) && escala >= 1);
+                    conferir(nome + ": cabe na largura, ou é a menor escala", escala === 1 || parseFloat(visao.style.width) <= caso.largura);
+                    const alturaDaImagem = alturaDaVisao * escala;
+                    const alturaDaPlanta = alturaDaPlantaNaTela();
+                    const alturaDoPalco = parseFloat(palco.style.minHeight);
+                    conferir(nome + ": o palco reserva a MAIOR entre a imagem (" + alturaDaImagem + ") e a planta (" + alturaDaPlanta.toFixed(1) + "): " + palco.style.minHeight,
+                        perto(alturaDoPalco, Math.max(alturaDaImagem, alturaDaPlanta), 0.01));
+                    if (caso.estilo !== null) {
+                        conferirIgual(nome + ": largura em px", visao.style.width, caso.estilo);
+                    }
+                    if (caso.palcoEmPx !== undefined) {
+                        conferir(nome + ": o palco tem ≈ " + caso.palcoEmPx + " px (a planta é mais alta que a imagem)", perto(alturaDoPalco, caso.palcoEmPx, 1), palco.style.minHeight);
+                    }
+                });
+            });
+        });
+
+        testar("a tecla H troca a imagem pela planta", function () {
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferirIgual("antes do H a imagem aparece", visao.hidden, false);
+            conferirIgual("e a planta não", tela.hidden, true);
+            conferirIgual("e a leitura fica vazia", document.getElementById("leitura").textContent, "");
+
+            apertarTecla("h");
+            conferirIgual("H liga a depuração", depuracaoLigada, true);
+            const comPlanta = verUmQuadro();
+            conferirIgual("com H a imagem some", visao.hidden, true);
+            conferirIgual("e a planta aparece", tela.hidden, false);
+            conferirIgual("a imagem não é desenhada enquanto a planta está à mostra", comPlanta.todos.length, 0);
+            const texto = document.getElementById("leitura").textContent;
+            conferir("a leitura traz a altura do meio", texto.indexOf("meio: perp 1.500 altura") !== -1, texto);
+            conferir("e a altura de 164 px de 200", texto.indexOf("de 200") !== -1);
+
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna de novo", depuracaoLigada, true);
+
+            apertarTecla("H");
+            const deVolta = verUmQuadro();
+            conferirIgual("H maiúsculo desliga e a imagem volta", visao.hidden, false);
+            conferirIgual("a planta some de novo", tela.hidden, true);
+            conferirIgual("a imagem é desenhada outra vez", deVolta.paredes.length, 320);
+            conferirIgual("a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+            conferirIgual("H não liga ação nenhuma", acoesAtivas.size, 0);
+        });
+
+        testar("a leitura do H traz de novo os números do passo 3", function () {
+            reiniciarEVer(1.5, 1.5, 0.25);
+            apertarTecla("h");
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            conferir("o raio do olhar: casa (3, 2), face y, distância 2.021", texto.indexOf("raio: casa (3, 2) lado y dist 2.021") !== -1, texto);
+            conferir("o DDA contra o passo fixo do GUIA: 3 passos contra 21", texto.indexOf("DDA 3 passos | fixo 0.1: 21 (2.10)") !== -1, texto);
+            conferir("e a linha do meio vem com a perpendicular igual à distância", texto.indexOf("meio: perp 2.021 altura") !== -1, texto);
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("H de novo: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+        });
+
+        testar("alternar o H não mexe na altura do palco (min-height cobre a imagem e a planta)", function () {
+            const tamanhos = [[1280, 720], [600, 600], [1000, 500], [390, 844], [585, 1000]];
+            tamanhos.forEach(function (tamanho) {
+                comJanela(tamanho[0], tamanho[1], function () {
+                    const nome = tamanho[0] + "×" + tamanho[1];
+                    reiniciarEVer(7.5, 9.5, Math.PI / 2);
+                    const alturaComImagem = palco.style.minHeight;
+                    const alturaDaImagem = parseFloat(visao.style.width) / larguraDaVisao * alturaDaVisao;
+                    const alturaDaPlanta = alturaDaPlantaNaTela();
+                    conferir(nome + ": o palco cobre a imagem (" + alturaDaImagem + ") e a planta (" + alturaDaPlanta.toFixed(1) + "): " + alturaComImagem,
+                        parseFloat(alturaComImagem) >= alturaDaImagem - 0.01 && parseFloat(alturaComImagem) >= alturaDaPlanta - 0.01);
+
+                    apertarTecla("h");
+                    verUmQuadro();
+                    conferirIgual(nome + ": com o H ligado a altura do palco é a mesma", palco.style.minHeight, alturaComImagem);
+                    apertarTecla("h");
+                    verUmQuadro();
+                    conferirIgual(nome + ": com o H desligado também", palco.style.minHeight, alturaComImagem);
+                    conferirIgual(nome + ": a imagem de volta, sem planta", visao.hidden + "/" + tela.hidden, "false/true");
+                });
+            });
+        });
+
+        testar("as letras da planta ficam sobre fundos escuros com contraste de 4,5:1", function () {
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            const letras = letrasDaPlantaComFundo();
+            const COR_AMARELA = "#ffd84d";
+            const fundosEsperados = { D: "#54410f", E: "#15434d", R: "#55296a" };
+            const fundosDaImagem = { D: "#a8842e", E: "#2e7d8a", R: "#8a4aa8" };
+            const letrasEsperadas = ["D", "E", "R", "/", "\\", "S", "X"];
+
+            letrasEsperadas.forEach(function (letra) {
+                conferir("a letra " + letra + " é desenhada na planta", letras.some(function (item) { return item.letra === letra; }));
+            });
+
+            Object.keys(fundosEsperados).forEach(function (letra) {
+                const daLetra = letras.filter(function (item) { return item.letra === letra; });
+                conferir(letra + ": o fundo da planta é " + fundosEsperados[letra] + " em todas as casas dela (" + daLetra.length + ")",
+                    daLetra.length > 0 && daLetra.every(function (item) { return item.fundo === fundosEsperados[letra]; }),
+                    JSON.stringify(daLetra.map(function (item) { return item.fundo; })));
+                conferir(letra + ": e NÃO é a cor da parede da imagem (" + fundosDaImagem[letra] + ")", daLetra.every(function (item) { return item.fundo !== fundosDaImagem[letra]; }));
+            });
+
+            let menorContraste = Infinity;
+            let pior = null;
+            letras.forEach(function (item) {
+                const contraste = item.fundo === null ? 0 : razaoDeContraste(item.cor, item.fundo);
+                if (contraste < menorContraste) {
+                    menorContraste = contraste;
+                    pior = item;
+                }
+            });
+            conferir("toda letra é amarela " + COR_AMARELA, letras.every(function (item) { return item.cor === COR_AMARELA; }));
+            conferir("toda letra tem um fundo conhecido desenhado antes dela", letras.every(function (item) { return typeof item.fundo === "string"; }));
+            conferir("o menor contraste entre a letra amarela e o fundo é ≥ 4,5:1 (" + menorContraste.toFixed(2) + ")", menorContraste >= 4.5, JSON.stringify(pior));
+
+            Object.keys(fundosEsperados).forEach(function (letra) {
+                const razao = razaoDeContraste(COR_AMARELA, fundosEsperados[letra]);
+                conferir(letra + ": " + COR_AMARELA + " sobre " + fundosEsperados[letra] + " = " + razao.toFixed(2) + ":1 (≥ 4,5)", razao >= 4.5);
+                conferir(letra + ": com o fundo da parede da imagem NÃO passaria (" + razaoDeContraste(COR_AMARELA, fundosDaImagem[letra]).toFixed(2) + ":1)",
+                    razaoDeContraste(COR_AMARELA, fundosDaImagem[letra]) < 4.5);
+            });
+            conferir("o medidor de contraste está certo: preto × branco = 21:1", perto(razaoDeContraste("#000000", "#ffffff"), 21, 1e-9));
+        });
+
+        testar("a conta do passo fixo só é refeita quando o zelador se mexe", function () {
+            const original = window.lancarRaioPorPassos;
+            let chamadas = 0;
+            window.lancarRaioPorPassos = function () {
+                chamadas++;
+                return original.apply(this, arguments);
+            };
+            try {
+                reiniciarEVer(1.5, 1.5, 0.25);
+                apertarTecla("h");
+                avancarQuadro(16);
+                const primeira = chamadas;
+                conferir("a primeira vez com o H calcula (≥ 1 chamada)", primeira >= 1, "chamadas = " + primeira);
+                avancarQuadros(10, 16);
+                conferirIgual("10 quadros parado: nenhuma conta nova", chamadas, primeira);
+                conferir("e a leitura continua trazendo o resultado", document.getElementById("leitura").textContent.indexOf("fixo 0.1: 21 (2.10)") !== -1);
+
+                apertarTecla("ArrowRight");
+                avancarQuadro(50);
+                soltarTecla("ArrowRight");
+                const depoisDoGiro = chamadas;
+                conferir("girar refaz a conta", depoisDoGiro > primeira, "chamadas = " + depoisDoGiro);
+                avancarQuadros(5, 16);
+                conferirIgual("parou de novo: nenhuma conta nova", chamadas, depoisDoGiro);
+
+                apertarTecla("h");
+                avancarQuadros(3, 16);
+                apertarTecla("h");
+                avancarQuadros(3, 16);
+                conferirIgual("desligar e ligar o H com a pose igual não refaz a conta", chamadas, depoisDoGiro);
+            } finally {
+                window.lancarRaioPorPassos = original;
+                if (depuracaoLigada) {
+                    apertarTecla("h");
+                }
+                soltarTudo();
+            }
+        });
+
+        testar("entrada: tecla e botão seguram a mesma ação, e só a última entrada solta", function () {
+            apertarTecla("w");
+            apertarTecla("ArrowUp");
+            soltarTecla("ArrowUp");
+            conferirIgual("soltar ↑ com W ainda apertada continua andando", acoesAtivas.has("frente"), true);
+            soltarTecla("w");
+            conferirIgual("soltar a última entrada para", acoesAtivas.has("frente"), false);
+
+            apertarTecla("w");
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 7);
+            soltarTecla("w");
+            conferirIgual("tecla + botão: soltar a tecla com o dedo ainda no botão continua", acoesAtivas.has("frente"), true);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup", 7);
+            conferirIgual("soltar o dedo para", acoesAtivas.has("frente"), false);
+
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 1);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 2);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerup", 1);
+            conferirIgual("dois dedos no mesmo botão: soltar um mantém a ação", acoesAtivas.has("tras"), true);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerup", 2);
+            conferirIgual("soltar o segundo para", acoesAtivas.has("tras"), false);
+
+            apertarTecla("w");
+            dispararPonteiro(botaoDaAcao("girarDireita"), "pointerdown", 3);
+            soltarTudo();
+            conferirIgual("blur limpa ações e entradas", acoesAtivas.size + entradasAtivas.size, 0);
+        });
+
+        testar("andar muda os raios: a parede chega mais perto e a imagem cresce", function () {
+            reiniciarEVer(8.5, 9.5, 3 * Math.PI / 2);
+            const alturaAntes = raio.altura;
+            const distanciaAntes = raio.perpendicular;
+            apertarTecla("w");
+            avancarQuadro(50);
+            soltarTecla("w");
+            conferir("a perpendicular do meio cai 0,15 (4,5 → 4,35)", perto(raio.perpendicular, distanciaAntes - 0.15, 1e-6), "perpendicular = " + raio.perpendicular);
+            conferir("e a altura sobe", raio.altura > alturaAntes);
+            conferirIgual("as colunas seguem certas depois de andar", motivoDeColunasErradas(), null);
+
+            reiniciarEVer(8.5, 9.5, 3 * Math.PI / 2);
+            apertarTecla("ArrowRight");
+            avancarQuadro(50);
+            soltarTecla("ArrowRight");
+            conferirIgual("as colunas seguem certas depois de girar", motivoDeColunasErradas(), null);
+        });
+
+        testar("robô aleatório: raios, alturas e desenho em todo quadro", function () {
+            const QUADROS = 1500;
+            semearSorteio(2028);
+            reiniciarEVer(1.5, 1.5, Math.PI / 4 + 0.001);
+            const teclas = ["w", "s", "a", "d", "ArrowLeft", "ArrowRight"];
+            const apertadas = new Set();
+            let primeiraViolacao = null;
+            let caminho = 0;
+            let quadrosComReferencia = 0;
+            const casasBatidas = new Set();
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                const sorteio = Math.random();
+                if (sorteio < 0.15) {
+                    const tecla = teclas[Math.floor(Math.random() * teclas.length)];
+                    if (apertadas.has(tecla)) {
+                        soltarTecla(tecla);
+                        apertadas.delete(tecla);
+                    } else {
+                        apertarTecla(tecla);
+                        apertadas.add(tecla);
+                    }
+                } else if (sorteio < 0.17) {
+                    soltarTudo();
+                    apertadas.clear();
+                }
+                const ligarPlanta = Math.random() < 0.02;
+                if (ligarPlanta) {
+                    apertarTecla("h");
+                }
+
+                const antes = { x: jogador.x, y: jogador.y };
+                const milissegundos = Math.random() < 0.9 ? 8 + Math.floor(Math.random() * 30) : 60 + Math.floor(Math.random() * 2000);
+                retangulosDaVisao.length = 0;
+                avancarQuadro(milissegundos);
+                caminho += Math.hypot(jogador.x - antes.x, jogador.y - antes.y);
+
+                if (raiosDaTela.length !== larguraDaVisao) {
+                    primeiraViolacao = "quadro " + quadro + ": " + raiosDaTela.length + " raios";
+                } else {
+                    const k = constanteK(larguraDaVisao);
+                    for (let coluna = 0; coluna < larguraDaVisao && primeiraViolacao === null; coluna++) {
+                        const resultado = raiosDaTela[coluna];
+                        if (!Number.isFinite(resultado.altura) || !(resultado.perpendicular > 0) || !pertoRelativo(resultado.altura * resultado.perpendicular, k)
+                            || !casaSolidaNoTexto(resultado.coluna, resultado.linha)) {
+                            primeiraViolacao = "quadro " + quadro + " coluna " + coluna + ": perpendicular " + resultado.perpendicular + " altura " + resultado.altura;
+                        }
+                        if (coluna === 0 || coluna === larguraDaVisao - 1 || coluna === 160) {
+                            casasBatidas.add(resultado.coluna + "," + resultado.linha);
+                        }
+                    }
+                }
+                if (primeiraViolacao === null && !depuracaoLigada) {
+                    const comoAImagem = {
+                        paredes: retangulosDaVisao.filter(function (retangulo) { return retangulo.largura === 1 && retangulo.estilo !== SOMBRA_DO_LADO_Y; })
+                    };
+                    const motivo = motivoDeDesenhoErrado(comoAImagem);
+                    if (motivo !== null) {
+                        primeiraViolacao = "quadro " + quadro + ": " + motivo;
+                    }
+                }
+                if (primeiraViolacao === null && quadro % 25 === 0) {
+                    quadrosComReferencia++;
+                    const motivo = motivoDeColunasErradas();
+                    if (motivo !== null) {
+                        primeiraViolacao = "quadro " + quadro + ": " + motivo;
+                    }
+                }
+                if (ligarPlanta) {
+                    apertarTecla("h");
+                }
+            }
+
+            conferir("em " + QUADROS + " quadros: um raio por coluna, k certo, perpendicular > 0, desenho dentro da imagem, " + quadrosComReferencia + " quadros inteiros contra a referência",
+                primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô andou (" + caminho.toFixed(0) + " casas) e viu muitas casas (" + casasBatidas.size + ")", caminho > 50 && casasBatidas.size >= 20);
+            soltarTudo();
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

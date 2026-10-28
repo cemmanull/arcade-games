@@ -1,0 +1,62 @@
+/*
+  PASSO 3: estilo
+
+  O palco ocupa o que sobra da tela; o canvas do three.js enche o palco.
+*/
+
+:root {
+    --cor-fundo: #07111c;
+    --cor-texto: #dfe9f3;
+    --cor-perigo: #ff8a4d;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: system-ui, sans-serif;
+    font-size: 1rem;
+}
+
+h1 {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    font-size: 1.25rem;
+}
+
+/* min-height: 0 deixa o palco encolher; sem isso o canvas empurraria a página e ela rolaria. */
+#palco {
+    flex: 1;
+    min-height: 0;
+}
+
+#palco canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#aviso {
+    max-width: 32rem;
+    margin: 1rem;
+    padding: 1rem;
+    border: 2px solid var(--cor-perigo);
+    border-radius: 0.5rem;
+    line-height: 1.5;
+}
+
+#aviso[hidden] {
+    display: none;
+}

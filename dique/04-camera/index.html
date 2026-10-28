@@ -1,0 +1,42 @@
+<!--
+  DIQUE — PASSO 4: A CÂMERA
+
+  Arraste (mouse ou dedo) ou use W A S D para rolar; roda do mouse, + e − (ou Perto e Longe) para o zoom.
+  O toque continua certo com a câmera: marca, e o segundo toque confirma. Q e R giram a vista:
+  o dique alto esconde uma casa, e girar a revela. H mostra as casas escondidas e o raio.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dique — passo 4</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="regras.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Dique</h1>
+
+    <canvas id="jogo" width="384" height="300">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>
+        <button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>
+        <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+
+    <p id="aviso" role="status"></p>
+
+    <pre id="leitura" aria-live="off"></pre>
+
+    <p id="ajuda">Arraste: rolar · Toque: marcar, de novo: confirmar · setas: cursor · W A S D: rolar · + −: zoom · Q R: girar · H: invisível</p>
+</body>
+</html>

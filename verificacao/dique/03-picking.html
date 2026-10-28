@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 3: o picking (o jogo)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 3: o picking (o jogo)</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids. O canvas começa com 1×1: quem o dimensiona é o script, a partir do mapa. -->
+    <canvas id="jogo" width="1" height="1"></canvas>
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+    <p id="aviso" role="status"></p>
+    <pre id="leitura" aria-live="off"></pre>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/03-picking/regras.js"></script>
+    <script src="../../dique/03-picking/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const errosNaCarga = errosDeConsole.slice();
+        const ALTURAS_ORIGINAIS = JSON.stringify(alturas);
+        const FACES = ["topo", "esquerda", "direita"];
+        const COR_DO_CURSOR = "#ffe14d";
+        const COR_DO_CONTORNO = "rgba(0, 0, 0, 0.5)";
+        const COR_DO_PINO = "#101820";
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada e de estado
+        // ------------------------------------------------------------
+        function apertarTecla(tecla, modificadores, alvo) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, modificadores || {}));
+            (alvo || document).dispatchEvent(evento);
+            return evento;
+        }
+
+        function eventoNoPixel(tipo, sx, sy) {
+            const caixa = tela.getBoundingClientRect();
+            return new PointerEvent(tipo, { clientX: caixa.left + sx * caixa.width / tela.width, clientY: caixa.top + sy * caixa.height / tela.height, pointerId: 1, bubbles: true });
+        }
+
+        function tocarNoPixel(sx, sy) {
+            tela.dispatchEvent(eventoNoPixel("pointerdown", sx, sy));
+        }
+
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            const rotacaoOriginal = rotacao;
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(rotacaoOriginal);
+            }
+        }
+
+        function sortearTerreno() {
+            alturas.forEach(function (linha) {
+                for (let x = 0; x < linha.length; x++) linha[x] = Math.floor(Math.random() * 5);
+            });
+        }
+
+        function restaurarTerreno() {
+            const original = JSON.parse(ALTURAS_ORIGINAIS);
+            alturas.forEach(function (linha, y) {
+                for (let x = 0; x < linha.length; x++) linha[x] = original[y][x];
+            });
+            irParaOGiro(0);
+        }
+
+        function zerarAEntrada() {
+            pinos.clear();
+            marcada = false;
+            cursor = { x: 4, y: 4 };
+            if (depuracaoLigada) apertarTecla("h");
+            avisar("");
+            irParaOGiro(0);
+        }
+
+        function nomeDaCasa(casa) {
+            return casa.x + "," + casa.y;
+        }
+
+        // ------------------------------------------------------------
+        // Minha força bruta (sem as funções de projeção do jogo): sx = ox + 18 (u − v), sy = oy + 9 (u + v) − 12 z.
+        // ------------------------------------------------------------
+        function girarPeloMeuCaminho(x, y, giros) {
+            let ponto = [x, y];
+            for (let i = 0; i < giros; i++) ponto = [TAMANHO - ponto[1], ponto[0]];
+            return ponto;
+        }
+
+        function projetarMinha(u, v, z) {
+            return { x: 192 + 18 * (u - v), y: 60 + 9 * (u + v) - 12 * z };
+        }
+
+        function pontoNoPoligonoConvexo(poligono, ponto) {
+            let positivo = false, negativo = false;
+            for (let i = 0; i < poligono.length; i++) {
+                const canto = poligono[i], proximo = poligono[(i + 1) % poligono.length];
+                const lado = (proximo.x - canto.x) * (ponto.y - canto.y) - (proximo.y - canto.y) * (ponto.x - canto.x);
+                if (lado > 1e-9) positivo = true;
+                if (lado < -1e-9) negativo = true;
+            }
+            return !(positivo && negativo);
+        }
+
+        function construirCenario() {
+            const casas = [];
+            alturas.forEach(function (linha, y) {
+                linha.forEach(function (altura, x) {
+                    const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, rotacao);
+                    const nivel = Math.max(altura, 1);
+                    const canto = function (du, dv, z) { return projetarMinha(centro[0] + du, centro[1] + dv, z); };
+                    const topoCima = canto(-0.5, -0.5, nivel), topoDireita = canto(0.5, -0.5, nivel);
+                    const topoBaixo = canto(0.5, 0.5, nivel), topoEsquerda = canto(-0.5, 0.5, nivel);
+                    const baseDireita = canto(0.5, -0.5, 0), baseBaixo = canto(0.5, 0.5, 0), baseEsquerda = canto(-0.5, 0.5, 0);
+                    casas.push({
+                        x: x, y: y, proximidade: centro[0] + centro[1],
+                        faces: {
+                            topo: [topoCima, topoDireita, topoBaixo, topoEsquerda],
+                            esquerda: [topoEsquerda, topoBaixo, baseBaixo, baseEsquerda],
+                            direita: [topoBaixo, topoDireita, baseDireita, baseBaixo],
+                        },
+                        minX: topoEsquerda.x, maxX: topoDireita.x, minY: topoCima.y, maxY: baseBaixo.y,
+                    });
+                });
+            });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            return casas;
+        }
+
+        function acharPelaMinhaForcaBruta(cenario, sx, sy) {
+            const ponto = { x: sx, y: sy };
+            for (let i = 0; i < cenario.length; i++) {
+                const casa = cenario[i];
+                if (sx < casa.minX || sx > casa.maxX || sy < casa.minY || sy > casa.maxY) continue;
+                for (let f = 0; f < 3; f++) {
+                    if (pontoNoPoligonoConvexo(casa.faces[FACES[f]], ponto)) return { x: casa.x, y: casa.y, face: FACES[f] };
+                }
+            }
+            return null;
+        }
+
+        function escondedoresPelaMinhaConta(cenario, x, y) {
+            const dela = cenario.find(function (casa) { return casa.x === x && casa.y === y; });
+            const ponto = dela.faces.topo.reduce(function (soma, canto) { return { x: soma.x + canto.x / 4, y: soma.y + canto.y / 4 }; }, { x: 0, y: 0 });
+            return cenario.filter(function (casa) {
+                return casa.proximidade > dela.proximidade + 1e-9 && FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], ponto); });
+            }).map(nomeDaCasa);
+        }
+
+        // Um pixel de verdade DENTRO de uma face de uma casa, à vista no giro 0: procura, pela minha força bruta, um ponto da face que
+        // nenhuma casa da frente cobre. Devolve null se a face está toda coberta.
+        function pixelNaFace(x, y, face) {
+            const cenario = construirCenario();
+            const casa = cenario.find(function (candidata) { return candidata.x === x && candidata.y === y; });
+            const poligono = casa.faces[face];
+            for (let sy = casa.minY + 0.5; sy < casa.maxY; sy += 1) {
+                for (let sx = casa.minX + 0.5; sx < casa.maxX; sx += 1) {
+                    const acerto = acharPelaMinhaForcaBruta(cenario, sx, sy);
+                    if (acerto && acerto.x === x && acerto.y === y && acerto.face === face && pontoNoPoligonoConvexo(poligono, { x: sx, y: sy })) return { x: sx, y: sy };
+                }
+            }
+            return null;
+        }
+
+        function casaComAsTresFacesAVista() {      // no giro 0: a primeira casa de terra cujo topo e as duas laterais têm pixels à vista
+            for (let y = 0; y < TAMANHO; y++) {
+                for (let x = 0; x < TAMANHO; x++) {
+                    if (alturas[y][x] >= 2 && FACES.every(function (face) { return pixelNaFace(x, y, face) !== null; })) return { x: x, y: y };
+                }
+            }
+            return null;
+        }
+
+        // ------------------------------------------------------------
+        // O gravador do quadro (traços com espessura/cor/tracejado e preenchimentos) e os espiões nas funções de desenho.
+        // ------------------------------------------------------------
+        function alfaDaCor(cor) {
+            const partes = /^rgba\(.*,\s*([\d.]+)\)$/.exec(cor);
+            return partes ? Number(partes[1]) : 1;
+        }
+
+        function gravarQuadros(quantidade) {
+            const registro = [];
+            let caminho = [];
+            let dentroDe = null;
+            const prototipo = CanvasRenderingContext2D.prototype;
+            const caixaVerdadeira = desenharCaixa, aguaVerdadeira = desenharAgua, pinoVerdadeiro = desenharPino;
+            pincel.beginPath = function () { caminho = []; prototipo.beginPath.call(pincel); };
+            pincel.moveTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.moveTo.call(pincel, x, y); };
+            pincel.lineTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.lineTo.call(pincel, x, y); };
+            pincel.stroke = function () {
+                registro.push({ tipo: "traco", pontos: caminho.slice(), largura: pincel.lineWidth, cor: pincel.strokeStyle, tracejado: pincel.getLineDash().length > 0, dentroDe: dentroDe });
+                prototipo.stroke.call(pincel);
+            };
+            pincel.fill = function () {
+                registro.push({ tipo: "preenchimento", pontos: caminho.slice(), cor: pincel.fillStyle, dentroDe: dentroDe });
+                prototipo.fill.call(pincel);
+            };
+            desenharCaixa = function (x, y, de, ate, estilo) {
+                registro.push({ tipo: "caixa", x: x, y: y, de: de, ate: ate, contorno: estilo.contorno });
+                dentroDe = "caixa";
+                try { return caixaVerdadeira(x, y, de, ate, estilo); } finally { dentroDe = null; }
+            };
+            desenharAgua = function (casa) {
+                registro.push({ tipo: "agua", x: casa.x, y: casa.y, altura: casa.altura });
+                dentroDe = "agua";
+                try { return aguaVerdadeira(casa); } finally { dentroDe = null; }
+            };
+            desenharPino = function (casa) {
+                registro.push({ tipo: "pino", x: casa.x, y: casa.y });
+                dentroDe = "pino";
+                try { return pinoVerdadeiro(casa); } finally { dentroDe = null; }
+            };
+            try {
+                for (let i = 0; i < quantidade; i++) if (!avancarQuadro(16)) throw new Error("o laço do jogo parou de pedir quadros");
+            } finally {
+                desenharCaixa = caixaVerdadeira;
+                desenharAgua = aguaVerdadeira;
+                desenharPino = pinoVerdadeiro;
+                ["beginPath", "moveTo", "lineTo", "stroke", "fill"].forEach(function (nome) { delete pincel[nome]; });
+            }
+            return registro;
+        }
+
+        function fichasDoQuadro(registro) {          // C caixa, A água, P pino, K cursor sólido, k cursor tracejado
+            const fichas = [];
+            registro.forEach(function (operacao) {
+                if (operacao.tipo === "caixa") fichas.push("C " + operacao.x + "," + operacao.y);
+                else if (operacao.tipo === "agua") fichas.push("A " + operacao.x + "," + operacao.y);
+                else if (operacao.tipo === "pino") fichas.push("P " + operacao.x + "," + operacao.y);
+                else if (operacao.tipo === "traco" && operacao.cor === COR_DO_CURSOR) fichas.push(operacao.tracejado ? "k" : "K");
+            });
+            return fichas;
+        }
+
+        function fichasEsperadas(escondido) {
+            const fichas = [];
+            listaDeDesenho.forEach(function (casa) {
+                fichas.push("C " + casa.x + "," + casa.y);
+                if (casa.altura < NIVEL_DA_AGUA) fichas.push("A " + casa.x + "," + casa.y);
+                if (pinos.has(casa.x + "," + casa.y)) fichas.push("P " + casa.x + "," + casa.y);
+                if (casa.x === cursor.x && casa.y === cursor.y) { fichas.push("K"); if (marcada) fichas.push("K"); }
+            });
+            if (escondido) { fichas.push("k"); if (marcada) fichas.push("k"); }
+            return fichas;
+        }
+
+        function chaveDePonto(ponto) {
+            return (Math.round(ponto.x * 1000) / 1000) + ";" + (Math.round(ponto.y * 1000) / 1000);
+        }
+
+        function casasAlagadasDoMapa() {
+            const casas = [];
+            alturas.forEach(function (linha, y) { linha.forEach(function (altura, x) { if (altura < NIVEL_DA_AGUA) casas.push({ x: x, y: y }); }); });
+            return casas;
+        }
+
+        function bordasBrancasEsperadas() {
+            const chaves = [];
+            casasAlagadasDoMapa().forEach(function (casa) {
+                [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (passo) {
+                    const vx = casa.x + passo[0], vy = casa.y + passo[1];
+                    const dentro = vx >= 0 && vy >= 0 && vx < TAMANHO && vy < TAMANHO;
+                    if (!dentro || alturas[vy][vx] >= NIVEL_DA_AGUA) chaves.push(chaveDePonto(mundoParaTela(casa.x + 0.5 + passo[0] / 2, casa.y + 0.5 + passo[1] / 2, NIVEL_DA_AGUA)));
+                });
+            });
+            return chaves.sort();
+        }
+
+        // Três casas com o topo à vista no giro 0 (não cobertas por dique): o terreno de verdade decide quais.
+        const CASAS_A_VISTA = [[7, 7], [4, 4], [6, 2], [2, 6], [3, 3]].map(function (par) { return { x: par[0], y: par[1] }; }).filter(function (casa) { return pixelNaFace(casa.x, casa.y, "topo") !== null; });
+        const PRIMEIRA = CASAS_A_VISTA[0], SEGUNDA = CASAS_A_VISTA[1], TERCEIRA = CASAS_A_VISTA[2];
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("a tela: canvas dimensionado pelo script a partir do mapa, #aviso com role=status", function () {
+            conferirIgual("largura = ilha + 2 margens de 12 px", tela.width, TAMANHO * LARGURA_DO_BLOCO + 24);
+            conferirIgual("altura = ORIGEM.y + meia ilha + margem", tela.height, ORIGEM.y + TAMANHO * LARGURA_DO_BLOCO / 2 + 12);
+            conferirIgual("e são 384 px de largura", tela.width, 384);
+            conferirIgual("e 252 px de altura", tela.height, 252);
+            conferirIgual("o aviso do esqueleto é uma região role=status", aviso.getAttribute("role"), "status");
+            conferirIgual("o mapa de verdade é válido", MAPA_VALIDO, true);
+            conferirIgual("o laço começou (pediu o primeiro quadro)", avancarQuadro(16), true);
+            conferirIgual("estado inicial: cursor (4, 4), nada marcado, sem pinos", JSON.stringify({ c: cursor, m: marcada, p: pinos.size }), JSON.stringify({ c: { x: 4, y: 4 }, m: false, p: 0 }));
+        });
+
+        testar("DOIS TOQUES: o primeiro marca, o segundo na mesma casa confirma", function () {
+            zerarAEntrada();
+            const topo = pixelNaFace(PRIMEIRA.x, PRIMEIRA.y, "topo");
+            const acertoDoTopo = acharCasaPeloRaio(topo.x, topo.y);
+            conferirIgual("preparação: o pixel à vista do topo de (" + nomeDaCasa(PRIMEIRA) + ") é dela mesmo", acertoDoTopo && nomeDaCasa(acertoDoTopo), nomeDaCasa(PRIMEIRA));
+
+            tocarNoPixel(topo.x, topo.y);
+            conferirIgual("1º toque: o cursor vai para a casa tocada", nomeDaCasa(cursor), nomeDaCasa(PRIMEIRA));
+            conferirIgual("1º toque: ela fica marcada", marcada, true);
+            conferirIgual("1º toque: NADA é confirmado (sem pinos)", pinos.size, 0);
+            conferir("1º toque: o aviso diz que marcou e pede o segundo toque", /Marcada/.test(aviso.textContent) && /de novo/.test(aviso.textContent), aviso.textContent);
+            conferir("1º toque: o aviso descreve a casa (altura)", aviso.textContent.indexOf("casa " + PRIMEIRA.x + ", " + PRIMEIRA.y + ", altura " + alturas[PRIMEIRA.y][PRIMEIRA.x]) !== -1, aviso.textContent);
+
+            tocarNoPixel(topo.x, topo.y);
+            conferirIgual("2º toque: o pino foi gravado em pinos (\"x,y\")", Array.from(pinos).join("|"), nomeDaCasa(PRIMEIRA));
+            conferirIgual("2º toque: a marca some", marcada, false);
+            conferir("2º toque: o aviso diz que colocou o pino", aviso.textContent === "Pino colocado na casa " + PRIMEIRA.x + ", " + PRIMEIRA.y, aviso.textContent);
+
+            tocarNoPixel(topo.x, topo.y);
+            conferirIgual("3º toque: marca de novo (não confirma de novo)", marcada, true);
+            conferirIgual("3º toque: o pino continua", pinos.size, 1);
+            tocarNoPixel(topo.x, topo.y);
+            conferirIgual("4º toque: o pino é retirado", pinos.size, 0);
+            conferir("4º toque: o aviso diz que retirou", aviso.textContent === "Pino retirado na casa " + PRIMEIRA.x + ", " + PRIMEIRA.y, aviso.textContent);
+        });
+
+        testar("um toque em OUTRA casa move a marca (sem confirmar nada); só repetir a casa marcada confirma", function () {
+            zerarAEntrada();
+            const a = pixelNaFace(PRIMEIRA.x, PRIMEIRA.y, "topo"), b = pixelNaFace(SEGUNDA.x, SEGUNDA.y, "topo"), c = pixelNaFace(TERCEIRA.x, TERCEIRA.y, "topo");
+            tocarNoPixel(a.x, a.y);
+            tocarNoPixel(b.x, b.y);
+            conferirIgual("toque em B depois de A: o cursor está em B", nomeDaCasa(cursor), nomeDaCasa(SEGUNDA));
+            conferirIgual("e B está marcada (a marca andou)", marcada, true);
+            conferirIgual("e A NÃO recebeu pino", pinos.size, 0);
+            tocarNoPixel(c.x, c.y);
+            conferirIgual("toque em C: a marca anda de novo", nomeDaCasa(cursor), nomeDaCasa(TERCEIRA));
+            conferirIgual("ainda sem pinos", pinos.size, 0);
+            tocarNoPixel(c.x, c.y);
+            conferirIgual("repetir C confirma só em C", Array.from(pinos).join("|"), nomeDaCasa(TERCEIRA));
+            tocarNoPixel(a.x, a.y);
+            tocarNoPixel(b.x, b.y);
+            tocarNoPixel(a.x, a.y);
+            conferirIgual("A, B, A em seguida: o último toque só marca A (não é a casa que estava marcada)", pinos.size, 1);
+            conferirIgual("e A está marcada", nomeDaCasa(cursor) + " " + marcada, nomeDaCasa(PRIMEIRA) + " true");
+        });
+
+        testar("topo e lateral são da MESMA casa: marcar no topo e confirmar na lateral funciona", function () {
+            zerarAEntrada();
+            const casa = casaComAsTresFacesAVista();
+            conferir("preparação: há uma casa com topo e as duas laterais à vista (" + (casa && nomeDaCasa(casa)) + ")", casa !== null);
+            ["esquerda", "direita"].forEach(function (lateral) {
+                pinos.clear(); marcada = false;
+                const noTopo = pixelNaFace(casa.x, casa.y, "topo"), naLateral = pixelNaFace(casa.x, casa.y, lateral);
+                const acerto = acharCasaPeloRaio(naLateral.x, naLateral.y);
+                conferirIgual("preparação: o pixel está na lateral " + lateral + " de (" + nomeDaCasa(casa) + ")", acerto.x + "," + acerto.y + " " + acerto.face, nomeDaCasa(casa) + " " + lateral);
+                tocarNoPixel(noTopo.x, noTopo.y);
+                tocarNoPixel(naLateral.x, naLateral.y);
+                conferirIgual("topo e depois lateral " + lateral + ": confirma o pino na casa", Array.from(pinos).join("|"), nomeDaCasa(casa));
+                tocarNoPixel(naLateral.x, naLateral.y);
+                tocarNoPixel(noTopo.x, noTopo.y);
+                conferirIgual("lateral " + lateral + " e depois topo: retira o pino", pinos.size, 0);
+            });
+        });
+
+        testar("um toque no vazio (céu, mar aberto fora do mapa) não muda nada, nem desfaz a marca", function () {
+            zerarAEntrada();
+            const a = pixelNaFace(PRIMEIRA.x, PRIMEIRA.y, "topo");
+            tocarNoPixel(a.x, a.y);
+            const antes = JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent });
+            [[2.5, 2.5], [380.5, 5.5], [2.5, 248.5], [380.5, 248.5], [192.5, 1.5]].forEach(function (pixel) { tocarNoPixel(pixel[0], pixel[1]); });
+            conferirIgual("cinco toques no vazio: cursor, marca, pinos e aviso iguais", JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent }), antes);
+            tocarNoPixel(a.x, a.y);
+            conferirIgual("e o toque seguinte na casa marcada ainda confirma", pinos.size, 1);
+        });
+
+        testar("o toque pega o que está à vista: a casa de trás do dique não responde (contra a minha força bruta), nos 4 giros", function () {
+            zerarAEntrada();
+            semearSorteio(1234);
+            let toques = 0, divergencias = 0, semAcerto = 0, escondidasTocadas = 0;
+            const exemplos = [];
+            [0, 1, 2, 3].forEach(function (giro) {
+                irParaOGiro(giro);
+                const cenario = construirCenario();
+                for (let i = 0; i < 400; i++) {
+                    const sx = Math.floor(10 + Math.random() * 364) + 0.5, sy = Math.floor(10 + Math.random() * 232) + 0.5;
+                    marcada = false;
+                    cursor = { x: 0, y: 0 };
+                    pinos.clear();
+                    tocarNoPixel(sx, sy);
+                    const esperado = acharPelaMinhaForcaBruta(cenario, sx, sy);
+                    toques++;
+                    const obtido = marcada ? nomeDaCasa(cursor) : "nada";
+                    const certo = esperado ? esperado.x + "," + esperado.y : "nada";
+                    if (!esperado) semAcerto++;
+                    if (obtido !== certo) {
+                        divergencias++;
+                        if (exemplos.length < 3) exemplos.push("giro " + giro * 90 + "° pixel " + sx + "," + sy + ": o toque marcou " + obtido + ", a bruta diz " + certo);
+                    }
+                    if (esperado && escondedoresPelaMinhaConta(cenario, esperado.x, esperado.y).length > 0) escondidasTocadas++;
+                }
+            });
+            conferir(toques + " toques: a casa marcada é a que a minha força bruta acha (ou nada, " + semAcerto + " vezes)", divergencias === 0 && semAcerto > 200, exemplos.join(" | "));
+            conferir("a amostra tocou casas parcialmente escondidas (" + escondidasTocadas + "): o dique à frente é quem responde onde cobre", escondidasTocadas > 50);
+            zerarAEntrada();
+        });
+
+        testar("o CSS pode encolher o canvas: o toque continua na casa certa (pixel da página → pixel do canvas)", function () {
+            zerarAEntrada();
+            const larguraAntes = tela.style.width;
+            tela.style.width = "192px";
+            try {
+                const caixa = tela.getBoundingClientRect();
+                conferir("preparação: o canvas aparece na metade do tamanho", Math.abs(caixa.width - 192) < 1, String(caixa.width));
+                const alvo = pixelNaFace(SEGUNDA.x, SEGUNDA.y, "topo");
+                tocarNoPixel(alvo.x, alvo.y);
+                conferirIgual("o toque no pixel (" + alvo.x + ", " + alvo.y + ") do canvas encolhido marca " + nomeDaCasa(SEGUNDA), nomeDaCasa(cursor), nomeDaCasa(SEGUNDA));
+            } finally {
+                tela.style.width = larguraAntes;
+            }
+        });
+
+        testar("Enter e Espaço aplicam na casa do cursor; setas desmarcam; botão Aplicar também", function () {
+            zerarAEntrada();
+            cursor = { x: 3, y: 3 };
+            const enter = apertarTecla("Enter");
+            conferirIgual("Enter põe o pino na casa do cursor", Array.from(pinos).join("|"), "3,3");
+            conferirIgual("Enter chama preventDefault (a página não rola)", enter.defaultPrevented, true);
+            const espaco = apertarTecla(" ");
+            conferirIgual("Espaço retira o mesmo pino", pinos.size, 0);
+            conferirIgual("Espaço chama preventDefault", espaco.defaultPrevented, true);
+            conferir("o aviso descreve o que aconteceu", /Pino retirado na casa 3, 3/.test(aviso.textContent), aviso.textContent);
+
+            marcada = true;
+            apertarTecla("Enter");
+            conferirIgual("aplicar zera a marca", marcada, false);
+
+            marcada = true;
+            apertarTecla("ArrowRight");
+            conferirIgual("mexer o cursor com as setas desmarca", marcada, false);
+
+            pinos.clear();
+            document.querySelector('[data-acao="aplicar"]').click();
+            conferirIgual("o botão Aplicar põe o pino na casa do cursor", Array.from(pinos).join("|"), nomeDaCasa(cursor));
+            apertarTecla("Enter");
+            conferirIgual("Enter na mesma casa o retira (liga e desliga)", pinos.size, 0);
+            apertarTecla("Enter");
+            conferirIgual("e outro Enter o põe de novo", pinos.size, 1);
+        });
+
+        testar("num botão, Enter e Espaço NÃO aplicam pelo documento (o botão age uma vez só, no clique)", function () {
+            zerarAEntrada();
+            const botaoAplicar = document.querySelector('[data-acao="aplicar"]');
+            const enter = apertarTecla("Enter", {}, botaoAplicar);
+            conferirIgual("Enter com o foco no botão: o documento não aplica", pinos.size, 0);
+            conferirIgual("e não impede o comportamento do botão (sem preventDefault)", enter.defaultPrevented, false);
+            const espaco = apertarTecla(" ", {}, botaoAplicar);
+            conferirIgual("Espaço com o foco no botão: o documento não aplica", pinos.size, 0);
+            conferirIgual("e não chama preventDefault", espaco.defaultPrevented, false);
+            apertarTecla("Enter", {}, document.querySelector('[data-acao="girarDireita"]'));
+            conferirIgual("Enter em outro botão também não aplica", pinos.size, 0);
+
+            botaoAplicar.click();      // é o clique que o teclado produz no navegador de verdade
+            conferirIgual("o clique do botão aplica UMA vez", pinos.size, 1);
+            botaoAplicar.click();
+            conferirIgual("outro clique retira (uma vez por clique)", pinos.size, 0);
+            conferirIgual("a rotação não mudou (Enter no botão de girar não girou)", rotacao, 0);
+        });
+
+        testar("Ctrl, Cmd e Alt + tecla são ignorados (Ctrl+R recarrega a página, não gira a vista)", function () {
+            zerarAEntrada();
+            const antes = JSON.stringify({ r: rotacao, h: depuracaoLigada, c: cursor, p: Array.from(pinos), m: marcada });
+            const eventos = [];
+            ["ctrlKey", "metaKey", "altKey"].forEach(function (modificador) {
+                const m = {}; m[modificador] = true;
+                ["r", "R", "q", "h", "Enter", " ", "ArrowRight", "ArrowDown"].forEach(function (tecla) { eventos.push(apertarTecla(tecla, m)); });
+            });
+            conferirIgual("24 combinações: rotação, depuração, cursor, pinos e marca iguais", JSON.stringify({ r: rotacao, h: depuracaoLigada, c: cursor, p: Array.from(pinos), m: marcada }), antes);
+            conferirIgual("e nenhuma foi engolida com preventDefault (o navegador segue livre)", eventos.filter(function (evento) { return evento.defaultPrevented; }).length, 0);
+            apertarTecla("r");
+            conferirIgual("sem modificador, R gira", rotacao, 1);
+            irParaOGiro(0);
+            apertarTecla("h", { shiftKey: true });
+            conferirIgual("Shift + H ainda liga a depuração (só Ctrl, Cmd e Alt são ignorados)", depuracaoLigada, true);
+            apertarTecla("h");
+        });
+
+        testar("as setas movem o cursor UMA casa pela tela em qualquer giro, param na borda e alcançam as 100 casas", function () {
+            zerarAEntrada();
+            const SETAS_DA_TELA = [["ArrowRight", 1, 0], ["ArrowLeft", -1, 0], ["ArrowDown", 0, 1], ["ArrowUp", 0, -1]];
+            function casaDoCentroGirado(alvo, giros) {
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giros);
+                        if (Math.abs(centro[0] - alvo[0]) < 1e-9 && Math.abs(centro[1] - alvo[1]) < 1e-9) return { x: x, y: y };
+                    }
+                }
+                return null;
+            }
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, naBorda = 0, semPreventDefault = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        SETAS_DA_TELA.forEach(function (seta) {
+                            cursor = { x: x, y: y };
+                            const evento = apertarTecla(seta[0]);
+                            const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giro);
+                            const alvo = casaDoCentroGirado([centro[0] + seta[1], centro[1] + seta[2]], giro);
+                            if (!alvo) naBorda++;
+                            const esperada = alvo || { x: x, y: y };
+                            if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                                erros++;
+                                if (primeiro === null) primeiro = seta[0] + " em (" + x + "," + y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                            }
+                            if (!evento.defaultPrevented) semPreventDefault++;
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: 400 setas andam uma casa pela tela (ou ficam na borda: " + naBorda + " paradas)", erros === 0 && naBorda === 40, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: toda seta chama preventDefault", semPreventDefault, 0);
+
+                for (let i = 0; i < 12; i++) { apertarTecla("ArrowLeft"); apertarTecla("ArrowUp"); }
+                const visitadas = new Set([nomeDaCasa(cursor)]);
+                for (let linha = 0; linha < TAMANHO; linha++) {
+                    for (let coluna = 0; coluna < TAMANHO - 1; coluna++) { apertarTecla(linha % 2 === 0 ? "ArrowRight" : "ArrowLeft"); visitadas.add(nomeDaCasa(cursor)); }
+                    if (linha < TAMANHO - 1) { apertarTecla("ArrowDown"); visitadas.add(nomeDaCasa(cursor)); }
+                }
+                conferirIgual("giro " + giro * 90 + "°: a serpentina de setas alcança as 100 casas", visitadas.size, 100);
+            });
+            zerarAEntrada();
+        });
+
+        testar("#aviso: anuncia em cada evento (cursor, marca, pino, giro), descreve a casa escondida, e não mexe por quadro", function () {
+            zerarAEntrada();
+            avisar("sentinela");
+            avancarQuadros(60, 16);
+            conferirIgual("60 quadros sem evento: o aviso não muda (nada de anúncio por quadro)", aviso.textContent, "sentinela");
+
+            apertarTecla("ArrowRight");
+            conferir("seta: anuncia a casa do cursor", /^Cursor na casa \d, \d, altura \d/.test(aviso.textContent), aviso.textContent);
+            const anuncioDaSeta = aviso.textContent;
+            apertarTecla("Enter");
+            conferir("aplicar: anuncia o pino", /^Pino colocado na casa/.test(aviso.textContent) && aviso.textContent !== anuncioDaSeta, aviso.textContent);
+
+            // Cada casa: a descrição diz "escondida" exatamente quando minha conta acha algo à frente.
+            let divergencias = 0, escondidas = 0;
+            rodarNosQuatroGiros(function () {
+                const cenario = construirCenario();
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const meus = escondedoresPelaMinhaConta(cenario, x, y);
+                        if (meus.length > 0) escondidas++;
+                        const texto = descreverCasa(x, y);
+                        if ((texto.indexOf("escondida atrás de um bloco") !== -1) !== (meus.length > 0)) divergencias++;
+                        if (texto.indexOf("casa " + x + ", " + y + ", altura " + alturas[y][x]) !== 0) divergencias++;
+                    }
+                }
+            });
+            conferir("descreverCasa × minha conta: 400 casas, " + escondidas + " escondidas, 0 divergências", divergencias === 0 && escondidas > 20);
+
+            const antesDoGiro = aviso.textContent;
+            apertarTecla("r");
+            avancarQuadro(16);
+            conferirIgual("girar não muda o aviso por conta própria (o passo 3 só anuncia cursor, marca e pino)", aviso.textContent, antesDoGiro);
+            zerarAEntrada();
+        });
+
+        testar("o desenho: cada pino é pintado na vez da casa; o cursor marcado tem dois losangos; o tracejado só se escondido", function () {
+            zerarAEntrada();
+            let divergencias = 0, escondidos = 0, visiveis = 0;
+            const exemplos = [];
+            pinos.add("2,3"); pinos.add("5,5"); pinos.add("8,1");
+            rodarNosQuatroGiros(function (giro) {
+                const cenario = construirCenario();
+                [false, true].forEach(function (comMarca) {
+                    marcada = comMarca;
+                    for (let y = 0; y < TAMANHO; y++) {
+                        for (let x = 0; x < TAMANHO; x++) {
+                            if (!comMarca && (x + y) % 3 === 0) continue;       // sem marca, duas casas em três
+                            if (comMarca && (x + y) % 5 !== 0) continue;       // com marca, uma casa em cinco basta
+                            cursor = { x: x, y: y };
+                            const escondido = escondedoresPelaMinhaConta(cenario, x, y).length > 0;
+                            if (!comMarca) { if (escondido) escondidos++; else visiveis++; }
+                            const fichas = fichasDoQuadro(gravarQuadros(1)).join("|");
+                            const esperadas = fichasEsperadas(escondido).join("|");
+                            if (fichas !== esperadas) {
+                                divergencias++;
+                                if (exemplos.length < 2) exemplos.push("giro " + giro * 90 + "° (" + x + "," + y + ") marca " + comMarca + ": " + fichas.split("|").filter(function (f) { return f.length === 1; }).join("") + " esperado " + esperadas.split("|").filter(function (f) { return f.length === 1; }).join(""));
+                            }
+                        }
+                    }
+                });
+            });
+            zerarAEntrada();
+            conferir("~320 quadros (duas casas em três × 4 giros sem marca, 20 com marca): a ordem C, A, P, K bate com a esperada", divergencias === 0, exemplos.join(" || "));
+            conferir("há cursores escondidos (" + escondidos + " em 400) e à vista (" + visiveis + ")", escondidos > 20 && visiveis > 20);
+        });
+
+        testar("todo contorno tem 1 px (o pino também), com H ligado, o raio na tela e o cursor escondido", function () {
+            zerarAEntrada();
+            pinos.add("4,4"); pinos.add("3,3");
+            const ESTILOS_DE_CONTORNO = [COR_DO_CONTORNO, "rgba(255, 255, 255, 0.7)", "rgba(0, 0, 0, 0)", COR_DO_PINO];
+            let contornos = 0, finos = 0, cursores = 0, tracejados = 0;
+            const problemas = [];
+            rodarNosQuatroGiros(function (giro) {
+                const cenario = construirCenario();
+                let escondida = null;
+                for (let y = 0; y < TAMANHO && !escondida; y++) for (let x = 0; x < TAMANHO && !escondida; x++) if (escondedoresPelaMinhaConta(cenario, x, y).length > 0) escondida = { x: x, y: y };
+                [{ x: 4, y: 4 }, escondida].forEach(function (posicao, indice) {
+                    [false, true].forEach(function (comH) {
+                        cursor = { x: posicao.x, y: posicao.y };
+                        marcada = comH;
+                        depuracaoLigada = comH;
+                        if (comH) tela.dispatchEvent(eventoNoPixel("pointermove", 200.5, 120.5));
+                        const registro = gravarQuadros(2);
+                        registro.filter(function (operacao) { return operacao.tipo === "traco"; }).forEach(function (traco) {
+                            if (ESTILOS_DE_CONTORNO.indexOf(traco.cor) !== -1 || traco.dentroDe) {
+                                contornos++;
+                                if (traco.largura === 1) finos++;
+                                else problemas.push("giro " + giro * 90 + "° H " + comH + " cursor " + (indice ? "escondido" : "à vista") + ": " + traco.cor + " com " + traco.largura + " px");
+                            }
+                            if (traco.cor === COR_DO_CURSOR) { cursores++; if (traco.tracejado) tracejados++; }
+                        });
+                    });
+                });
+            });
+            zerarAEntrada();
+            conferir(contornos + " contornos conferidos, todos com 1 px", problemas.length === 0 && contornos > 3000 && finos === contornos, problemas.slice(0, 3).join(" | "));
+            conferir("o cursor (3 px) e a cópia tracejada do cursor escondido apareceram (" + cursores + " e " + tracejados + ")", cursores > 0 && tracejados > 0);
+        });
+
+        // A água de um quadro, contra a conta da página: um topo por casa mais baixa que o nível, sem laterais, borda branca só onde há terra ou o fim do mapa.
+        testar("a água: um topo plano por casa mais baixa que o nível, sem laterais e sem linha entre águas, nos 4 giros", function () {
+            zerarAEntrada();
+            let fronteiras = 0;
+            rodarNosQuatroGiros(function (giro) {
+                const registro = gravarQuadros(1);
+                const nome = "giro " + giro * 90 + "°: ";
+                const alagadas = casasAlagadasDoMapa();
+                const chamadas = registro.filter(function (operacao) { return operacao.tipo === "agua"; });
+                conferirIgual(nome + "uma chamada de desenharAgua por casa alagada", chamadas.map(nomeDaCasa).sort().join("|"), alagadas.map(nomeDaCasa).sort().join("|"));
+                conferirIgual(nome + "100 caixas (a água não passa por desenharCaixa)", registro.filter(function (operacao) { return operacao.tipo === "caixa"; }).length, 100);
+                const bordas = [];
+                let preenchimentos = 0, opacos = 0;
+                registro.filter(function (operacao) { return operacao.dentroDe === "agua"; }).forEach(function (operacao) {
+                    if (operacao.tipo === "preenchimento") { preenchimentos++; if (!(alfaDaCor(operacao.cor) < 1)) opacos++; }
+                    if (operacao.tipo === "traco" && alfaDaCor(operacao.cor) > 0) bordas.push(chaveDePonto({ x: (operacao.pontos[0].x + operacao.pontos[1].x) / 2, y: (operacao.pontos[0].y + operacao.pontos[1].y) / 2 }) + (operacao.pontos.length === 2 && operacao.largura === 1 && operacao.cor.indexOf("255, 255, 255") !== -1 ? "" : "!"));
+                });
+                conferirIgual(nome + "um preenchimento por casa de água (só o topo)", preenchimentos, alagadas.length);
+                conferirIgual(nome + "e todos translúcidos", opacos, 0);
+                fronteiras = bordasBrancasEsperadas().length;
+                conferirIgual(nome + "as arestas brancas (1 px, 2 pontos) são as das fronteiras água/terra e água/fim do mapa", bordas.sort().join("|"), bordasBrancasEsperadas().join("|"));
+            });
+            conferir("há " + fronteiras + " fronteiras a conferir", fronteiras > 30);
+        });
+
+        testar("H: a leitura compara o raio com a força bruta (IGUAL em todo pixel), mostra a face e as colunas", function () {
+            zerarAEntrada();
+            ponteiro = null;
+            conferir("sem H e sem ponteiro a leitura está vazia", (avancarQuadro(16), leitura.textContent === ""));
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferir("com H e sem ponteiro, pede para apontar", /aponte/.test(leitura.textContent), leitura.textContent);
+            semearSorteio(55);
+            let diferentes = 0, iguais = 0, comColunas = 0;
+            for (let i = 0; i < 120; i++) {
+                tela.dispatchEvent(eventoNoPixel("pointermove", 5 + Math.random() * 374, 5 + Math.random() * 240));
+                avancarQuadro(16);
+                if (/DIFERENTE/.test(leitura.textContent)) diferentes++;
+                if (/IGUAL/.test(leitura.textContent)) iguais++;
+                if (/\d+ colunas/.test(leitura.textContent)) comColunas++;
+            }
+            conferirIgual("120 posições do ponteiro: nunca DIFERENTE", diferentes, 0);
+            conferirIgual("e sempre IGUAL", iguais, 120);
+            conferir("a leitura cita as colunas do raio quando há acerto (" + comColunas + ")", comColunas > 20);
+            const alvo = casaComAsTresFacesAVista(), centro = pixelNaFace(alvo.x, alvo.y, "esquerda");
+            tela.dispatchEvent(eventoNoPixel("pointermove", centro.x, centro.y));
+            avancarQuadro(16);
+            conferir("sobre a lateral esquerda de (" + nomeDaCasa(alvo) + "): a leitura diz casa (" + alvo.x + ", " + alvo.y + ") lateral esquerda", leitura.textContent.indexOf("casa (" + alvo.x + ", " + alvo.y + ") lateral esquerda") !== -1, leitura.textContent);
+            conferir("e a inversa sem altura (a do passo 1) vem à parte", /inversa sem altura/.test(leitura.textContent));
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("H de novo esvazia a leitura", leitura.textContent, "");
+            zerarAEntrada();
+        });
+
+        testar("girar: Q e R refazem a lista; botões ⟲ ⟳ fazem o mesmo; a marca e os pinos sobrevivem ao giro", function () {
+            zerarAEntrada();
+            pinos.add("4,4"); marcada = true;
+            apertarTecla("r");
+            conferirIgual("R gira para a direita", rotacao, 1);
+            conferirIgual("a lista é a do giro 1", listaDeDesenho.map(nomeDaCasa).join("|"), (function () { irParaOGiro(1); return listaDeDesenho.map(nomeDaCasa).join("|"); })());
+            apertarTecla("q"); apertarTecla("q");
+            conferirIgual("Q duas vezes: giro 3", rotacao, 3);
+            document.querySelector('[data-acao="girarDireita"]').click();
+            document.querySelector('[data-acao="girarEsquerda"]').click();
+            conferirIgual("⟳ e ⟲ se desfazem", rotacao, 3);
+            conferirIgual("os pinos continuam", Array.from(pinos).join("|"), "4,4");
+            conferirIgual("a marca continua", marcada, true);
+            zerarAEntrada();
+        });
+
+        testar("o jogo roda sem se estragar e sem erro de console", function () {
+            zerarAEntrada();
+            restaurarTerreno();
+            avancarQuadros(60, 16);
+            conferir("o loop segue pedindo quadros", avancarQuadro(16));
+            conferir("e sobrevive a um quadro gigante", avancarQuadro(10000));
+            conferirIgual("o terreno de verdade foi restaurado", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("e depois de tudo também não", errosDeConsole.join(" | "), "");
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

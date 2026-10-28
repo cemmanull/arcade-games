@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 3: o mar</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/03-mar/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 3: o mar</h1>
+    <pre id="resultado"></pre>
+
+    <main id="palco"></main>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const TOLERANCIA = 1e-5;
+            const TETO_DO_QUADRO = 0.05;   // segundos: o jogo nunca anda mais que isso por quadro
+
+            // Cores do GDD §6 / tabela do passo, escritas aqui de propósito (não lidas do script).
+            const CEU_DE_TARDE = 0xf3c98b;
+            const CEU_DE_NOITE = 0x07111c;
+            const MAR_DE_TARDE = 0x3d7ea6;
+            const MAR_DE_NOITE = 0x14344f;
+
+            let tempoEsperado = 0;   // segundos de jogo que o relógio falso entregou, contados aqui
+
+            // O teste confere regras, não pixels: o desenho real de 1.200 quadros seria lento por software.
+            renderizador.render = function () { };
+
+            const normaisDoInicio = Float32Array.from(mar.geometry.attributes.normal.array);
+
+            function proximo(obtido, esperado) {
+                return Math.abs(obtido - esperado) < TOLERANCIA;
+            }
+
+            function passar(milissegundos) {
+                const rodou = avancarQuadro(milissegundos);
+                if (!rodou) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+                tempoEsperado += Math.max(0, Math.min(milissegundos / 1000, TETO_DO_QUADRO));
+            }
+
+            function passarAte(segundos) {
+                const quadros = Math.round((segundos - tempoEsperado) / TETO_DO_QUADRO);
+                for (let i = 0; i < quadros; i++) {
+                    passar(50);
+                }
+            }
+
+            // Fórmula do GDD/GUIA: y = 0,5 · (sen(0,6·x + 1,3·t) + sen(0,5·z + 0,9·t)) / 2
+            function alturaEsperada(x, z, tempo) {
+                return 0.5 * (Math.sin(0.6 * x + 1.3 * tempo) + Math.sin(0.5 * z + 0.9 * tempo)) / 2;
+            }
+
+            function indicesAmostrados() {
+                const total = mar.geometry.attributes.position.count;
+                const indices = [0, total - 1, Math.floor(total / 2)];
+                for (let i = 0; i < total; i += 97) {
+                    indices.push(i);
+                }
+                return indices;
+            }
+
+            function piorErroDeAltura(tempo) {
+                const posicoes = mar.geometry.attributes.position;
+                let pior = 0;
+                indicesAmostrados().forEach(function (i) {
+                    const erro = Math.abs(posicoes.getY(i) - alturaEsperada(posicoes.getX(i), posicoes.getZ(i), tempo));
+                    pior = Math.max(pior, erro);
+                });
+                return pior;
+            }
+
+            function todosFinitos(lista) {
+                for (let i = 0; i < lista.length; i++) {
+                    if (!Number.isFinite(lista[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function misturarCanal(inicio, fim, t) {
+                return inicio + (fim - inicio) * t;
+            }
+
+            function corMisturada(corInicial, corFinal, t) {
+                const inicio = new THREE.Color(corInicial);
+                const fim = new THREE.Color(corFinal);
+                return {
+                    r: misturarCanal(inicio.r, fim.r, t),
+                    g: misturarCanal(inicio.g, fim.g, t),
+                    b: misturarCanal(inicio.b, fim.b, t)
+                };
+            }
+
+            function corIgual(cor, esperada) {
+                return proximo(cor.r, esperada.r) && proximo(cor.g, esperada.g) && proximo(cor.b, esperada.b);
+            }
+
+            function descreverCor(cor) {
+                return "(" + [cor.r, cor.g, cor.b].map(function (canal) { return canal.toFixed(5); }).join(", ") + ")";
+            }
+
+            function apertarTecla(tecla, opcoes) {
+                window.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ key: tecla }, opcoes)));
+            }
+
+            testar("o mar: 64×64 divisões, deitado na geometria, névoa e material", function () {
+                conferir("o three.js carregou e o renderizador existe", typeof THREE !== "undefined" && renderizador !== null);
+                conferir("o mar é um PlaneGeometry", mar.geometry.type === "PlaneGeometry");
+                conferirIgual("64 divisões em x", mar.geometry.parameters.widthSegments, 64);
+                conferirIgual("64 divisões em z", mar.geometry.parameters.heightSegments, 64);
+                conferirIgual("65 × 65 = 4.225 vértices", mar.geometry.attributes.position.count, 4225);
+                conferir("a malha não é girada (rotateX foi na geometria)",
+                    mar.rotation.x === 0 && mar.rotation.y === 0 && mar.rotation.z === 0);
+                conferir("flatShading ligado", mar.material.flatShading === true);
+                conferir("a cena tem FogExp2", cena.fog !== null && cena.fog.isFogExp2 === true);
+                conferir("a névoa nasce com a cor do fundo", corIgual(cena.fog.color, cena.background));
+            });
+
+            testar("o relógio manda: ondas, barco, névoa e céu seguem o tempo (tabela do entardecer)", function () {
+                // t em segundos de jogo; os números de densidade, luz e cone são a tabela do passo
+                // (tarde → noite em 40 s, linear, parada em 1 depois disso).
+                const instantes = [
+                    { t: 0,    densidade: 0.012,  luz: 4,    cone: 0.04 },
+                    { t: 0.05 },
+                    { t: 1 },
+                    { t: 2.5 },
+                    { t: 10,   densidade: 0.0165, luz: 3.85, cone: 0.075 },
+                    { t: 20,   densidade: 0.021,  luz: 3.7,  cone: 0.11 },
+                    { t: 40,   densidade: 0.03,   luz: 3.4,  cone: 0.18 },
+                    { t: 60,   densidade: 0.03,   luz: 3.4,  cone: 0.18 },
+                    { t: 100,  densidade: 0.03,   luz: 3.4,  cone: 0.18 }
+                ];
+
+                instantes.forEach(function (instante) {
+                    if (instante.t === 0) {
+                        passar(0);   // um quadro de duração zero: aplica o céu em t = 0
+                    } else {
+                        passarAte(instante.t);
+                    }
+                    const rotulo = "t = " + instante.t + " s: ";
+                    const noite = Math.min(tempoEsperado / 40, 1);
+
+                    conferir(rotulo + "o relógio do jogo concorda com o relógio falso", proximo(tempoTotal, tempoEsperado),
+                        "tempoTotal = " + tempoTotal + ", esperado " + tempoEsperado);
+
+                    const erro = piorErroDeAltura(tempoEsperado);
+                    conferir(rotulo + "os vértices seguem a fórmula (erro máximo " + erro.toExponential(1) + ")", erro < TOLERANCIA);
+
+                    const alturaDaBarca = alturaEsperada(barca.position.x, barca.position.z, tempoEsperado);
+                    conferir(rotulo + "a barca boia na onda", proximo(barca.position.y, alturaDaBarca),
+                        "y = " + barca.position.y + ", esperado " + alturaDaBarca);
+
+                    const ceuEsperado = corMisturada(CEU_DE_TARDE, CEU_DE_NOITE, noite);
+                    conferir(rotulo + "o fundo é a mistura tarde→noite", corIgual(cena.background, ceuEsperado),
+                        "obtido " + descreverCor(cena.background) + ", esperado " + descreverCor(ceuEsperado));
+                    conferir(rotulo + "a cor da névoa é exatamente a do fundo",
+                        cena.fog.color.r === cena.background.r && cena.fog.color.g === cena.background.g && cena.fog.color.b === cena.background.b);
+
+                    const marEsperado = corMisturada(MAR_DE_TARDE, MAR_DE_NOITE, noite);
+                    conferir(rotulo + "a cor do mar é a mistura tarde→noite", corIgual(mar.material.color, marEsperado));
+
+                    const densidadeEsperada = 0.012 + (0.03 - 0.012) * noite;
+                    const luzEsperada = 4 + (3.4 - 4) * noite;
+                    const coneEsperado = 0.04 + (0.18 - 0.04) * noite;
+                    conferir(rotulo + "densidade da névoa", proximo(cena.fog.density, densidadeEsperada),
+                        "obtido " + cena.fog.density + ", esperado " + densidadeEsperada);
+                    conferir(rotulo + "luz do céu", proximo(luzDoCeu.intensity, luzEsperada),
+                        "obtido " + luzDoCeu.intensity + ", esperado " + luzEsperada);
+                    conferir(rotulo + "opacidade do cone", proximo(cone.material.opacity, coneEsperado),
+                        "obtido " + cone.material.opacity + ", esperado " + coneEsperado);
+
+                    if (instante.densidade !== undefined) {
+                        conferir(rotulo + "densidade da tabela (" + instante.densidade + ")", proximo(cena.fog.density, instante.densidade));
+                        conferir(rotulo + "luz da tabela (" + instante.luz + ")", proximo(luzDoCeu.intensity, instante.luz));
+                        conferir(rotulo + "cone da tabela (" + instante.cone + ")", proximo(cone.material.opacity, instante.cone));
+                    }
+
+                    conferir(rotulo + "nenhum NaN nos vértices", todosFinitos(mar.geometry.attributes.position.array));
+                    conferir(rotulo + "nenhum NaN no céu, na barca e na luz",
+                        todosFinitos([cena.background.r, cena.background.g, cena.background.b, cena.fog.density,
+                            luzDoCeu.intensity, cone.material.opacity, barca.position.y, barca.rotation.y]));
+                });
+
+                conferir("o fundo de noite é exatamente a cor da noite", corIgual(cena.background, new THREE.Color(CEU_DE_NOITE)));
+            });
+
+            testar("as ondas existem e respeitam a amplitude", function () {
+                const posicoes = mar.geometry.attributes.position;
+                let menor = Infinity;
+                let maior = -Infinity;
+                for (let i = 0; i < posicoes.count; i++) {
+                    menor = Math.min(menor, posicoes.getY(i));
+                    maior = Math.max(maior, posicoes.getY(i));
+                }
+                conferir("o mar não é liso (relevo > 0,5 m entre cristas e cavas)", maior - menor > 0.5, "relevo = " + (maior - menor));
+                conferir("nenhuma onda passa de ±0,5 m", maior <= 0.5 + TOLERANCIA && menor >= -0.5 - TOLERANCIA);
+            });
+
+            testar("as normais ficam como nasceram (flatShading as calcula na GPU)", function () {
+                const normaisAgora = mar.geometry.attributes.normal.array;
+                let iguais = normaisAgora.length === normaisDoInicio.length;
+                for (let i = 0; iguais && i < normaisAgora.length; i++) {
+                    iguais = normaisAgora[i] === normaisDoInicio[i];
+                }
+                conferir("o buffer de normais não mudou em 2.000 quadros", iguais);
+
+                let todasParaCima = true;
+                for (let i = 0; i < normaisAgora.length; i += 3) {
+                    todasParaCima = todasParaCima && proximo(normaisAgora[i], 0) && proximo(normaisAgora[i + 1], 1) && proximo(normaisAgora[i + 2], 0);
+                }
+                conferir("e todas apontam para +y (plano deitado)", todasParaCima);
+            });
+
+            testar("a barca boia onde estiver, mesmo fora da origem", function () {
+                barca.position.set(7, 0, -3);
+                passar(50);
+                const esperado = alturaEsperada(7, -3, tempoEsperado);
+                conferir("y da barca em (7, -3)", proximo(barca.position.y, esperado), "y = " + barca.position.y + ", esperado " + esperado);
+            });
+
+            testar("o teto do quadro: relógio que volta e quadro gigante", function () {
+                const antesDoRecuo = tempoTotal;
+                passar(-100);
+                conferirIgual("quadro para trás (-100 ms) não faz o tempo andar", tempoTotal, antesDoRecuo);
+                conferir("e nada vira NaN", todosFinitos(mar.geometry.attributes.position.array) && Number.isFinite(barca.position.y));
+
+                passar(100);   // volta o relógio falso ao ponto de antes, mais 100 ms: dt de 100 ms vira 50 ms
+                const antesDoSalto = tempoTotal;
+                passar(10000);
+                conferir("quadro de 10 s anda no máximo 50 ms", proximo(tempoTotal - antesDoSalto, TETO_DO_QUADRO),
+                    "andou " + (tempoTotal - antesDoSalto) + " s");
+                conferir("as ondas seguem a fórmula depois do salto", piorErroDeAltura(tempoEsperado) < TOLERANCIA);
+            });
+
+            testar("a tecla H liga e desliga os eixos, sem repetição nem Ctrl", function () {
+                function eixosVisiveis() {
+                    return eixos.every(function (eixo) { return eixo.visible === true; });
+                }
+                function eixosEscondidos() {
+                    return eixos.every(function (eixo) { return eixo.visible === false; });
+                }
+
+                conferir("os eixos começam escondidos", eixosEscondidos());
+
+                apertarTecla("h");
+                conferir("H mostra os eixos", eixosVisiveis());
+
+                apertarTecla("h", { repeat: true });
+                apertarTecla("h", { repeat: true });
+                conferir("repetição automática de H não pisca", eixosVisiveis());
+
+                apertarTecla("h", { ctrlKey: true });
+                apertarTecla("h", { metaKey: true });
+                apertarTecla("h", { altKey: true });
+                conferir("Ctrl/Meta/Alt+H não agem", eixosVisiveis());
+
+                window.dispatchEvent(new Event("keydown"));
+                conferir("tecla sem `key` (undefined) não age nem quebra", eixosVisiveis());
+
+                apertarTecla("H");
+                conferir("H maiúsculo esconde de novo", eixosEscondidos());
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

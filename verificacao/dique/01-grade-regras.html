@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 1: as regras da grade (matemática pura)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 1: as regras da grade</h1>
+    <p>Só o <code>regras.js</code>: sem canvas e sem DOM do jogo.</p>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="../../dique/01-grade/regras.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const PONTOS_POR_GIRO = 1000;
+        const LARGURA_DA_TELA_EM_PIXELS = 390;
+
+        function sortearEntre(minimo, maximo) {
+            return minimo + Math.random() * (maximo - minimo);
+        }
+
+        function multiplicar(matriz, vetor) {
+            return [
+                matriz[0][0] * vetor[0] + matriz[0][1] * vetor[1],
+                matriz[1][0] * vetor[0] + matriz[1][1] * vetor[1],
+            ];
+        }
+
+        function multiplicarMatrizes(a, b) {
+            return [0, 1].map(function (linha) {
+                return [0, 1].map(function (coluna) {
+                    return a[linha][0] * b[0][coluna] + a[linha][1] * b[1][coluna];
+                });
+            });
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            const rotacaoOriginal = rotacao;
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    rotacao = giro;
+                    caso(giro);
+                }
+            } finally {
+                rotacao = rotacaoOriginal;
+            }
+        }
+
+        testar("a matriz e a inversa", function () {
+            conferir("det ≠ 0", DETERMINANTE !== 0 && Number.isFinite(DETERMINANTE));
+            conferir("DETERMINANTE bate com ad − bc de MATRIZ",
+                Math.abs(DETERMINANTE - (MATRIZ[0][0] * MATRIZ[1][1] - MATRIZ[0][1] * MATRIZ[1][0])) < TOLERANCIA);
+            conferir("det = L²/4 (losango 2:1 com L de largura)",
+                Math.abs(DETERMINANTE - LARGURA_DO_BLOCO * LARGURA_DO_BLOCO / 4) < TOLERANCIA);
+
+            const produto = multiplicarMatrizes(MATRIZ, INVERSA);
+            conferir("MATRIZ · INVERSA = I",
+                Math.abs(produto[0][0] - 1) < TOLERANCIA && Math.abs(produto[1][1] - 1) < TOLERANCIA
+                && Math.abs(produto[0][1]) < TOLERANCIA && Math.abs(produto[1][0]) < TOLERANCIA,
+                JSON.stringify(produto));
+
+            const produtoInverso = multiplicarMatrizes(INVERSA, MATRIZ);
+            conferir("INVERSA · MATRIZ = I",
+                Math.abs(produtoInverso[0][0] - 1) < TOLERANCIA && Math.abs(produtoInverso[1][1] - 1) < TOLERANCIA
+                && Math.abs(produtoInverso[0][1]) < TOLERANCIA && Math.abs(produtoInverso[1][0]) < TOLERANCIA,
+                JSON.stringify(produtoInverso));
+
+            // Valores escritos à mão para L = 36: o losango tem 36 de largura e 18 de altura.
+            conferirIgual("L = 36", LARGURA_DO_BLOCO, 36);
+            conferirIgual("M = [[18, −18], [9, 9]]", JSON.stringify(MATRIZ), JSON.stringify([[18, -18], [9, 9]]));
+            conferir("M · (1, 0) = (18, 9): um passo em x desce à direita",
+                multiplicar(MATRIZ, [1, 0])[0] === 18 && multiplicar(MATRIZ, [1, 0])[1] === 9);
+            conferir("M · (0, 1) = (−18, 9): um passo em y desce à esquerda",
+                multiplicar(MATRIZ, [0, 1])[0] === -18 && multiplicar(MATRIZ, [0, 1])[1] === 9);
+        });
+
+        testar("a projeção sem giro, com valores à mão", function () {
+            rotacao = 0;
+            conferirIgual("o canto (0, 0) cai na ORIGEM", JSON.stringify(mundoParaTela(0, 0)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y }));
+            conferirIgual("(1, 0) = ORIGEM + (18, 9)", JSON.stringify(mundoParaTela(1, 0)), JSON.stringify({ x: ORIGEM.x + 18, y: ORIGEM.y + 9 }));
+            conferirIgual("(0, 1) = ORIGEM + (−18, 9)", JSON.stringify(mundoParaTela(0, 1)), JSON.stringify({ x: ORIGEM.x - 18, y: ORIGEM.y + 9 }));
+            conferirIgual("(1, 1) = ORIGEM + (0, 18)", JSON.stringify(mundoParaTela(1, 1)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y + 18 }));
+            conferirIgual("projetar(u, v) = mundoParaTela sem giro", JSON.stringify(projetar(3, 5)), JSON.stringify(mundoParaTela(3, 5)));
+            conferirIgual("a margem da ORIGEM é de 12 px em cima", ORIGEM.y, 12);
+            conferirIgual("o canto (0, 0) fica no meio horizontal + 12 px", ORIGEM.x, TAMANHO * LARGURA_DO_BLOCO / 2 + 12);
+        });
+
+        testar("girarPonto: giro de 90° em torno do centro da ilha", function () {
+            conferirIgual("0 giros não mexe", JSON.stringify(girarPonto(3, 7, 0)), JSON.stringify({ x: 3, y: 7 }));
+            conferirIgual("1 giro: (x, y) → (N − y, x)", JSON.stringify(girarPonto(3, 7, 1)), JSON.stringify({ x: TAMANHO - 7, y: 3 }));
+            conferirIgual("2 giros: (x, y) → (N − x, N − y)", JSON.stringify(girarPonto(3, 7, 2)), JSON.stringify({ x: TAMANHO - 3, y: TAMANHO - 7 }));
+            conferirIgual("3 giros: (x, y) → (y, N − x)", JSON.stringify(girarPonto(3, 7, 3)), JSON.stringify({ x: 7, y: TAMANHO - 3 }));
+            conferirIgual("4 giros voltam ao ponto", JSON.stringify(girarPonto(3.25, 7.75, 4)), JSON.stringify({ x: 3.25, y: 7.75 }));
+
+            const centro = TAMANHO / 2;
+            let pior = 0;
+            for (let giros = 1; giros < 4; giros++) {
+                const girado = girarPonto(sortearEntre(0, TAMANHO), sortearEntre(0, TAMANHO), giros);
+                pior = Math.max(pior, Math.abs(girarPonto(centro, centro, giros).x - centro), Math.abs(girarPonto(centro, centro, giros).y - centro));
+                conferir("o giro de " + giros * 90 + "° mantém o ponto dentro do quadrado",
+                    girado.x >= 0 && girado.x <= TAMANHO && girado.y >= 0 && girado.y <= TAMANHO);
+            }
+            conferirIgual("o centro da ilha é o ponto fixo do giro", pior, 0);
+
+            let distanciaPreservada = true;
+            for (let i = 0; i < 200; i++) {
+                const x = sortearEntre(0, TAMANHO), y = sortearEntre(0, TAMANHO);
+                const outroX = sortearEntre(0, TAMANHO), outroY = sortearEntre(0, TAMANHO);
+                const a = girarPonto(x, y, 1), b = girarPonto(outroX, outroY, 1);
+                const antes = Math.hypot(x - outroX, y - outroY), depois = Math.hypot(a.x - b.x, a.y - b.y);
+                if (Math.abs(antes - depois) > TOLERANCIA) distanciaPreservada = false;
+            }
+            conferir("o giro preserva distâncias (é rígido, sem espelhar nem esticar)", distanciaPreservada);
+        });
+
+        testar("ida e volta: mundo → tela → mundo (1.000 pontos por giro)", function () {
+            semearSorteio(20261027);
+            rodarNosQuatroGiros(function (giro) {
+                let pior = 0;
+                for (let i = 0; i < PONTOS_POR_GIRO; i++) {
+                    const x = sortearEntre(-2, TAMANHO + 2), y = sortearEntre(-2, TAMANHO + 2);
+                    const naTela = mundoParaTela(x, y);
+                    const devolta = telaParaMundo(naTela.x, naTela.y);
+                    pior = Math.max(pior, Math.abs(devolta.x - x), Math.abs(devolta.y - y));
+                }
+                conferir("giro " + giro * 90 + "°: pior erro " + pior.toExponential(2) + " < 1e-9", pior < TOLERANCIA, "erro " + pior);
+            });
+        });
+
+        testar("ida e volta: tela → mundo → tela (1.000 pontos por giro)", function () {
+            semearSorteio(777);
+            rodarNosQuatroGiros(function (giro) {
+                let pior = 0;
+                for (let i = 0; i < PONTOS_POR_GIRO; i++) {
+                    const sx = sortearEntre(-50, 450), sy = sortearEntre(-50, 350);
+                    const noMundo = telaParaMundo(sx, sy);
+                    const devolta = mundoParaTela(noMundo.x, noMundo.y);
+                    pior = Math.max(pior, Math.abs(devolta.x - sx), Math.abs(devolta.y - sy));
+                }
+                conferir("giro " + giro * 90 + "°: pior erro " + pior.toExponential(2) + " < 1e-9", pior < TOLERANCIA, "erro " + pior);
+            });
+        });
+
+        testar("o centro de cada casa volta à própria casa, nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                let erradas = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const naTela = mundoParaTela(x + 0.5, y + 0.5);
+                        const devolta = telaParaMundo(naTela.x, naTela.y);
+                        if (Math.floor(devolta.x) !== x || Math.floor(devolta.y) !== y) erradas++;
+                    }
+                }
+                conferirIgual("giro " + giro * 90 + "°: casas que caem em outra casa", erradas, 0);
+            });
+        });
+
+        testar("o giro de verdade muda a vista (e 4 giros a devolvem)", function () {
+            rotacao = 0;
+            const base = mundoParaTela(2.5, 7.5);
+            const posicoes = [];
+            rodarNosQuatroGiros(function () { posicoes.push(JSON.stringify(mundoParaTela(2.5, 7.5))); });
+            conferirIgual("o giro 0 é a projeção pura", posicoes[0], JSON.stringify(base));
+            conferirIgual("4 posições diferentes para um ponto fora do centro", new Set(posicoes).size, 4);
+
+            // O centro da ilha cai no mesmo pixel em qualquer giro: gira-se em torno dele.
+            const centros = [];
+            rodarNosQuatroGiros(function () { centros.push(JSON.stringify(mundoParaTela(TAMANHO / 2, TAMANHO / 2))); });
+            conferirIgual("o centro da ilha não se move na tela", new Set(centros).size, 1);
+
+            // Girar 90° para a direita: o canto de trás (0, 0) da ilha passa a ser o da esquerda.
+            // Em rotacao 1, o ponto do mundo (0, TAMANHO) cai na ORIGEM de novo: (0, N) → (N - N, 0).
+            rotacao = 1;
+            conferirIgual("em rotacao 1, o canto (0, N) vira o canto de trás",
+                JSON.stringify(mundoParaTela(0, TAMANHO)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y }));
+            rotacao = 2;
+            conferirIgual("em rotacao 2, o canto (N, N) vira o canto de trás",
+                JSON.stringify(mundoParaTela(TAMANHO, TAMANHO)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y }));
+            rotacao = 3;
+            conferirIgual("em rotacao 3, o canto (N, 0) vira o canto de trás",
+                JSON.stringify(mundoParaTela(TAMANHO, 0)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y }));
+            rotacao = 0;
+        });
+
+        testar("cantosDoBloco: cima, direita, baixo, esquerda, em qualquer giro", function () {
+            rodarNosQuatroGiros(function (giro) {
+                let mal = 0;
+                let semDiamante = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const cantos = cantosDoBloco(x, y);
+                        const [cima, direita, baixo, esquerda] = cantos;
+                        const ordemCerta = cima.y < direita.y && cima.y < esquerda.y && baixo.y > direita.y && baixo.y > esquerda.y
+                            && esquerda.x < cima.x && direita.x > cima.x;
+                        if (cantos.length !== 4 || !ordemCerta) mal++;
+
+                        const larguraCerta = Math.abs(direita.x - esquerda.x - LARGURA_DO_BLOCO) < TOLERANCIA;
+                        const alturaCerta = Math.abs(baixo.y - cima.y - LARGURA_DO_BLOCO / 2) < TOLERANCIA;
+                        const centro = mundoParaTela(x + 0.5, y + 0.5);
+                        const centrado = Math.abs((cima.x + baixo.x) / 2 - centro.x) < TOLERANCIA && Math.abs((cima.y + baixo.y) / 2 - centro.y) < TOLERANCIA;
+                        if (!larguraCerta || !alturaCerta || !centrado) semDiamante++;
+                    }
+                }
+                conferirIgual("giro " + giro * 90 + "°: casas com cantos fora da ordem", mal, 0);
+                conferirIgual("giro " + giro * 90 + "°: casas que não são um losango L × L/2 centrado na casa", semDiamante, 0);
+            });
+        });
+
+        testar("a ilha 10×10 cabe em 390 px em todos os giros", function () {
+            conferirIgual("a ilha é 10×10", TAMANHO, 10);
+            rodarNosQuatroGiros(function (giro) {
+                let esquerda = Infinity, direita = -Infinity, cima = Infinity, baixo = -Infinity;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        cantosDoBloco(x, y).forEach(function (canto) {
+                            esquerda = Math.min(esquerda, canto.x); direita = Math.max(direita, canto.x);
+                            cima = Math.min(cima, canto.y); baixo = Math.max(baixo, canto.y);
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: x de " + esquerda + " a " + direita + " cabe em [0, " + LARGURA_DA_TELA_EM_PIXELS + "]",
+                    esquerda >= 0 && direita <= LARGURA_DA_TELA_EM_PIXELS);
+                conferirIgual("giro " + giro * 90 + "°: a ilha tem 360 px de largura (10 × L)", direita - esquerda, TAMANHO * LARGURA_DO_BLOCO);
+                conferir("giro " + giro * 90 + "°: y de " + cima + " a " + baixo + " não sai por cima", cima >= 0);
+                conferir("giro " + giro * 90 + "°: a ilha tem 180 px de altura (10 × L/2)", Math.abs(baixo - cima - TAMANHO * LARGURA_DO_BLOCO / 2) < TOLERANCIA);
+            });
+        });
+
+        testar("o mapa em texto vira alturas numéricas", function () {
+            conferirIgual("o mapa tem 10 linhas", ALTURAS_EM_TEXTO.length, 10);
+            conferirIgual("TAMANHO é deduzido do texto", TAMANHO, ALTURAS_EM_TEXTO.length);
+            conferir("o mapa é quadrado: toda linha tem TAMANHO colunas",
+                ALTURAS_EM_TEXTO.every(function (linha) { return linha.length === TAMANHO; }));
+            conferir("só aparecem os símbolos da legenda (~ e 0 a 4)",
+                ALTURAS_EM_TEXTO.every(function (linha) { return /^[~0-4]+$/.test(linha); }));
+            conferirIgual("a grade viva tem TAMANHO linhas", alturas.length, TAMANHO);
+            conferir("a grade viva tem TAMANHO colunas em toda linha",
+                alturas.every(function (linha) { return linha.length === TAMANHO; }));
+
+            let tipoErrado = 0, aguaMalLida = 0, digitoMalLido = 0, forasDaFaixa = 0;
+            ALTURAS_EM_TEXTO.forEach(function (linha, y) {
+                linha.split("").forEach(function (simbolo, x) {
+                    const altura = alturas[y][x];
+                    if (typeof altura !== "number" || Number.isNaN(altura)) tipoErrado++;
+                    if (simbolo === "~" && altura !== 0) aguaMalLida++;
+                    if (simbolo !== "~" && altura !== Number(simbolo)) digitoMalLido++;
+                    if (altura < 0 || altura > 4) forasDaFaixa++;
+                });
+            });
+            conferirIgual("toda altura é um número (não texto, não NaN)", tipoErrado, 0);
+            conferirIgual("todo ~ virou 0", aguaMalLida, 0);
+            conferirIgual("todo dígito virou o mesmo número", digitoMalLido, 0);
+            conferirIgual("nenhuma altura fora de 0 a 4", forasDaFaixa, 0);
+
+            // Casos escolhidos a dedo na ilha de verdade.
+            conferirIgual("o pico: linha 4, coluna 4 = 4", alturas[4][4], 4);
+            conferirIgual("o canto de fora (0, 0) é mar = 0", alturas[0][0], 0);
+            conferirIgual("o lago do meio (5, 5) é o dígito 0, não mar, e vale 0", alturas[5][5], 0);
+            conferirIgual("(4, 3) vale 3", alturas[3][4], 3);
+            conferir("o tipo guardado é number", typeof alturas[4][4] === "number" && typeof alturas[0][0] === "number");
+        });
+
+        testar("a borda da ilha é mar (a ilha cabe sem encostar na beirada)", function () {
+            const ultima = TAMANHO - 1;
+            let bordaSeca = 0;
+            for (let i = 0; i < TAMANHO; i++) {
+                [[i, 0], [i, ultima], [0, i], [ultima, i]].forEach(function (par) {
+                    if (ALTURAS_EM_TEXTO[par[1]][par[0]] !== "~") bordaSeca++;
+                });
+            }
+            conferirIgual("casas da borda que não são mar", bordaSeca, 0);
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

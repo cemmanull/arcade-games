@@ -1,0 +1,56 @@
+/* DIQUE — PASSO 1: estilo. O canvas tem o tamanho do mapa (script.js): 384x204 aqui, a ilha de 360 de largura mais 12 de margem de cada lado. */
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 12px;
+    background-color: #0b1020;
+    color: #eaf0ff;
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: #ffe14d;
+}
+
+canvas {
+    display: block;
+    max-width: 100%;                         /* o canvas tem o tamanho do mapa (script.js); em tela estreita, encolhe */
+    height: auto;
+    outline: 2px solid #9aa6c4;   /* outline não entra na conta do getBoundingClientRect */
+    touch-action: none;                      /* o dedo aponta, a página não rola */
+}
+
+button {
+    min-width: 48px;
+    min-height: 48px;
+    font: inherit;
+    color: #eaf0ff;
+    background: #1b2748;
+    border: 2px solid #9aa6c4;
+    border-radius: 8px;
+}
+
+button:focus-visible {
+    outline: 3px solid #ffe14d;
+}
+
+p, pre {
+    margin: 0;
+    font-size: 13px;
+    color: #9aa6c4;
+}
+
+#leitura {
+    min-height: 3.6em;                       /* reserva o lugar: ligar o H não empurra a página */
+    font-size: 11px;
+    color: #eaf0ff;
+}

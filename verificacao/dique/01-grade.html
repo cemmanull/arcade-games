@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 1: a grade (o jogo)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 1: a grade (o jogo)</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids. O canvas começa com 1×1: quem o dimensiona é o script, a partir do mapa. -->
+    <canvas id="jogo" width="1" height="1"></canvas>
+    <button type="button" id="ver" aria-label="Ver o invisível (H)">Ver</button>
+    <pre id="leitura" aria-live="off"></pre>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error e os erros da carga. -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/01-grade/regras.js"></script>
+    <script src="../../dique/01-grade/script.js"></script>
+
+    <script>
+        const errosNaCarga = errosDeConsole.slice();
+
+        // A conta independente do jogo: resolvida à mão a partir de sx = ox + 18(u − v), sy = oy + 9(u + v).
+        const ORIGEM_ESPERADA = { x: 10 * 36 / 2 + 12, y: 12 };
+
+        function chaoSegundoAPagina(sx, sy) {
+            const diferencaDeX = (sx - ORIGEM_ESPERADA.x) / 18;        // u − v
+            const somaDeY = (sy - ORIGEM_ESPERADA.y) / 9;               // u + v
+            return { x: (somaDeY + diferencaDeX) / 2, y: (somaDeY - diferencaDeX) / 2 };
+        }
+
+        function apontarParaPixelDaTela(sx, sy, tipo) {
+            const caixa = tela.getBoundingClientRect();
+            const evento = new PointerEvent(tipo || "pointermove", {
+                clientX: caixa.left + sx * caixa.width / tela.width,
+                clientY: caixa.top + sy * caixa.height / tela.height,
+                bubbles: true,
+            });
+            tela.dispatchEvent(evento);
+        }
+
+        function apertarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: tecla, cancelable: true }));
+        }
+
+        function lerPixel(x, y) {
+            const dados = pincel.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+            return { r: dados[0], g: dados[1], b: dados[2] };
+        }
+
+        function pertoDe(pixel, r, g, b, folga) {
+            return Math.abs(pixel.r - r) <= folga && Math.abs(pixel.g - g) <= folga && Math.abs(pixel.b - b) <= folga;
+        }
+
+        // Meio da aresta direita-baixo do losango: o contorno amarelo do cursor passa por aí.
+        function meioDaArestaDoCursor() {
+            const cantos = cantosDoBloco(cursor.x, cursor.y);
+            return { x: (cantos[1].x + cantos[2].x) / 2, y: (cantos[1].y + cantos[2].y) / 2 };
+        }
+
+        testar("a tela", function () {
+            conferirIgual("o canvas tem 384 px de largura", tela.width, 384);
+            conferirIgual("o canvas tem 204 px de altura", tela.height, 204);
+            conferir("o canvas comporta a ilha (360 px) mais a margem", tela.width >= 10 * 36 + 2 * 12 && tela.width <= 390);
+            conferir("o canvas existe e tem contexto 2d", pincel !== null && typeof pincel.fillRect === "function");
+            conferirIgual("a ORIGEM do jogo é a conta da página", JSON.stringify(ORIGEM), JSON.stringify(ORIGEM_ESPERADA));
+            conferirIgual("a vista começa sem giro", rotacao, 0);
+        });
+
+        testar("o primeiro quadro desenha a ilha", function () {
+            conferirIgual("o loop pediu o primeiro quadro", avancarQuadro(16), true);
+            const mar = lerPixel(10, 10);
+            conferir("o canto de fora é o fundo escuro (não ficou em branco)", pertoDe(mar, 11, 16, 32, 3), JSON.stringify(mar));
+
+            // O centro de uma casa de altura 4 usa a cor do topo mais alto.
+            const centroDoPico = mundoParaTela(4.5, 4.5);
+            const pico = lerPixel(centroDoPico.x, centroDoPico.y - 4);
+            conferir("o pico (altura 4) é cinza-claro", pico.r > 180 && pico.g > 180 && pico.b > 180 && pico.b >= pico.r - 10, JSON.stringify(pico));
+
+            // O mar é azul; a casa (4, 1) tem altura 1 e é verde.
+            const centroDoMar = mundoParaTela(0.5, 0.5);
+            const azul = lerPixel(centroDoMar.x, centroDoMar.y);
+            conferir("o mar é azul (b > r)", azul.b > azul.r + 40, JSON.stringify(azul));
+            const centroDaTerra = mundoParaTela(4.5, 1.5);
+            const terra = lerPixel(centroDaTerra.x, centroDaTerra.y);
+            conferir("a terra de altura 1 é verde (g > b)", terra.g > terra.b + 40, JSON.stringify(terra));
+        });
+
+        testar("a tecla H e o botão Ver ligam e desligam a depuração", function () {
+            conferirIgual("começa desligada", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("sem H a leitura fica vazia", leitura.textContent, "");
+
+            apertarTecla("h");
+            conferirIgual("H liga", depuracaoLigada, true);
+            avancarQuadro(16);
+            conferir("ligada, a leitura mostra a matriz", leitura.textContent.indexOf("M  = ") === 0, JSON.stringify(leitura.textContent));
+            conferir("ligada, a leitura mostra o determinante", leitura.textContent.indexOf("det = " + DETERMINANTE) !== -1);
+            conferir("ligada, a leitura mostra a inversa", leitura.textContent.indexOf("M⁻¹ = ") !== -1);
+            conferir("ligada, a leitura mostra a casa marcada", leitura.textContent.indexOf("casa (" + cursor.x + ", " + cursor.y + ")") !== -1);
+
+            // O eixo x (vermelho) vai de (0,0) a (N,0): o ponto médio é um pixel vermelho.
+            const meioDoEixo = mundoParaTela(TAMANHO / 2, 0);
+            conferir("ligada, o eixo x aparece em vermelho", pertoDe(lerPixel(meioDoEixo.x, meioDoEixo.y), 255, 90, 90, 40), JSON.stringify(lerPixel(meioDoEixo.x, meioDoEixo.y)));
+
+            apertarTecla("h");
+            conferirIgual("H de novo desliga", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("desligada, a leitura volta a ficar vazia", leitura.textContent, "");
+            conferir("desligada, o eixo some", !pertoDe(lerPixel(meioDoEixo.x, meioDoEixo.y), 255, 90, 90, 40));
+
+            apertarTecla("H");
+            conferirIgual("H maiúsculo também liga", depuracaoLigada, true);
+            apertarTecla("j");
+            apertarTecla("w");
+            apertarTecla("Enter");
+            conferirIgual("outras teclas não mexem na depuração", depuracaoLigada, true);
+            apertarTecla("h");
+            conferirIgual("H desliga de novo", depuracaoLigada, false);
+
+            document.getElementById("ver").click();
+            conferirIgual("o botão Ver liga", depuracaoLigada, true);
+            document.getElementById("ver").click();
+            conferirIgual("o botão Ver desliga", depuracaoLigada, false);
+        });
+
+        testar("pointermove marca a casa sob o ponteiro (conta independente)", function () {
+            let divergencias = 0;
+            let primeira = null;
+            for (let y = 0; y < TAMANHO; y++) {
+                for (let x = 0; x < TAMANHO; x++) {
+                    const centro = mundoParaTela(x + 0.5, y + 0.5);
+                    apontarParaPixelDaTela(centro.x, centro.y);
+
+                    const esperado = chaoSegundoAPagina(centro.x, centro.y);
+                    const casaEsperada = { x: Math.floor(esperado.x), y: Math.floor(esperado.y) };
+                    if (cursor.x !== casaEsperada.x || cursor.y !== casaEsperada.y || casaEsperada.x !== x || casaEsperada.y !== y) {
+                        divergencias++;
+                        if (primeira === null) primeira = "casa (" + x + "," + y + "): jogo marcou (" + cursor.x + "," + cursor.y + "), conta da página (" + casaEsperada.x + "," + casaEsperada.y + ")";
+                    }
+                    if (Math.abs(chaoSobOPonteiro.x - esperado.x) > 1e-9 || Math.abs(chaoSobOPonteiro.y - esperado.y) > 1e-9) {
+                        divergencias++;
+                        if (primeira === null) primeira = "chão sob o ponteiro em (" + x + "," + y + ") difere da conta da página";
+                    }
+                }
+            }
+            conferir("as " + TAMANHO * TAMANHO + " casas: o cursor marca a casa certa e o chão bate com a conta da página", divergencias === 0, primeira);
+        });
+
+        testar("pointermove em pixels aleatórios bate com a conta da página", function () {
+            semearSorteio(4242);
+            let divergencias = 0;
+            let primeira = null;
+            let dentro = 0;
+            let cursorAntes = { x: cursor.x, y: cursor.y };
+            for (let i = 0; i < 1000; i++) {
+                const sx = Math.random() * tela.width, sy = Math.random() * tela.height;
+                apontarParaPixelDaTela(sx, sy);
+
+                const esperado = chaoSegundoAPagina(sx, sy);
+                const x = Math.floor(esperado.x), y = Math.floor(esperado.y);
+                const naIlha = x >= 0 && y >= 0 && x < TAMANHO && y < TAMANHO;
+                if (naIlha) {
+                    dentro++;
+                    cursorAntes = { x: x, y: y };
+                }
+                // Fora da ilha o cursor fica onde estava.
+                if (cursor.x !== cursorAntes.x || cursor.y !== cursorAntes.y) {
+                    divergencias++;
+                    if (primeira === null) primeira = "pixel (" + sx.toFixed(2) + "," + sy.toFixed(2) + "): jogo (" + cursor.x + "," + cursor.y + "), página (" + cursorAntes.x + "," + cursorAntes.y + ")";
+                }
+            }
+            conferir("1.000 pixels: cursor igual ao da conta da página", divergencias === 0, primeira);
+            conferir("a amostra pega pixels dentro da ilha", dentro > 300, "dentro = " + dentro);
+        });
+
+        testar("fora da ilha o cursor não se mexe, mas o chão sob o ponteiro é informado", function () {
+            const centro = mundoParaTela(5.5, 5.5);
+            apontarParaPixelDaTela(centro.x, centro.y);
+            const casaAntes = { x: cursor.x, y: cursor.y };
+            conferirIgual("preparação: o cursor está na casa (5, 5)", casaAntes.x * 10 + casaAntes.y, 55);
+
+            apontarParaPixelDaTela(1, 1);
+            conferirIgual("canto superior esquerdo da tela: cursor igual", cursor.x * 10 + cursor.y, 55);
+            conferir("e o chão sob o ponteiro está fora do mapa", chaoSobOPonteiro.x < 0 || chaoSobOPonteiro.y < 0 || chaoSobOPonteiro.x >= TAMANHO || chaoSobOPonteiro.y >= TAMANHO);
+
+            apontarParaPixelDaTela(tela.width - 1, tela.height - 1);
+            conferirIgual("canto inferior direito da tela: cursor igual", cursor.x * 10 + cursor.y, 55);
+
+            const aoSul = mundoParaTela(TAMANHO + 0.2, 5.5);
+            apontarParaPixelDaTela(aoSul.x, aoSul.y);
+            conferirIgual("logo depois da última coluna: cursor igual", cursor.x * 10 + cursor.y, 55);
+
+            const antesDoZero = mundoParaTela(-0.2, 5.5);
+            apontarParaPixelDaTela(antesDoZero.x, antesDoZero.y);
+            conferirIgual("logo antes da primeira coluna: cursor igual", cursor.x * 10 + cursor.y, 55);
+        });
+
+        testar("bordas das casas: o canto exato de uma casa pertence à casa de baixo e à direita", function () {
+            const canto = mundoParaTela(3, 6);
+            apontarParaPixelDaTela(canto.x, canto.y);
+            conferirIgual("o canto (3, 6) marca a casa (3, 6)", cursor.x * 10 + cursor.y, 36);
+
+            const quaseFora = mundoParaTela(0.0001, 0.0001);
+            apontarParaPixelDaTela(quaseFora.x, quaseFora.y);
+            conferirIgual("logo dentro do canto (0, 0) marca a casa (0, 0)", cursor.x * 10 + cursor.y, 0);
+
+            const ultima = mundoParaTela(TAMANHO - 0.0001, TAMANHO - 0.0001);
+            apontarParaPixelDaTela(ultima.x, ultima.y);
+            conferirIgual("logo dentro do canto (N, N) marca a última casa", cursor.x * 10 + cursor.y, (TAMANHO - 1) * 11);
+        });
+
+        testar("pointerdown também marca, e o contorno amarelo acompanha o cursor", function () {
+            const centro = mundoParaTela(6.5, 2.5);
+            apontarParaPixelDaTela(centro.x, centro.y, "pointerdown");
+            conferirIgual("pointerdown marca a casa (6, 2)", cursor.x * 10 + cursor.y, 62);
+
+            avancarQuadro(16);
+            const meio = meioDaArestaDoCursor();
+            const pixel = lerPixel(meio.x, meio.y);
+            conferir("o contorno do cursor é amarelo na aresta da casa (6, 2)", pertoDe(pixel, 255, 225, 77, 60), JSON.stringify(pixel));
+
+            const outro = mundoParaTela(2.5, 7.5);
+            apontarParaPixelDaTela(outro.x, outro.y);
+            avancarQuadro(16);
+            conferir("depois de mover, a aresta antiga não é mais amarela", !pertoDe(lerPixel(meio.x, meio.y), 255, 225, 77, 40));
+            const novoMeio = meioDaArestaDoCursor();
+            conferir("e a nova casa (2, 7) ganhou o contorno amarelo", pertoDe(lerPixel(novoMeio.x, novoMeio.y), 255, 225, 77, 60), JSON.stringify(lerPixel(novoMeio.x, novoMeio.y)));
+        });
+
+        testar("a leitura de depuração acompanha o ponteiro", function () {
+            const centro = mundoParaTela(3.5, 8.5);
+            apontarParaPixelDaTela(centro.x, centro.y);
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferir("a leitura cita a casa (3, 8)", leitura.textContent.indexOf("casa (3, 8)") !== -1, JSON.stringify(leitura.textContent));
+            conferir("e o chão sob o dedo 3.50, 8.50", leitura.textContent.indexOf("(3.50, 8.50)") !== -1, JSON.stringify(leitura.textContent));
+            apertarTecla("h");
+        });
+
+        // ------------------------------------------------------------
+        // Gravador do canvas: o que o jogo manda ao pincel em N quadros (traços com espessura e cor, textos, preenchimentos).
+        // ------------------------------------------------------------
+        const COR_DO_CONTORNO = "rgba(0, 0, 0, 0.5)";
+        const COR_DO_CURSOR = "#ffe14d";
+
+        function gravarQuadros(quantidade) {
+            const registro = [];
+            let caminho = [];
+            const prototipo = CanvasRenderingContext2D.prototype;
+            pincel.beginPath = function () { caminho = []; prototipo.beginPath.call(pincel); };
+            pincel.moveTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.moveTo.call(pincel, x, y); };
+            pincel.lineTo = function (x, y) { caminho.push({ x: x, y: y }); prototipo.lineTo.call(pincel, x, y); };
+            pincel.stroke = function () {
+                registro.push({ tipo: "traco", pontos: caminho.slice(), largura: pincel.lineWidth, cor: pincel.strokeStyle });
+                prototipo.stroke.call(pincel);
+            };
+            pincel.strokeText = function (texto, x, y) {
+                registro.push({ tipo: "texto-contorno", texto: String(texto), x: x, y: y, largura: pincel.lineWidth, cor: pincel.strokeStyle });
+                prototipo.strokeText.call(pincel, texto, x, y);
+            };
+            pincel.fillText = function (texto, x, y) {
+                registro.push({ tipo: "texto-cheio", texto: String(texto), x: x, y: y, cor: pincel.fillStyle });
+                prototipo.fillText.call(pincel, texto, x, y);
+            };
+            try {
+                for (let i = 0; i < quantidade; i++) if (!avancarQuadro(16)) throw new Error("o laço do jogo parou de pedir quadros");
+            } finally {
+                ["beginPath", "moveTo", "lineTo", "stroke", "strokeText", "fillText"].forEach(function (nome) { delete pincel[nome]; });
+            }
+            return registro;
+        }
+
+        // Contraste WCAG entre duas cores "#rrggbb": (L1 + 0,05) / (L2 + 0,05).
+        function luminancia(r, g, b) {
+            const canal = function (valor) { const c = valor / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+            return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+        }
+
+        function luminanciaDaCor(cor) {
+            const canais = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cor);
+            if (!canais) throw new Error("cor que a página não sabe ler: " + cor);
+            return luminancia(parseInt(canais[1], 16), parseInt(canais[2], 16), parseInt(canais[3], 16));
+        }
+
+        function contrasteEntre(luminanciaA, luminanciaB) {
+            return (Math.max(luminanciaA, luminanciaB) + 0.05) / (Math.min(luminanciaA, luminanciaB) + 0.05);
+        }
+
+        testar("o canvas é dimensionado pelo script a partir do mapa (o esqueleto da página começa com 1×1)", function () {
+            conferirIgual("largura = ilha inteira + 12 px de margem de cada lado", tela.width, TAMANHO * LARGURA_DO_BLOCO + 24);
+            conferirIgual("altura = margem de cima + meia ilha + margem de baixo", tela.height, ORIGEM.y + TAMANHO * LARGURA_DO_BLOCO / 2 + 12);
+            conferirIgual("e para este mapa são 384 px de largura", tela.width, 384);
+            conferirIgual("e 204 px de altura", tela.height, 204);
+        });
+
+        testar("H: o número de altura tem contorno escuro e preenchimento branco, com contraste ≥ 4,5:1 (calculado aqui)", function () {
+            depuracaoLigada = true;
+            const registro = gravarQuadros(1);
+            depuracaoLigada = false;
+            const contornos = registro.filter(function (operacao) { return operacao.tipo === "texto-contorno"; });
+            const cheios = registro.filter(function (operacao) { return operacao.tipo === "texto-cheio" && /^\d$/.test(operacao.texto); });      // sem as letras x e y dos eixos
+            const terra = ALTURAS_EM_TEXTO.join("").split("").filter(function (simbolo) { return simbolo !== "~"; });
+            conferirIgual("um rótulo por casa de terra (o mar não tem número)", cheios.length, terra.length);
+            conferirIgual("e um contorno para cada rótulo", contornos.length, terra.length);
+            const indicesDosContornos = [], indicesDosCheios = [];
+            registro.forEach(function (operacao, i) {
+                if (operacao.tipo === "texto-contorno") indicesDosContornos.push(i);
+                if (operacao.tipo === "texto-cheio" && /^\d$/.test(operacao.texto)) indicesDosCheios.push(i);
+            });
+            conferir("o contorno é desenhado ANTES do preenchimento, do mesmo texto no mesmo ponto",
+                contornos.every(function (contorno, i) {
+                    const cheio = cheios[i];
+                    return indicesDosContornos[i] < indicesDosCheios[i] && contorno.texto === cheio.texto && contorno.x === cheio.x && contorno.y === cheio.y;
+                }));
+            conferir("o texto é a altura (0 a 4)", cheios.every(function (cheio) { return /^[0-4]$/.test(cheio.texto); }));
+            conferir("o contorno tem pelo menos 2 px de espessura", contornos.every(function (contorno) { return contorno.largura >= 2; }));
+            const preenchimentosDistintos = new Set(cheios.map(function (cheio) { return cheio.cor; })), contornosDistintos = new Set(contornos.map(function (contorno) { return contorno.cor; }));
+            conferirIgual("uma cor só de preenchimento", preenchimentosDistintos.size, 1);
+            conferirIgual("uma cor só de contorno", contornosDistintos.size, 1);
+            const contraste = contrasteEntre(luminanciaDaCor(cheios[0].cor), luminanciaDaCor(contornos[0].cor));
+            conferir("contraste entre o preenchimento " + cheios[0].cor + " e o contorno " + contornos[0].cor + " = " + contraste.toFixed(1) + ":1 (≥ 4,5)", contraste >= 4.5);
+            conferir("o preenchimento é claro e o contorno é escuro", luminanciaDaCor(cheios[0].cor) > 0.9 && luminanciaDaCor(contornos[0].cor) < 0.05);
+            const semContorno = contrasteEntre(luminanciaDaCor(cheios[0].cor), luminanciaDaCor("#d9c27a"));
+            conferir("controle: o branco sozinho sobre a areia teria só " + semContorno.toFixed(1) + ":1 — é o contorno que garante a leitura", semContorno < 4.5);
+        });
+
+        testar("H: no canvas de verdade, o número sobre a areia mostra pixels claros e escuros (contraste ≥ 4,5:1 medido)", function () {
+            depuracaoLigada = true;
+            avancarQuadro(16);
+            depuracaoLigada = false;
+            // A casa (5, 5) tem altura 0 e é de areia (#d9c27a): o pior fundo para texto branco.
+            const centro = mundoParaTela(5.5, 5.5);
+            const dados = pincel.getImageData(Math.round(centro.x) - 6, Math.round(centro.y) - 6, 12, 12).data;
+            let maisClaro = -1, maisEscuro = 2;
+            for (let i = 0; i < dados.length; i += 4) {
+                const l = luminancia(dados[i], dados[i + 1], dados[i + 2]);
+                maisClaro = Math.max(maisClaro, l);
+                maisEscuro = Math.min(maisEscuro, l);
+            }
+            conferir("o pixel mais claro da região do número é quase branco", maisClaro > 0.8, "luminância " + maisClaro.toFixed(2));
+            conferir("o mais escuro é o contorno", maisEscuro < 0.05, "luminância " + maisEscuro.toFixed(3));
+            conferir("contraste medido " + contrasteEntre(maisClaro, maisEscuro).toFixed(1) + ":1", contrasteEntre(maisClaro, maisEscuro) >= 4.5);
+            avancarQuadro(16);
+        });
+
+        testar("todo contorno de bloco tem 1 px, com H ligado e quadro após quadro (o cursor e os eixos, de 3 px, não vazam)", function () {
+            let contornos = 0;
+            const problemas = [];
+            [0, 1, 2, 3].forEach(function (giro) {
+                rotacao = giro;
+                [false, true].forEach(function (comH) {
+                    depuracaoLigada = comH;
+                    const registro = gravarQuadros(2);
+                    registro.filter(function (operacao) { return operacao.tipo === "traco" && operacao.cor === COR_DO_CONTORNO; }).forEach(function (traco) {
+                        contornos++;
+                        if (traco.largura !== 1) problemas.push("giro " + giro * 90 + "° H " + comH + ": contorno com " + traco.largura + " px");
+                    });
+                    const cursores = registro.filter(function (operacao) { return operacao.tipo === "traco" && operacao.cor === COR_DO_CURSOR; });
+                    if (cursores.length !== 2 || cursores.some(function (traco) { return traco.largura !== 3; })) problemas.push("giro " + giro * 90 + "° H " + comH + ": o cursor deveria ser um traço de 3 px por quadro");
+                    const eixos = registro.filter(function (operacao) { return operacao.tipo === "traco" && (operacao.cor === "#ff5a5a" || operacao.cor === "#5ab0ff"); });
+                    if (eixos.length !== (comH ? 4 : 0)) problemas.push("giro " + giro * 90 + "° H " + comH + ": eixos desenhados " + eixos.length);
+                });
+            });
+            rotacao = 0;
+            depuracaoLigada = false;
+            conferir(contornos + " contornos de bloco (100 por quadro, 16 quadros), todos com 1 px", problemas.length === 0 && contornos === 1600, problemas.slice(0, 3).join(" | ") + " (contornos = " + contornos + ")");
+        });
+
+        testar("as setas movem o cursor UMA casa pela tela, em qualquer giro, param na borda e alcançam as 100 casas", function () {
+            const SETAS_DA_TELA = [["ArrowRight", 1, 0], ["ArrowLeft", -1, 0], ["ArrowDown", 0, 1], ["ArrowUp", 0, -1]];
+            function girarPeloMeuCaminho(x, y, giros) {
+                let ponto = [x, y];
+                for (let i = 0; i < giros; i++) ponto = [TAMANHO - ponto[1], ponto[0]];
+                return ponto;
+            }
+            function casaDoCentroGirado(alvo, giros) {
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giros);
+                        if (Math.abs(centro[0] - alvo[0]) < 1e-9 && Math.abs(centro[1] - alvo[1]) < 1e-9) return { x: x, y: y };
+                    }
+                }
+                return null;
+            }
+            [0, 1, 2, 3].forEach(function (giro) {
+                rotacao = giro;
+                let erros = 0, primeiro = null, naBorda = 0, semPreventDefault = 0;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        SETAS_DA_TELA.forEach(function (seta) {
+                            cursor = { x: x, y: y };
+                            const evento = new KeyboardEvent("keydown", { key: seta[0], cancelable: true });
+                            document.dispatchEvent(evento);
+                            const centro = girarPeloMeuCaminho(x + 0.5, y + 0.5, giro);
+                            const alvo = casaDoCentroGirado([centro[0] + seta[1], centro[1] + seta[2]], giro);
+                            if (!alvo) naBorda++;
+                            const esperada = alvo || { x: x, y: y };
+                            if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                                erros++;
+                                if (primeiro === null) primeiro = seta[0] + " em (" + x + "," + y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                            }
+                            if (!evento.defaultPrevented) semPreventDefault++;
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: 400 setas andam uma casa pela tela (ou ficam na borda: " + naBorda + " paradas)", erros === 0 && naBorda === 40, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: toda seta chama preventDefault", semPreventDefault, 0);
+
+                for (let i = 0; i < 12; i++) { apertarTecla("ArrowLeft"); apertarTecla("ArrowUp"); }
+                const visitadas = new Set([cursor.x + "," + cursor.y]);
+                let passosLongos = 0, anterior = { x: cursor.x, y: cursor.y };
+                for (let linha = 0; linha < TAMANHO; linha++) {
+                    const passos = [];
+                    for (let coluna = 0; coluna < TAMANHO - 1; coluna++) passos.push(linha % 2 === 0 ? "ArrowRight" : "ArrowLeft");
+                    if (linha < TAMANHO - 1) passos.push("ArrowDown");
+                    passos.forEach(function (tecla) {
+                        apertarTecla(tecla);
+                        visitadas.add(cursor.x + "," + cursor.y);
+                        if (Math.abs(cursor.x - anterior.x) + Math.abs(cursor.y - anterior.y) !== 1) passosLongos++;
+                        anterior = { x: cursor.x, y: cursor.y };
+                    });
+                }
+                conferirIgual("giro " + giro * 90 + "°: a serpentina de setas alcança as 100 casas", visitadas.size, 100);
+                conferirIgual("giro " + giro * 90 + "°: e cada passo anda uma casa do mapa", passosLongos, 0);
+            });
+            rotacao = 0;
+            cursor = { x: 4, y: 4 };
+        });
+
+        testar("o jogo roda sem se estragar", function () {
+            avancarQuadros(300, 16);
+            conferir("o loop segue pedindo quadros", avancarQuadro(16));
+            conferir("o loop sobrevive a um quadro gigante", avancarQuadro(10000));
+            conferirIgual("o mapa não mudou", alturas[4][4], 4);
+        });
+
+        testar("sem erro de console", function () {
+            conferirIgual("a carga da página não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("e depois de tudo também não", errosDeConsole.join(" | "), "");
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

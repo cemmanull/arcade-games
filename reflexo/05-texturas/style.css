@@ -1,0 +1,73 @@
+/* REFLEXO — PASSO 5: estilo. Botões de toque com 56 px de altura (o mínimo é 48). */
+
+:root {
+    --cor-fundo: #08080e;      /* o azul-noite do observatório */
+    --cor-feixe: #bbffff;
+    --cor-texto: #e8ecff;
+    --cor-apagada: #7f8aa8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 16px;
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: var(--cor-feixe);
+}
+
+canvas { display: block; width: min(384px, 100%); height: auto; border: 2px solid var(--cor-apagada); }
+
+[hidden] { display: none; }   /* sem isto, o display: block do canvas vence o atributo */
+#palco { display: grid; place-items: center; }
+
+/* A imagem em baixa resolução é ampliada sem suavizar; a largura (inteira) vem do script. */
+#visao { border: 0; image-rendering: pixelated; }
+
+p { margin: 0; font-size: 13px; text-align: center; color: var(--cor-apagada); }
+
+#leitura {
+    min-height: 8em;   /* reserva as 6 linhas do H: ligá-lo não empurra a página */
+    white-space: pre;
+    color: var(--cor-texto);
+}
+
+#controles { display: grid; grid-template-columns: repeat(4, 72px); gap: 8px; }
+
+#controles button {
+    height: 56px;
+    font-size: 24px;
+    color: var(--cor-feixe);
+    background: #1c1c2c;
+    border: 2px solid var(--cor-apagada);
+    touch-action: none;   /* o dedo não rola nem dá zoom: só aperta */
+    user-select: none;
+    -webkit-user-select: none;       /* iOS: pressão longa não seleciona... */
+    -webkit-touch-callout: none;     /* ...nem abre o menu de contexto */
+}
+
+/* Apertado (dedo, mouse ou a tecla equivalente): mais claro, borda do feixe e afundado. */
+#controles button:active, #controles button.segurado, #controles button[aria-pressed="true"] {
+    background: #3a3a5c;
+    border-color: var(--cor-feixe);
+    transform: translateY(2px);
+}
+
+/* Os comandos (Planta, Medir) ficam na quarta coluna, com texto: a tecla vai entre parênteses. */
+#controles button[data-comando] { grid-column: 4; font-size: 14px; }
+#controles button[data-comando="planta"] { grid-row: 1; }
+#controles button[data-comando="medir"] { grid-row: 2; }

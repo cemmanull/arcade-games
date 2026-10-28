@@ -1,0 +1,50 @@
+<!--
+  REFLEXO — PASSO 8: SOMBRAS
+
+  Sombras rondam e perseguem; só o feixe de luz as desfaz (meio segundo). Cada
+  toque tira uma vida (são três). E ou Espaço gira o espelho à frente, R reinicia
+  a sala, H troca a imagem pela planta, com o campo de distância das sombras.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reflexo — passo 8</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Reflexo</h1>
+
+    <div id="palco">
+        <canvas id="visao" width="320" height="200" role="img"
+            aria-label="A sala em primeira pessoa: paredes de tijolo, espelhos prateados em pé no chão, um feixe de luz ciano que quica neles, um receptor na parede e sombras roxas em forma de chama">
+            Seu navegador não suporta canvas.
+        </canvas>
+        <canvas id="jogo" width="384" height="288" role="img" hidden
+            aria-label="Planta da sala vista de cima, com o caminho do feixe, os espelhos, o receptor, a porta, as sombras e o campo de distância delas">
+            Seu navegador não suporta canvas.
+        </canvas>
+    </div>
+
+    <p id="leitura"></p>
+    <p id="aviso" class="so-leitor" role="status"></p>
+
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar para a esquerda">⟲</button>
+        <button type="button" data-acao="frente" aria-label="Andar para a frente">▲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar para a direita">⟳</button>
+        <button type="button" data-acao="esquerda" aria-label="Passo para a esquerda">◀&#xFE0E;</button>
+        <button type="button" data-acao="tras" aria-label="Andar para trás">▼</button>
+        <button type="button" data-acao="direita" aria-label="Passo para a direita">▶&#xFE0E;</button>
+        <button type="button" data-comando="espelho">Espelho</button>
+        <button type="button" data-comando="planta" aria-pressed="false">Planta</button>
+        <button type="button" data-comando="reiniciar">Reiniciar</button>
+    </div>
+
+    <p id="ajuda">W S ou ↑ ↓: andar · A D: passo · ← →: girar<br>E ou Espaço: girar o espelho à frente · R: reiniciar a sala · H: planta (anel = receptor aceso · números = passos até você)</p>
+</body>
+</html>

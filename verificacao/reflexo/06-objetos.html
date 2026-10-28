@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 6: objetos</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 6: objetos</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo (o mesmo do index.html). Uma cópia viva vai para #aplicacao, escondida, para as
+         afirmações; outra, com o style.css de verdade, vai para os iframes (rolagem e alvos de toque). -->
+    <template id="esqueleto">
+        <h1>Reflexo</h1>
+        <div id="palco">
+            <canvas id="visao" width="320" height="200"></canvas>
+            <canvas id="jogo" width="384" height="288" hidden></canvas>
+        </div>
+        <p id="leitura"></p>
+        <div id="controles">
+            <button type="button" data-acao="girarEsquerda">⟲</button>
+            <button type="button" data-acao="frente">▲</button>
+            <button type="button" data-acao="girarDireita">⟳</button>
+            <button type="button" data-acao="esquerda">◀&#xFE0E;</button>
+            <button type="button" data-acao="tras">▼</button>
+            <button type="button" data-acao="direita">▶&#xFE0E;</button>
+            <button type="button" data-comando="planta" aria-pressed="false">Planta (H)</button>
+        </div>
+        <p id="ajuda">W S ou ↑ ↓: andar · A D: passo lateral · ← →: girar<br>H: planta (● linha vertical cruzada · ■ horizontal · círculo sombra · losango cristal)</p>
+    </template>
+    <div id="aplicacao" hidden></div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- A janela do teste é falsa e mutável (1280×720): o jogo lê innerWidth/innerHeight ao carregar. -->
+    <script>
+        const janelaFalsa = { largura: 1280, altura: 720 };
+        Object.defineProperty(window, "innerWidth", { get: function () { return janelaFalsa.largura; }, configurable: true });
+        Object.defineProperty(window, "innerHeight", { get: function () { return janelaFalsa.altura; }, configurable: true });
+        document.getElementById("aplicacao").appendChild(document.getElementById("esqueleto").content.cloneNode(true));
+    </script>
+
+    <!-- Este passo é sobre PIXELS: a imagem (#visao) usa o canvas de verdade e o teste lê o buffer e o canvas.
+         Só a planta (#jogo) ignora o desenho. -->
+    <script>
+        const contextoDaPlanta = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        const obterContextoDeVerdade = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (tipo, opcoes) {
+            return this.id === "jogo" ? contextoDaPlanta : obterContextoDeVerdade.call(this, tipo, opcoes);
+        };
+    </script>
+    <script src="../../reflexo/06-objetos/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const VOLTA_COMPLETA = 2 * Math.PI;
+        const SIMBOLOS_SOLIDOS_ESPERADOS = "#%DER";
+        const PLANO_ESPERADO = Math.tan(33 * Math.PI / 180);   // campo de visão de 66°
+
+        // A especificação da névoa, do fundo e dos sprites, escrita aqui, não lida do jogo.
+        const NIVEIS = 32;
+        const DISTANCIA_DA_NEVOA_ESPERADA = 10;
+        const NIVEIS_EXTRAS_DA_FACE_Y = 5;
+        // A cor da névoa e a do horizonte vêm do PASSO (uma cópia só); o que o teste afirma é a regra: são a mesma.
+        const NEVOA = COR_DA_NEVOA;
+        const HORIZONTE = COR_DO_HORIZONTE;
+        const TETO_ALTO = [4, 4, 9];
+        const PISO_BAIXO = [38, 38, 56];
+        const TAMANHO_DA_TEXTURA_ESPERADO = 16;
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertarTecla(tecla) {
+            const evento = new KeyboardEvent("keydown", { key: tecla, cancelable: true });
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        // Põe o jogador numa pose conhecida, sem ações ativas, e roda UM quadro sem entrada
+        // (é ele que lança os raios, projeta os objetos e desenha o buffer).
+        function reiniciarEVer(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+            avancarQuadro(16);
+        }
+
+        function perto(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        function pertoRelativo(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? 1e-9 : tolerancia) * Math.max(1, Math.abs(esperado));
+        }
+
+        function constanteK(largura) {
+            return largura / (2 * PLANO_ESPERADO);
+        }
+
+        function comJanela(largura, altura, funcao) {
+            janelaFalsa.largura = largura;
+            janelaFalsa.altura = altura;
+            try {
+                window.dispatchEvent(new Event("resize"));
+                funcao();
+            } finally {
+                janelaFalsa.largura = 1280;
+                janelaFalsa.altura = 720;
+                window.dispatchEvent(new Event("resize"));
+                soltarTudo();
+            }
+        }
+
+        // Troca a lista de objetos do jogo (um array const: muda-se o conteúdo) e devolve a original ao sair.
+        function comObjetos(lista, funcao) {
+            const original = OBJETOS.slice();
+            OBJETOS.length = 0;
+            lista.forEach(function (objeto) { OBJETOS.push(objeto); });
+            try {
+                funcao();
+            } finally {
+                OBJETOS.length = 0;
+                original.forEach(function (objeto) { OBJETOS.push(objeto); });
+            }
+        }
+
+        function corDoHex(hex) {
+            return [1, 3, 5].map(function (inicio) { return parseInt(hex.slice(inicio, inicio + 2), 16); });
+        }
+
+        function sortearPoseLivre() {
+            for (let tentativa = 0; tentativa < 1000; tentativa++) {
+                const x = 1 + Math.random() * (COLUNAS - 2);
+                const y = 1 + Math.random() * (LINHAS - 2);
+                if (!casaSolidaNoTexto(Math.floor(x), Math.floor(y))) {
+                    return { x: x, y: y, angulo: Math.random() * VOLTA_COMPLETA };
+                }
+            }
+            throw new Error("não achei pose livre");
+        }
+
+        function copiaDoBuffer() {
+            return Uint32Array.from(pixels);
+        }
+
+        function primeiraColunaDiferente(umBuffer, outroBuffer) {
+            for (let indice = 0; indice < umBuffer.length; indice++) {
+                if (umBuffer[indice] !== outroBuffer[indice]) {
+                    return indice % larguraDaVisao;
+                }
+            }
+            return -1;
+        }
+
+        function colunasQueDiferem(umBuffer, outroBuffer) {
+            const colunas = new Set();
+            for (let indice = 0; indice < umBuffer.length; indice++) {
+                if (umBuffer[indice] !== outroBuffer[indice]) {
+                    colunas.add(indice % larguraDaVisao);
+                }
+            }
+            return colunas;
+        }
+
+        // ---- a verdade independente 1: o texto do mapa e a interseção raio × casa (placas) ----
+
+        function casaSolidaNoTexto(coluna, linha) {
+            const simbolo = MAPA_EM_TEXTO[linha] && MAPA_EM_TEXTO[linha][coluna];
+            return simbolo === undefined || SIMBOLOS_SOLIDOS_ESPERADOS.includes(simbolo);
+        }
+
+        function intervaloNoEixo(origem, direcao, minimo, maximo) {
+            if (direcao === 0) {
+                return origem >= minimo && origem < maximo ? { entra: -Infinity, sai: Infinity } : null;
+            }
+            const aoMinimo = (minimo - origem) / direcao;
+            const aoMaximo = (maximo - origem) / direcao;
+            return { entra: Math.min(aoMinimo, aoMaximo), sai: Math.max(aoMinimo, aoMaximo) };
+        }
+
+        function raioDeReferencia(origemX, origemY, direcaoX, direcaoY) {
+            let melhor = null;
+            for (let linha = 0; linha < MAPA_EM_TEXTO.length; linha++) {
+                for (let coluna = 0; coluna < MAPA_EM_TEXTO[linha].length; coluna++) {
+                    if (!casaSolidaNoTexto(coluna, linha)) {
+                        continue;
+                    }
+                    const noX = intervaloNoEixo(origemX, direcaoX, coluna, coluna + 1);
+                    const noY = intervaloNoEixo(origemY, direcaoY, linha, linha + 1);
+                    if (noX === null || noY === null) {
+                        continue;
+                    }
+                    const entra = Math.max(noX.entra, noY.entra);
+                    const sai = Math.min(noX.sai, noY.sai);
+                    if (!(sai > entra && sai > 0)) {
+                        continue;
+                    }
+                    const distancia = Math.max(entra, 0);
+                    if (melhor === null || distancia < melhor.distancia) {
+                        melhor = {
+                            coluna: coluna, linha: linha, distancia: distancia,
+                            lado: noX.entra > noY.entra ? "x" : "y",
+                            x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia
+                        };
+                    }
+                }
+            }
+            return melhor;
+        }
+
+        function desvioDaColuna(coluna, largura) {
+            return Math.atan(PLANO_ESPERADO * (2 * (coluna + 0.5) / largura - 1));
+        }
+
+        // A distância perpendicular da parede em CADA coluna da pose atual, pela referência (o z-buffer certo).
+        function paredesDeReferencia() {
+            const largura = larguraDaVisao;
+            return Array.from({ length: largura }, function (_, coluna) {
+                const desvio = desvioDaColuna(coluna, largura);
+                const resultado = raioDeReferencia(jogador.x, jogador.y, Math.cos(jogador.angulo + desvio), Math.sin(jogador.angulo + desvio));
+                return resultado.distancia * Math.cos(desvio);
+            });
+        }
+
+        // ---- a verdade independente 2: u, a posição ao longo da face (como no passo 5) ----
+
+        function acertaNaQuina(resultado) {
+            return perto(resultado.x, Math.round(resultado.x), 1e-9) && perto(resultado.y, Math.round(resultado.y), 1e-9);
+        }
+
+        function extremosDaFace(resultado) {
+            if (resultado.lado === "x") {
+                const linhaDaGrade = Math.round(resultado.x);
+                return [[linhaDaGrade, resultado.linha], [linhaDaGrade, resultado.linha + 1]];
+            }
+            const linhaDaGrade = Math.round(resultado.y);
+            return [[resultado.coluna, linhaDaGrade], [resultado.coluna + 1, linhaDaGrade]];
+        }
+
+        function uDeReferencia(resultado) {
+            const extremos = extremosDaFace(resultado);
+            const aX = extremos[0][0] - jogador.x;
+            const aY = extremos[0][1] - jogador.y;
+            const bX = extremos[1][0] - jogador.x;
+            const bY = extremos[1][1] - jogador.y;
+            const esquerdo = aX * bY - aY * bX > 0 ? extremos[0] : extremos[1];
+            return Math.hypot(resultado.x - esquerdo[0], resultado.y - esquerdo[1]);
+        }
+
+        // ---- a verdade independente 3: o objeto no espaço da câmera, à mão ----
+
+        // Rotação inversa do olhar: profundidade = quanto à frente, lateral = quanto à direita.
+        // Devolve null para o que está atrás do olho ou perto demais; senão, o retângulo na imagem.
+        function projecaoDeReferencia(objeto) {
+            const vetorX = objeto.x - jogador.x;
+            const vetorY = objeto.y - jogador.y;
+            const cosseno = Math.cos(jogador.angulo);
+            const seno = Math.sin(jogador.angulo);
+            const profundidade = vetorX * cosseno + vetorY * seno;
+            const lateral = -vetorX * seno + vetorY * cosseno;
+            if (profundidade < PROFUNDIDADE_MINIMA) {
+                return null;
+            }
+
+            const tamanho = CATALOGO_DE_SPRITES[objeto.tipo].tamanho;
+            const elevacao = CATALOGO_DE_SPRITES[objeto.tipo].elevacao;
+            const umaCasa = constanteK(larguraDaVisao) / profundidade;   // altura de uma parede de 1 casa a esta profundidade
+            const centro = larguraDaVisao / 2 + lateral * umaCasa;
+            const lado = tamanho * umaCasa;
+            const base = (alturaDaVisao + umaCasa) / 2 - elevacao * umaCasa;
+            return { objeto: objeto, profundidade: profundidade, lateral: lateral, esquerda: centro - lado / 2, direita: centro + lado / 2, topo: base - lado, base: base, lado: lado };
+        }
+
+        // As colunas do retângulo em que o sprite está mais perto que a parede (a parede dada por `paredes`).
+        function colunasDeReferencia(projecao, paredes) {
+            const colunas = [];
+            const inicio = Math.max(0, Math.ceil(projecao.esquerda - 0.5));
+            const fim = Math.min(larguraDaVisao, Math.ceil(projecao.direita - 0.5));
+            for (let coluna = inicio; coluna < fim; coluna++) {
+                if (projecao.profundidade < paredes[coluna]) {
+                    colunas.push(coluna);
+                }
+            }
+            return colunas;
+        }
+
+        function projecoesDeReferencia(paredes) {
+            return OBJETOS.map(projecaoDeReferencia)
+                .filter(function (projecao) { return projecao !== null; })
+                .sort(function (umaProjecao, outra) { return outra.profundidade - umaProjecao.profundidade; })
+                .map(function (projecao) { projecao.colunas = colunasDeReferencia(projecao, paredes); return projecao; });
+        }
+
+        // ---- a verdade independente 4: a imagem inteira (fundo, paredes e sprites), pixel a pixel ----
+
+        function misturarComANevoa(cor, nivel) {
+            return cor.map(function (canal, indice) { return Math.round(canal + (NEVOA[indice] - canal) * (nivel / (NIVEIS - 1))); });
+        }
+
+        function nivelDeReferencia(distancia, lado) {
+            return Math.min(NIVEIS - 1, Math.floor(distancia / DISTANCIA_DA_NEVOA_ESPERADA * (NIVEIS - 1)) + (lado === "y" ? NIVEIS_EXTRAS_DA_FACE_Y : 0));
+        }
+
+        function pintar(bytes, largura, linha, coluna, cor) {
+            const inicio = (linha * largura + coluna) * 4;
+            bytes[inicio] = cor[0];
+            bytes[inicio + 1] = cor[1];
+            bytes[inicio + 2] = cor[2];
+            bytes[inicio + 3] = 255;
+        }
+
+        function imagemDeReferencia(paredes) {
+            const largura = larguraDaVisao;
+            const altura = alturaDaVisao;
+            const k = constanteK(largura);
+            const bytes = new Uint8ClampedArray(largura * altura * 4);
+            const colunasAmbiguas = new Set();
+            const pixelsAmbiguos = new Set();   // empates de ponto flutuante (ex.: altura exatamente 118): não dá para decidir
+
+            for (let linha = 0; linha < altura; linha++) {
+                const distanciaDoHorizonte = Math.abs(linha + 0.5 - altura / 2) / (altura / 2);
+                const extremo = linha < altura / 2 ? TETO_ALTO : PISO_BAIXO;
+                const cor = HORIZONTE.map(function (canal, indice) { return Math.round(canal + (extremo[indice] - canal) * distanciaDoHorizonte); });
+                for (let coluna = 0; coluna < largura; coluna++) {
+                    pintar(bytes, largura, linha, coluna, cor);
+                }
+            }
+
+            for (let coluna = 0; coluna < largura; coluna++) {
+                const resultado = raiosDaTela[coluna];
+                const simbolo = MAPA_EM_TEXTO[resultado.linha][resultado.coluna];
+                const alturaDaParede = k / resultado.perpendicular;
+                const nivel = nivelDeReferencia(resultado.perpendicular, resultado.lado);
+                const posicao = uDeReferencia(resultado) * TAMANHO_DA_TEXTURA_ESPERADO;
+                if (Math.abs(posicao - Math.round(posicao)) < 1e-6) {
+                    colunasAmbiguas.add(coluna);   // u cai quase em cima da divisa de dois texels
+                }
+                const colunaDaTextura = Math.min(TAMANHO_DA_TEXTURA_ESPERADO - 1, Math.floor(posicao));
+                const topoReal = (altura - alturaDaParede) / 2;
+
+                for (let linha = 0; linha < altura; linha++) {
+                    const centro = linha + 0.5;
+                    const posicaoNaTextura = (centro - topoReal) / alturaDaParede * TAMANHO_DA_TEXTURA_ESPERADO;
+                    if (Math.abs(centro - topoReal) < 1e-9 || Math.abs(centro - topoReal - alturaDaParede) < 1e-9
+                        || Math.abs(posicaoNaTextura - Math.round(posicaoNaTextura)) < 1e-9) {
+                        pixelsAmbiguos.add(linha * largura + coluna);
+                    }
+                    if (centro < topoReal || centro >= topoReal + alturaDaParede) {
+                        continue;
+                    }
+                    const linhaDaTextura = Math.min(TAMANHO_DA_TEXTURA_ESPERADO - 1, Math.floor(posicaoNaTextura));
+                    const letra = TEXTURAS_EM_TEXTO[simbolo][linhaDaTextura][colunaDaTextura];
+                    pintar(bytes, largura, linha, coluna, misturarComANevoa(corDoHex(PALETA_DAS_TEXTURAS[letra]), nivel));
+                }
+            }
+
+            projecoesDeReferencia(paredes).forEach(function (projecao) {
+                const arte = CATALOGO_DE_SPRITES[projecao.objeto.tipo].arte;
+                const nivel = nivelDeReferencia(projecao.profundidade, "x");
+                const primeiraLinha = Math.max(0, Math.ceil(projecao.topo - 0.5));
+                const fimDasLinhas = Math.min(altura, Math.ceil(projecao.base - 0.5));
+                const ehEmpate = function (valor) { return Math.abs(valor - Math.round(valor)) < 1e-9; };
+                projecao.colunas.forEach(function (coluna) {
+                    const posicaoNaColuna = (coluna + 0.5 - projecao.esquerda) / projecao.lado * TAMANHO_DA_TEXTURA_ESPERADO;
+                    const colunaDaArte = Math.min(TAMANHO_DA_TEXTURA_ESPERADO - 1, Math.floor(posicaoNaColuna));
+                    for (let linha = primeiraLinha; linha < fimDasLinhas; linha++) {
+                        const posicaoNaLinha = (linha + 0.5 - projecao.topo) / projecao.lado * TAMANHO_DA_TEXTURA_ESPERADO;
+                        if (ehEmpate(posicaoNaColuna) || ehEmpate(posicaoNaLinha)) {
+                            pixelsAmbiguos.add(linha * largura + coluna);
+                        }
+                        const linhaDaArte = Math.min(TAMANHO_DA_TEXTURA_ESPERADO - 1, Math.floor(posicaoNaLinha));
+                        const letra = arte[linhaDaArte][colunaDaArte];
+                        if (letra !== ".") {
+                            pintar(bytes, largura, linha, coluna, misturarComANevoa(corDoHex(PALETA_DAS_TEXTURAS[letra]), nivel));
+                        }
+                    }
+                });
+            });
+            return { bytes: bytes, colunasAmbiguas: colunasAmbiguas, pixelsAmbiguos: pixelsAmbiguos };
+        }
+
+        // Compara o buffer do jogo com a referência. null ou o motivo.
+        function motivoDeBufferErrado() {
+            const largura = larguraDaVisao;
+            const altura = alturaDaVisao;
+            const referencia = imagemDeReferencia(paredesDeReferencia());
+            const nome = "pose (" + jogador.x.toFixed(3) + ", " + jogador.y.toFixed(3) + ", " + jogador.angulo.toFixed(3) + ") " + largura + "×" + altura;
+
+            if (imagem.width !== largura || imagem.height !== altura || pixels.length !== largura * altura) {
+                return nome + ": buffer " + imagem.width + "×" + imagem.height + " (" + pixels.length + " pixels)";
+            }
+            for (let linha = 0; linha < altura; linha++) {
+                for (let coluna = 0; coluna < largura; coluna++) {
+                    if (referencia.colunasAmbiguas.has(coluna) || referencia.pixelsAmbiguos.has(linha * largura + coluna)) {
+                        continue;
+                    }
+                    const inicio = (linha * largura + coluna) * 4;
+                    for (let canal = 0; canal < 4; canal++) {
+                        if (imagem.data[inicio + canal] !== referencia.bytes[inicio + canal]) {
+                            return nome + ": pixel (coluna " + coluna + ", linha " + linha + ") tem [" + Array.from(imagem.data.slice(inicio, inicio + 4)) + "] em vez de ["
+                                + Array.from(referencia.bytes.slice(inicio, inicio + 4)) + "]";
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function todosOsPixelsOpacos() {
+            const bytes = imagem.data;
+            for (let indice = 3; indice < bytes.length; indice += 4) {
+                if (bytes[indice] !== 255) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Os campos de um sprite do jogo contra a projeção de referência. null ou o motivo.
+        function motivoDeSpriteErrado(sprite, projecao) {
+            const campos = ["profundidade", "lateral", "esquerda", "direita", "topo", "base"];
+            for (let indice = 0; indice < campos.length; indice++) {
+                const campo = campos[indice];
+                if (!Number.isFinite(sprite[campo])) {
+                    return campo + " = " + sprite[campo];
+                }
+                if (!pertoRelativo(sprite[campo], projecao[campo], 1e-9)) {
+                    return campo + " = " + sprite[campo] + " em vez de " + projecao[campo];
+                }
+            }
+            return null;
+        }
+
+        // Todos os sprites do quadro (lista, ordem, campos, colunas) contra a referência. null ou o motivo.
+        function motivoDeSpritesErrados(paredes) {
+            const esperados = projecoesDeReferencia(paredes);
+            const nome = "pose (" + jogador.x.toFixed(3) + ", " + jogador.y.toFixed(3) + ", " + jogador.angulo.toFixed(3) + ")";
+            if (spritesDaTela.length !== esperados.length) {
+                return nome + ": " + spritesDaTela.length + " sprites na frente do olho em vez de " + esperados.length;
+            }
+            for (let indice = 0; indice < esperados.length; indice++) {
+                const sprite = spritesDaTela[indice];
+                const esperado = esperados[indice];
+                if (sprite.objeto !== esperado.objeto) {
+                    return nome + ": posição " + indice + " da lista é " + sprite.tipo + " (" + sprite.objeto.x + ", " + sprite.objeto.y + ") em vez de " + esperado.objeto.tipo + " (" + esperado.objeto.x + ", " + esperado.objeto.y + ")";
+                }
+                const campo = motivoDeSpriteErrado(sprite, esperado);
+                if (campo !== null) {
+                    return nome + ": " + sprite.tipo + " em (" + sprite.objeto.x + ", " + sprite.objeto.y + "): " + campo;
+                }
+                if (sprite.colunas.join(",") !== esperado.colunas.join(",")) {
+                    return nome + ": " + sprite.tipo + " em (" + sprite.objeto.x + ", " + sprite.objeto.y + "): colunas [" + sprite.colunas.slice(0, 8) + "…] (" + sprite.colunas.length + ") em vez de ["
+                        + esperado.colunas.slice(0, 8) + "…] (" + esperado.colunas.length + ")";
+                }
+            }
+            return null;
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial: artes prontas, z-buffer do tamanho da imagem", function () {
+            conferirIgual("nenhuma ação ativa ao abrir", acoesAtivas.size, 0);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            conferirIgual("o J virou chão", mapa[1][1], ".");
+            conferirIgual("com a janela falsa de 1280×720 a imagem é 320 de largura", larguraDaVisao, 320);
+            conferirIgual("e 200 de altura", alturaDaVisao, 200);
+            conferirIgual("o buffer tem 320 × 200 pixels", pixels.length, 320 * 200);
+            conferirIgual("a imagem começa visível", visao.hidden, false);
+            conferirIgual("e a planta escondida", tela.hidden, true);
+            conferirIgual("o raio do olhar existe", typeof raio, "object");
+            conferir("o z-buffer é um Float64Array", zBuffer instanceof Float64Array);
+            conferirIgual("com uma entrada por coluna: 320", zBuffer.length, 320);
+            conferir("a lista de sprites é um array", Array.isArray(spritesDaTela));
+            conferir("a profundidade mínima é pequena e positiva (" + PROFUNDIDADE_MINIMA + ")", PROFUNDIDADE_MINIMA > 0 && PROFUNDIDADE_MINIMA <= 0.5);
+            conferirIgual("a névoa é exatamente a cor do horizonte (parede e sprite enevoados somem nele)", JSON.stringify(COR_DA_NEVOA), JSON.stringify(COR_DO_HORIZONTE));
+            conferir("e são três canais inteiros de 0 a 255", COR_DA_NEVOA.length === 3 && COR_DA_NEVOA.every(function (canal) { return Number.isInteger(canal) && canal >= 0 && canal <= 255; }));
+            conferirIgual("seis objetos no mapa", OBJETOS.length, 6);
+            conferir("cada objeto tem um tipo do catálogo e está numa casa livre",
+                OBJETOS.every(function (objeto) { return CATALOGO_DE_SPRITES[objeto.tipo] !== undefined && !casaSolidaNoTexto(Math.floor(objeto.x), Math.floor(objeto.y)); }));
+
+            Object.keys(CATALOGO_DE_SPRITES).forEach(function (tipo) {
+                const catalogo = CATALOGO_DE_SPRITES[tipo];
+                conferir(tipo + ": tamanho em (0, 1] e elevação ≥ 0, cabendo sob o teto", catalogo.tamanho > 0 && catalogo.tamanho <= 1 && catalogo.elevacao >= 0 && catalogo.tamanho + catalogo.elevacao <= 1);
+                conferir(tipo + ": 32 níveis de névoa, cada um com 256 pixels", spritesSombreados[tipo].length === NIVEIS && spritesSombreados[tipo].every(function (nivel) { return nivel.length === 256; }));
+
+                let problema = null;
+                for (let texel = 0; texel < 256 && problema === null; texel++) {
+                    const letra = catalogo.arte[Math.floor(texel / 16)][texel % 16];
+                    for (let nivel = 0; nivel < NIVEIS && problema === null; nivel++) {
+                        const pixel = spritesSombreados[tipo][nivel][texel];
+                        const bytes = Array.from(new Uint8Array(Uint32Array.of(pixel).buffer));
+                        if (letra === ".") {
+                            if (pixel !== 0) {
+                                problema = tipo + " texel " + texel + " nível " + nivel + ": transparente virou " + pixel;
+                            }
+                        } else if (pixel === 0) {
+                            problema = tipo + " texel " + texel + " nível " + nivel + ": opaco virou transparente";
+                        } else if (bytes[3] !== 255) {
+                            problema = tipo + " texel " + texel + " nível " + nivel + ": alfa " + bytes[3];
+                        } else if (nivel === 0 && bytes.slice(0, 3).join(",") !== corDoHex(PALETA_DAS_TEXTURAS[letra]).join(",")) {
+                            problema = tipo + " texel " + texel + ": nível 0 = " + bytes + " em vez da paleta";
+                        } else if (nivel === 31 && bytes.slice(0, 3).join(",") !== NEVOA.join(",")) {
+                            problema = tipo + " texel " + texel + ": nível 31 = " + bytes + " em vez da névoa";
+                        }
+                    }
+                }
+                conferir(tipo + ": '.' é o pixel 0 (transparente) em todo nível, o resto é opaco, o nível 0 é a paleta e o 31 é a névoa", problema === null, problema);
+            });
+        });
+
+        testar("projeção para o espaço da câmera: valores à mão", function () {
+            // k = 320 / (2 tan 33°) ≈ 246.37 pixels para uma parede de 1 casa a 1 casa de distância.
+            comObjetos([{ tipo: "sombra", x: 3.5, y: 1.5 }, { tipo: "cristal", x: 3.5, y: 2.5 }], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                conferirIgual("os dois estão na frente do olho", spritesDaTela.length, 2);
+                const sombra = spritesDaTela.filter(function (sprite) { return sprite.tipo === "sombra"; })[0];
+                const cristal = spritesDaTela.filter(function (sprite) { return sprite.tipo === "cristal"; })[0];
+
+                conferir("sombra à frente, 2 casas: profundidade 2 e lateral 0", perto(sombra.profundidade, 2) && perto(sombra.lateral, 0), JSON.stringify({ p: sombra.profundidade, l: sombra.lateral }));
+                conferir("sombra: esquerda ≈ 110,7 e direita ≈ 209,3 (centro 160, lado 0,8 × 123,2)", perto(sombra.esquerda, 110.73, 0.05) && perto(sombra.direita, 209.27, 0.05), sombra.esquerda + " a " + sombra.direita);
+                conferir("sombra: topo ≈ 63,0 e base ≈ 161,6 (o chão na base da parede de 123,2)", perto(sombra.topo, 63.04, 0.05) && perto(sombra.base, 161.59, 0.05), sombra.topo + " a " + sombra.base);
+
+                conferir("cristal 1 casa à direita e 2 à frente: profundidade 2 e lateral +1", perto(cristal.profundidade, 2) && perto(cristal.lateral, 1), JSON.stringify({ p: cristal.profundidade, l: cristal.lateral }));
+                conferir("cristal: esquerda ≈ 252,4 e direita ≈ 314,0 (centro 283,2, lado 0,5 × 123,2)", perto(cristal.esquerda, 252.39, 0.05) && perto(cristal.direita, 313.98, 0.05), cristal.esquerda + " a " + cristal.direita);
+                conferir("cristal: levantado 0,2 casa: topo ≈ 75,4 e base ≈ 137,0", perto(cristal.topo, 75.36, 0.05) && perto(cristal.base, 136.95, 0.05), cristal.topo + " a " + cristal.base);
+            });
+
+            comObjetos([{ tipo: "sombra", x: 3.5, y: 3.5 }], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                const aEsquerda = spritesDaTela[0];
+                conferir("o objeto à direita do olhar (y maior, olhando para +x) tem lateral > 0 e fica à direita do centro da imagem", aEsquerda.lateral > 0 && (aEsquerda.esquerda + aEsquerda.direita) / 2 > 160);
+            });
+            comObjetos([{ tipo: "sombra", x: 3.5, y: 1.5 }], function () {
+                reiniciarEVer(1.5, 3.5, 0);
+                const sprite = spritesDaTela[0];
+                conferir("o objeto à esquerda (y menor): lateral < 0 e centro à esquerda de 160", sprite.lateral < 0 && (sprite.esquerda + sprite.direita) / 2 < 160, JSON.stringify({ lateral: sprite.lateral }));
+            });
+        });
+
+        testar("projeção: bate com a fórmula à mão em poses com giro e em todos os tipos", function () {
+            const lista = [
+                { tipo: "sombra", x: 8.5, y: 9.5 }, { tipo: "cristal", x: 10.5, y: 9.5 }, { tipo: "sombra", x: 13.5, y: 9.5 },
+                { tipo: "cristal", x: 9.5, y: 6.5 }, { tipo: "sombra", x: 3.5, y: 9.5 }, { tipo: "cristal", x: 12.5, y: 7.5 }
+            ];
+            const poses = [
+                [1.5, 9.5, 0], [4.5, 9.5, 0.3], [5.5, 10.5, -0.4 + VOLTA_COMPLETA], [8.5, 10.5, 3 * Math.PI / 2 + 0.2], [13.5, 8.5, Math.PI],
+                [12.5, 10.5, 2.5], [7.5, 9.5, 1.1], [9.5, 8.5, 4.0], [2.5, 9.5, Math.PI / 4]
+            ];
+            comObjetos(lista, function () {
+                poses.forEach(function (pose) {
+                    reiniciarEVer(pose[0], pose[1], pose[2]);
+                    const esperados = lista.map(projecaoDeReferencia).filter(function (projecao) { return projecao !== null; });
+                    conferirIgual("pose (" + pose + "): a lista tem os objetos que estão na frente do olho", spritesDaTela.length, esperados.length);
+                    let problema = null;
+                    esperados.forEach(function (esperado) {
+                        const sprite = spritesDaTela.filter(function (candidato) { return candidato.objeto === esperado.objeto; })[0];
+                        if (problema === null) {
+                            problema = sprite === undefined ? "falta " + esperado.objeto.tipo + " em (" + esperado.objeto.x + ", " + esperado.objeto.y + ")" : motivoDeSpriteErrado(sprite, esperado);
+                        }
+                    });
+                    conferir("pose (" + pose + "): profundidade, lateral e retângulo na imagem de cada um batem com a fórmula", problema === null, problema);
+                });
+            });
+        });
+
+        testar("sprite totalmente atrás da parede: zero colunas, e a imagem é a da cena sem ele", function () {
+            // O cristal (6,5, 1,5) está atrás da parede da casa (5, 1), vista de (1,5, 1,5) olhando para +x.
+            const cristalAtras = { tipo: "cristal", x: 6.5, y: 1.5 };
+            comObjetos([cristalAtras], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                conferirIgual("o cristal está na frente do olho (profundidade 5)", spritesDaTela.length, 1);
+                const sprite = spritesDaTela[0];
+                conferir("a parede está a 3,5 casas, o cristal a 5", perto(sprite.profundidade, 5) && perto(raiosDaTela[160].perpendicular, 3.5), "sprite " + sprite.profundidade + ", parede " + raiosDaTela[160].perpendicular);
+                conferir("o retângulo dele cobre várias colunas da imagem (" + Math.ceil(sprite.esquerda - 0.5) + " a " + Math.ceil(sprite.direita - 0.5) + ")", sprite.direita - sprite.esquerda >= 10 && sprite.esquerda >= 0 && sprite.direita <= 320);
+                conferirIgual("e NENHUMA coluna passa no z-buffer", sprite.colunas.length, 0);
+                const comOSprite = copiaDoBuffer();
+
+                OBJETOS.length = 0;
+                reiniciarEVer(1.5, 1.5, 0);
+                conferirIgual("sem o objeto a lista de sprites fica vazia", spritesDaTela.length, 0);
+                conferirIgual("a imagem com o sprite escondido é IGUAL à cena sem ele", primeiraColunaDiferente(comOSprite, pixels), -1);
+            });
+
+            // Controle: o mesmo cristal na frente da parede aparece.
+            comObjetos([{ tipo: "cristal", x: 3.5, y: 1.5 }], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                const sprite = spritesDaTela[0];
+                conferir("controle: a 2 casas (a parede está a 3,5) aparecem colunas (" + sprite.colunas.length + ")", sprite.colunas.length > 10);
+                const comOSprite = copiaDoBuffer();
+                OBJETOS.length = 0;
+                reiniciarEVer(1.5, 1.5, 0);
+                conferir("controle: e a imagem muda", primeiraColunaDiferente(comOSprite, pixels) !== -1);
+            });
+
+            // O mesmo cristal visto do outro lado da parede.
+            comObjetos([cristalAtras], function () {
+                reiniciarEVer(9.5, 1.5, Math.PI);
+                const sprite = spritesDaTela[0];
+                conferir("visto de (9,5, 1,5) para −x, o cristal aparece (profundidade 3, " + sprite.colunas.length + " colunas)", perto(sprite.profundidade, 3) && sprite.colunas.length > 10);
+            });
+        });
+
+        testar("sprite atrás do olho ou perto demais é descartado", function () {
+            const px = 8.5;
+            const py = 9.5;
+            const depois = function (profundidade, lateral) { return { tipo: "sombra", x: px + profundidade, y: py + lateral }; };
+            const descartados = [
+                ["atrás do olho, 2 casas", depois(-2, 0)],
+                ["atrás do olho, 0,01 casa", depois(-0.01, 0)],
+                ["exatamente no olho", depois(0, 0)],
+                ["ao lado do olho (profundidade 0)", depois(0, 0.8)],
+                ["a 95% da profundidade mínima", depois(PROFUNDIDADE_MINIMA * 0.95, 0)],
+                ["atrás e longe de lado", depois(-5, 3)]
+            ];
+            const mantido = { tipo: "cristal", x: px + PROFUNDIDADE_MINIMA * 1.05, y: py };
+            const longe = { tipo: "cristal", x: 13.5, y: 9.5 };
+
+            comObjetos([longe, mantido], function () {
+                reiniciarEVer(px, py, 0);
+                const soOsMantidos = copiaDoBuffer();
+                conferirIgual("sem descartados: dois sprites", spritesDaTela.length, 2);
+                conferir("o a 105% da profundidade mínima é mantido, finito, com retângulo grande",
+                    spritesDaTela.some(function (sprite) { return sprite.objeto === mantido && Number.isFinite(sprite.esquerda) && Number.isFinite(sprite.topo) && sprite.direita - sprite.esquerda > 100; }));
+                conferir("e todas as colunas dele ficam dentro da imagem", spritesDaTela.every(function (sprite) { return sprite.colunas.every(function (coluna) { return Number.isInteger(coluna) && coluna >= 0 && coluna < 320; }); }));
+                conferirIgual("o buffer do cenário de controle é igual à referência", motivoDeBufferErrado(), null);
+
+                descartados.forEach(function (caso) {
+                    comObjetos([longe, mantido, caso[1]], function () {
+                        reiniciarEVer(px, py, 0);
+                        conferir(caso[0] + ": não entra na lista de sprites", spritesDaTela.every(function (sprite) { return sprite.objeto !== caso[1]; }) && spritesDaTela.length === 2);
+                        conferir(caso[0] + ": a imagem é igual à da cena sem ele", primeiraColunaDiferente(soOsMantidos, pixels) === -1);
+                        conferir(caso[0] + ": nada vira NaN no z-buffer nem na lista", Array.from(zBuffer).every(Number.isFinite)
+                            && spritesDaTela.every(function (sprite) { return [sprite.profundidade, sprite.lateral, sprite.esquerda, sprite.direita, sprite.topo, sprite.base].every(Number.isFinite); }));
+                    });
+                });
+            });
+
+            // Virar de costas: o que estava na frente passa a estar atrás.
+            comObjetos([longe], function () {
+                reiniciarEVer(8.5, 9.5, 0);
+                conferirIgual("de frente: o sombra de 13,5 está na lista", spritesDaTela.length, 1);
+                reiniciarEVer(8.5, 9.5, Math.PI);
+                conferirIgual("de costas: a lista fica vazia", spritesDaTela.length, 0);
+                reiniciarEVer(8.5, 9.5, Math.PI / 2);
+                conferirIgual("de lado (profundidade 0 ou negativa): a lista fica vazia", spritesDaTela.length, 0);
+            });
+        });
+
+        testar("oclusão parcial: só as colunas que passam no z-buffer são desenhadas", function () {
+            // De (8,5, 10,75) olhando para cima, a abertura da fileira 8 (x de 8 a 9, com 1 casa de espessura) deixa
+            // ver a câmara; a quina (9, 8) corta a visão em x ≈ 9,27 na altura do cristal e esconde a borda direita
+            // dele (que vai de x = 8,95 a 9,45).
+            const cristal = { tipo: "cristal", x: 9.2, y: 6.5 };
+            const pose = [8.5, 10.75, 3 * Math.PI / 2];
+            comObjetos([cristal], function () {
+                reiniciarEVer(pose[0], pose[1], pose[2]);
+                const sprite = spritesDaTela[0];
+                const paredes = paredesDeReferencia();
+                const esperadas = colunasDeReferencia(projecaoDeReferencia(cristal), paredes);
+                const colunasDoRetangulo = Math.ceil(sprite.direita - 0.5) - Math.ceil(sprite.esquerda - 0.5);
+
+                conferir("o cenário é de oclusão PARCIAL: " + esperadas.length + " das " + colunasDoRetangulo + " colunas passam", esperadas.length > 0 && esperadas.length < colunasDoRetangulo);
+                conferirIgual("as colunas do jogo são exatamente as da referência", sprite.colunas.join(","), esperadas.join(","));
+                conferir("e são as da esquerda do retângulo (a borda direita fica atrás da parede)", sprite.colunas[0] === Math.ceil(sprite.esquerda - 0.5) && sprite.colunas.every(function (coluna) { return coluna < Math.ceil(sprite.direita - 0.5); }));
+
+                const comOSprite = copiaDoBuffer();
+                const colunasComSprite = Array.from(colunasQueDiferem(comOSprite, copiaDoBufferSemObjetos())).sort(function (a, b) { return a - b; });
+                conferir("a imagem muda SÓ nas colunas que passaram (" + colunasComSprite.length + " colunas mudaram)", colunasComSprite.length > 0 && colunasComSprite.every(function (coluna) { return sprite.colunas.indexOf(coluna) !== -1; }),
+                    "mudaram " + colunasComSprite.join(","));
+                conferir("e nas que ficam atrás da parede o pixel é o da parede", sprite.colunas.length < colunasDoRetangulo);
+                conferirIgual("a imagem inteira é igual à referência", motivoDeBufferErrado(), null);
+            });
+        });
+
+        // A imagem da pose atual sem nenhum objeto (volta a lista ao que era depois).
+        function copiaDoBufferSemObjetos() {
+            const guardados = OBJETOS.slice();
+            OBJETOS.length = 0;
+            avancarQuadro(16);
+            const semObjetos = copiaDoBuffer();
+            guardados.forEach(function (objeto) { OBJETOS.push(objeto); });
+            avancarQuadro(16);
+            return semObjetos;
+        }
+
+        testar("oclusão: colunas e lista contra a referência independente em 150 poses sorteadas", function () {
+            semearSorteio(606);
+            let problema = null;
+            let posesComOclusaoParcial = 0;
+            let posesComSpritesVisiveis = 0;
+            for (let indice = 0; indice < 150 && problema === null; indice++) {
+                const pose = sortearPoseLivre();
+                reiniciarEVer(pose.x, pose.y, pose.angulo);
+                const paredes = paredesDeReferencia();
+                problema = motivoDeSpritesErrados(paredes);
+                const projecoes = projecoesDeReferencia(paredes);
+                projecoes.forEach(function (projecao) {
+                    const colunasDoRetangulo = Math.min(larguraDaVisao, Math.ceil(projecao.direita - 0.5)) - Math.max(0, Math.ceil(projecao.esquerda - 0.5));
+                    if (projecao.colunas.length > 0 && projecao.colunas.length < colunasDoRetangulo) {
+                        posesComOclusaoParcial++;
+                    }
+                });
+                if (projecoes.some(function (projecao) { return projecao.colunas.length > 0; })) {
+                    posesComSpritesVisiveis++;
+                }
+            }
+            conferir("150 poses × 6 objetos: lista, ordem, campos e colunas batem com a referência", problema === null, problema);
+            conferir("o sorteio viu sprites em " + posesComSpritesVisiveis + " poses e oclusão parcial " + posesComOclusaoParcial + "×", posesComSpritesVisiveis >= 15 && posesComOclusaoParcial >= 2);
+        });
+
+        testar("dois sprites: do mais longe ao mais perto, o perto fica por cima", function () {
+            const longe = { tipo: "sombra", x: 13.5, y: 9.5 };
+            const proximo = { tipo: "cristal", x: 11.5, y: 9.5 };
+            const pose = [8.5, 9.5, 0];
+
+            let semNinguem;
+            let soLonge;
+            let soPerto;
+            comObjetos([], function () { reiniciarEVer(pose[0], pose[1], pose[2]); semNinguem = copiaDoBuffer(); });
+            comObjetos([longe], function () { reiniciarEVer(pose[0], pose[1], pose[2]); soLonge = copiaDoBuffer(); });
+            comObjetos([proximo], function () { reiniciarEVer(pose[0], pose[1], pose[2]); soPerto = copiaDoBuffer(); });
+
+            // Na ordem "perto, longe" da lista (a errada) e na "longe, perto".
+            [[proximo, longe], [longe, proximo]].forEach(function (lista, indice) {
+                comObjetos(lista, function () {
+                    reiniciarEVer(pose[0], pose[1], pose[2]);
+                    const nome = "lista " + (indice === 0 ? "perto, longe" : "longe, perto");
+                    conferirIgual(nome + ": a lista de desenho começa pelo mais longe", spritesDaTela.map(function (sprite) { return sprite.tipo; }).join(","), "sombra,cristal");
+                    conferir(nome + ": profundidades 5 e 3 (decrescentes)", perto_(spritesDaTela[0].profundidade, 5) && perto_(spritesDaTela[1].profundidade, 3));
+
+                    let pixelsDoPerto = 0;
+                    let pixelsSoDoLonge = 0;
+                    let sobreposicao = 0;
+                    let erradosNoPerto = 0;
+                    let erradosNoLonge = 0;
+                    for (let pixel = 0; pixel < pixels.length; pixel++) {
+                        const pertoDesenhado = soPerto[pixel] !== semNinguem[pixel];
+                        const longeDesenhado = soLonge[pixel] !== semNinguem[pixel];
+                        if (pertoDesenhado) {
+                            pixelsDoPerto++;
+                            if (longeDesenhado) {
+                                sobreposicao++;
+                            }
+                            if (pixels[pixel] !== soPerto[pixel]) {
+                                erradosNoPerto++;
+                            }
+                        } else if (longeDesenhado) {
+                            pixelsSoDoLonge++;
+                            if (pixels[pixel] !== soLonge[pixel]) {
+                                erradosNoLonge++;
+                            }
+                        }
+                    }
+                    conferir(nome + ": há pixels onde os dois sprites se sobrepõem (" + sobreposicao + "), senão a ordem não importaria", sobreposicao > 50);
+                    conferirIgual(nome + ": onde o perto é desenhado, o pixel é o do perto (" + pixelsDoPerto + " pixels)", erradosNoPerto, 0);
+                    conferirIgual(nome + ": onde só o longe é desenhado, o pixel é o do longe (" + pixelsSoDoLonge + " pixels)", erradosNoLonge, 0);
+                    conferirIgual(nome + ": imagem inteira igual à referência", motivoDeBufferErrado(), null);
+                });
+            });
+
+            function perto_(obtido, esperado) {
+                return Math.abs(obtido - esperado) <= 1e-9;
+            }
+        });
+
+        testar("o resultado não depende da ordem de OBJETOS", function () {
+            const original = OBJETOS.slice();
+            const poses = [[1.5, 9.5, 0], [9.5, 1.5, Math.PI], [8.5, 10.5, 3 * Math.PI / 2 + 0.1], [5.5, 9.5, 0.2], [12.5, 8.5, 2.9]];
+            semearSorteio(66);
+            poses.forEach(function (pose) {
+                reiniciarEVer(pose[0], pose[1], pose[2]);
+                const base = copiaDoBuffer();
+                const listaBase = spritesDaTela.map(function (sprite) { return sprite.tipo + sprite.objeto.x + "," + sprite.objeto.y; }).join(" ");
+                const visiveis = spritesDaTela.filter(function (sprite) { return sprite.colunas.length > 0; }).length;
+                let diferentes = 0;
+                let listasDiferentes = 0;
+                for (let rodada = 0; rodada < 8; rodada++) {
+                    const embaralhada = original.slice();
+                    for (let indice = embaralhada.length - 1; indice > 0; indice--) {
+                        const outro = Math.floor(Math.random() * (indice + 1));
+                        const guardado = embaralhada[indice];
+                        embaralhada[indice] = embaralhada[outro];
+                        embaralhada[outro] = guardado;
+                    }
+                    comObjetos(embaralhada, function () {
+                        reiniciarEVer(pose[0], pose[1], pose[2]);
+                        if (primeiraColunaDiferente(base, pixels) !== -1) {
+                            diferentes++;
+                        }
+                        if (spritesDaTela.map(function (sprite) { return sprite.tipo + sprite.objeto.x + "," + sprite.objeto.y; }).join(" ") !== listaBase) {
+                            listasDiferentes++;
+                        }
+                    });
+                }
+                conferirIgual("pose (" + pose + "), " + visiveis + " sprites visíveis: 8 ordens embaralhadas dão a mesma imagem", diferentes, 0);
+                conferirIgual("pose (" + pose + "): e a mesma lista de desenho", listasDiferentes, 0);
+            });
+            reiniciarEVer(1.5, 9.5, 0);
+        });
+
+        testar("z-buffer: uma entrada finita por coluna, igual à distância perpendicular da parede", function () {
+            const poses = [[7.5, 9.5, Math.PI / 2], [1.5, 9.5, 0], [13.9, 10.1, Math.PI / 4], [5.3, 7.7, 2.1], [7.5, 10.75, Math.PI / 2]];
+            poses.forEach(function (pose) {
+                reiniciarEVer(pose[0], pose[1], pose[2]);
+                const paredes = paredesDeReferencia();
+                let problema = zBuffer.length !== larguraDaVisao ? "tamanho " + zBuffer.length : null;
+                for (let coluna = 0; coluna < larguraDaVisao && problema === null; coluna++) {
+                    if (!Number.isFinite(zBuffer[coluna]) || !(zBuffer[coluna] > 0)) {
+                        problema = "coluna " + coluna + ": " + zBuffer[coluna];
+                    } else if (zBuffer[coluna] !== raiosDaTela[coluna].perpendicular) {
+                        problema = "coluna " + coluna + ": z-buffer " + zBuffer[coluna] + " e perpendicular " + raiosDaTela[coluna].perpendicular;
+                    } else if (!pertoRelativo(zBuffer[coluna], paredes[coluna], 1e-8)) {
+                        problema = "coluna " + coluna + ": z-buffer " + zBuffer[coluna] + " em vez de " + paredes[coluna];
+                    }
+                }
+                conferir("pose (" + pose + "): 320 entradas finitas e certas (a perpendicular, não a distância crua)", problema === null, problema);
+            });
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferir("de frente para uma parede reta, o z-buffer é constante (1,5): sem olho de peixe", Array.from(zBuffer).every(function (valor) { return perto(valor, 1.5, 1e-9); }));
+
+            comJanela(390, 844, function () {
+                reiniciarEVer(7.5, 9.5, Math.PI / 2);
+                conferirIgual("em retrato o z-buffer tem 195 entradas", zBuffer.length, 195);
+                conferir("todas finitas", Array.from(zBuffer).every(Number.isFinite));
+            });
+            reiniciarEVer(7.5, 9.5, Math.PI / 2);
+            conferirIgual("de volta à paisagem: 320 entradas", zBuffer.length, 320);
+        });
+
+        testar("a imagem inteira (paredes e sprites) contra a referência pixel a pixel", function () {
+            const fixas = [
+                { nome: "corredor da fileira 9, vendo as três figuras em fila", pose: [1.5, 9.5, 0] },
+                { nome: "de costas para as figuras: nenhum sprite", pose: [8.5, 9.5, Math.PI] },
+                { nome: "o cristal atrás da parede, visto do outro lado", pose: [9.5, 1.5, Math.PI] },
+                { nome: "girado", pose: [5.3, 9.1, 0.35] },
+                { nome: "oclusão parcial pela abertura", pose: [8.5, 10.75, 3 * Math.PI / 2] },
+                { nome: "sprite colado (0,21 casa)", pose: [10.29, 9.5, 0] },
+                { nome: "ângulo qualquer", pose: [12.1, 9.4, 2.4] }
+            ];
+            fixas.forEach(function (caso) {
+                reiniciarEVer(caso.pose[0], caso.pose[1], caso.pose[2]);
+                conferirIgual(caso.nome + ": imagem igual à referência", motivoDeBufferErrado(), null);
+                conferirIgual(caso.nome + ": todos os pixels opacos", todosOsPixelsOpacos(), true);
+            });
+
+            semearSorteio(2031);
+            let problema = null;
+            for (let indice = 0; indice < 25 && problema === null; indice++) {
+                const pose = sortearPoseLivre();
+                reiniciarEVer(pose.x, pose.y, pose.angulo);
+                problema = motivoDeBufferErrado();
+            }
+            conferir("25 poses sorteadas com os 6 objetos do mapa: imagem igual à referência", problema === null, problema);
+
+            comJanela(390, 844, function () {
+                reiniciarEVer(1.5, 9.5, 0);
+                conferirIgual("retrato 195×150: corredor", motivoDeBufferErrado(), null);
+                reiniciarEVer(8.5, 10.75, 3 * Math.PI / 2);
+                conferirIgual("retrato: oclusão parcial", motivoDeBufferErrado(), null);
+                conferir("retrato: as colunas dos sprites ficam em 0 a 194", spritesDaTela.every(function (sprite) { return sprite.colunas.every(function (coluna) { return coluna >= 0 && coluna < 195; }); }));
+            });
+        });
+
+        // O sprite tem algum pixel na imagem? A regra do pixel: uma coluna é dele se o CENTRO dela (coluna + 0,5) cai dentro
+        // do retângulo. Um sprite menos de meio pixel para dentro da borda da imagem não tem coluna nenhuma.
+        function algumCentroDeColunaDentro(projecao) {
+            for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
+                if (projecao.esquerda <= coluna + 0.5 && coluna + 0.5 < projecao.direita) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Quantos sprites aparecem, ficam fora do campo e ficam tapados por parede: contados à mão sobre a projeção de referência.
+        // Fora do campo = nenhum pixel dele cai na imagem (pela regra do centro da coluna); tapado = tem pixel na imagem, mas nenhuma coluna passa.
+        function categoriasDeReferencia() {
+            const projecoes = projecoesDeReferencia(paredesDeReferencia());
+            const aparecem = projecoes.filter(function (projecao) { return projecao.colunas.length > 0; }).length;
+            const foraDoCampo = projecoes.filter(function (projecao) { return !algumCentroDeColunaDentro(projecao); }).length;
+            return { naFrente: projecoes.length, aparecem: aparecem, foraDoCampo: foraDoCampo, tapados: projecoes.length - aparecem - foraDoCampo };
+        }
+
+        // Liga o H, lê a leitura de um quadro e desliga de novo.
+        function leituraComH() {
+            apertarTecla("h");
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            apertarTecla("h");
+            avancarQuadro(16);
+            return texto;
+        }
+
+        function motivoDaLeituraErrada(texto, categorias, total) {
+            const esperado = "aparecem " + categorias.aparecem + " · fora do campo " + categorias.foraDoCampo + " · tapados " + categorias.tapados;
+            if (texto.indexOf("sprites: " + categorias.naFrente + " na frente de " + total) === -1) {
+                return "esperava 'sprites: " + categorias.naFrente + " na frente de " + total + "' em: " + texto;
+            }
+            if (texto.split("\n").indexOf(esperado) === -1) {
+                return "esperava a linha '" + esperado + "' em: " + texto;
+            }
+            if (categorias.aparecem + categorias.foraDoCampo + categorias.tapados !== categorias.naFrente) {
+                return "a referência não fecha a soma";
+            }
+            return null;
+        }
+
+        testar("a leitura do H: 'aparecem K · fora do campo F · tapados T', e K + F + T = os sprites na frente", function () {
+            reiniciarEVer(1.5, 9.5, 0);
+            const categorias = categoriasDeReferencia();
+            conferirIgual("corredor da fileira 9: 6 na frente; 3 aparecem, 2 ficam à esquerda da imagem (y = 1,5) e 1 está atrás da parede da fileira 8", JSON.stringify(categorias), JSON.stringify({ naFrente: 6, aparecem: 3, foraDoCampo: 2, tapados: 1 }));
+            apertarTecla("h");
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            conferirIgual("a leitura bate com a referência", motivoDaLeituraErrada(texto, categorias, 6), null);
+            conferir("sem NaN, Infinity nem undefined", !/NaN|Infinity|undefined/.test(texto), texto);
+            conferir("nenhuma linha passa de 40 letras", texto.split("\n").every(function (linha) { return linha.length <= 40; }), texto.split("\n").map(function (linha) { return linha.length; }).join(","));
+            conferirIgual("com H a imagem some", visao.hidden, true);
+            apertarTecla("h");
+            avancarQuadro(16);
+
+            reiniciarEVer(8.5, 9.5, Math.PI);
+            conferirIgual("de costas para o corredor", motivoDaLeituraErrada(leituraComH(), categoriasDeReferencia(), 6), null);
+
+            // Um de cada: o da frente aparece, o do lado fica fora do campo (na frente do olho, mas à direita da imagem) e o
+            // de trás da parede da casa (5, 1) fica tapado.
+            const visivel = { tipo: "sombra", x: 3.5, y: 1.5 };
+            const foraDoCampo = { tipo: "cristal", x: 3.5, y: 8.5 };
+            const tapado = { tipo: "cristal", x: 6.5, y: 1.5 };
+            comObjetos([visivel, foraDoCampo, tapado], function () {
+                reiniciarEVer(1.5, 1.5, 0);
+                const umDeCada = categoriasDeReferencia();
+                conferirIgual("um de cada: a referência conta 1, 1 e 1", JSON.stringify(umDeCada), JSON.stringify({ naFrente: 3, aparecem: 1, foraDoCampo: 1, tapados: 1 }));
+                const projecaoFora = projecaoDeReferencia(foraDoCampo);
+                conferir("o de fora tem o retângulo todo à direita da imagem (esquerda " + projecaoFora.esquerda.toFixed(0) + " ≥ 320)", projecaoFora.esquerda >= 320);
+                const textoDeUmDeCada = leituraComH();
+                conferirIgual("a leitura diz aparecem 1 · fora do campo 1 · tapados 1", motivoDaLeituraErrada(textoDeUmDeCada, umDeCada, 3), null);
+                conferir("e as linhas cabem em 40 letras", textoDeUmDeCada.split("\n").every(function (linha) { return linha.length <= 40; }));
+            });
+
+            semearSorteio(861);
+            let problema = null;
+            let posesComFora = 0;
+            let posesComTapados = 0;
+            for (let indice = 0; indice < 60 && problema === null; indice++) {
+                const pose = sortearPoseLivre();
+                reiniciarEVer(pose.x, pose.y, pose.angulo);
+                const categoriasSorteadas = categoriasDeReferencia();
+                posesComFora += categoriasSorteadas.foraDoCampo > 0 ? 1 : 0;
+                posesComTapados += categoriasSorteadas.tapados > 0 ? 1 : 0;
+                problema = motivoDaLeituraErrada(leituraComH(), categoriasSorteadas, 6);
+            }
+            conferir("60 poses sorteadas: a leitura bate com a referência (fora do campo em " + posesComFora + " poses, tapados em " + posesComTapados + ")", problema === null, problema);
+            conferir("o sorteio exercitou as três categorias", posesComFora >= 10 && posesComTapados >= 3);
+            conferirIgual("H desligado: a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+            conferirIgual("e a imagem volta", visao.hidden, false);
+        });
+
+
+        // Uma pose em que as colunas das duas bordas da imagem enxergam a mais de 1,7 casa (nada tapa um sprite a 1,5).
+        function poseComAsBordasLivres() {
+            for (let linha = 1; linha < 11; linha++) {
+                for (let coluna = 1; coluna < 15; coluna++) {
+                    for (const angulo of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+                        const x = coluna + 0.5;
+                        const y = linha + 0.5;
+                        reiniciarEVer(x, y, angulo);
+                        if (!casaSolidaNoTexto(coluna, linha) && zBuffer[0] > 1.7 && zBuffer[larguraDaVisao - 1] > 1.7) {
+                            return { x: x, y: y, angulo: angulo };
+                        }
+                    }
+                }
+            }
+            throw new Error("não achei pose com as bordas livres");
+        }
+
+        // Um objeto a `profundidade` casas à frente, posto de modo que o retângulo dele fique a `distancia` pixels para DENTRO da borda
+        // da imagem: a direita dele na borda esquerda (borda = "esquerda") ou a esquerda dele na borda direita (borda = "direita").
+        function objetoComOBordaDentro(borda, distancia, profundidade) {
+            const tamanho = CATALOGO_DE_SPRITES.cristal.tamanho;
+            const umaCasa = constanteK(larguraDaVisao) / profundidade;
+            const lado = tamanho * umaCasa;
+            const lateral = borda === "esquerda"
+                ? (distancia - larguraDaVisao / 2 - lado / 2) / umaCasa
+                : (larguraDaVisao - distancia - larguraDaVisao / 2 + lado / 2) / umaCasa;
+            return { tipo: "cristal", x: jogador.x + profundidade * jogador.dx - lateral * jogador.dy, y: jogador.y + profundidade * jogador.dy + lateral * jogador.dx };
+        }
+
+        // "Fora do campo" e as colunas visíveis usam a MESMA regra do pixel (o centro da coluna dentro do sprite): um sprite menos de
+        // meio pixel para dentro da borda da imagem não tem pixel nenhum, então está fora do campo, não "tapado" por parede.
+        testar("a leitura do H e as colunas visíveis usam a mesma regra do centro do pixel: menos de meio pixel dentro da borda é fora do campo", function () {
+            const pose = poseComAsBordasLivres();
+            const casos = [
+                { nome: "direita a 0,3 px dentro da borda esquerda", borda: "esquerda", distancia: 0.3, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "direita a 0,45 px dentro da borda esquerda", borda: "esquerda", distancia: 0.45, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "direita a 0,7 px dentro da borda esquerda (o centro da coluna 0 cai nele)", borda: "esquerda", distancia: 0.7, colunas: [0], leitura: "aparecem 1 · fora do campo 0 · tapados 0" },
+                { nome: "esquerda a 0,3 px dentro da borda direita", borda: "direita", distancia: 0.3, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "esquerda a 0,45 px dentro da borda direita", borda: "direita", distancia: 0.45, colunas: [], leitura: "aparecem 0 · fora do campo 1 · tapados 0" },
+                { nome: "esquerda a 0,7 px dentro da borda direita (o centro da última coluna cai nele)", borda: "direita", distancia: 0.7, colunas: [larguraDaVisao - 1], leitura: "aparecem 1 · fora do campo 0 · tapados 0" }
+            ];
+            casos.forEach(function (caso) {
+                const objeto = objetoComOBordaDentro(caso.borda, caso.distancia, 1.5);
+                comObjetos([objeto], function () {
+                    reiniciarEVer(pose.x, pose.y, pose.angulo);
+                    const projecao = projecaoDeReferencia(objeto);
+                    const bordaMedida = caso.borda === "esquerda" ? projecao.direita : larguraDaVisao - projecao.esquerda;
+                    conferir(caso.nome + ": a montagem do teste está certa (a borda do retângulo está a " + bordaMedida.toFixed(3) + " px)", perto(bordaMedida, caso.distancia, 1e-6), bordaMedida);
+                    const sprite = spritesDaTela.filter(function (candidato) { return candidato.objeto === objeto; })[0];
+                    conferirIgual(caso.nome + ": as colunas desenhadas", JSON.stringify(sprite.colunas), JSON.stringify(caso.colunas));
+                    const linhas = leituraComH().split("\n");
+                    conferirIgual(caso.nome + ": a leitura", linhas[4], caso.leitura);
+                    conferirIgual(caso.nome + ": a leitura bate com a referência", motivoDaLeituraErrada(linhas.join("\n"), categoriasDeReferencia(), 1), null);
+                });
+            });
+        });
+
+        testar("a arte da sombra é a do catálogo e é a usada pelo tipo 'sombra'", function () {
+            const arte = CATALOGO_DE_SPRITES.sombra.arte;
+            conferir("a arte tem 16 linhas de 16 letras da paleta ou '.'", arte.length === 16 && arte.every(function (linha) { return linha.length === 16 && [...linha].every(function (letra) { return letra === "." || PALETA_DAS_TEXTURAS[letra] !== undefined; }); }));
+            conferirIgual("as sombras do mapa são do tipo 'sombra'", OBJETOS.filter(function (objeto) { return objeto.tipo === "sombra"; }).length, 3);
+
+            const sombra = { tipo: "sombra", x: 4.5, y: 9.5 };
+            comObjetos([sombra], function () {
+                reiniciarEVer(1.5, 9.5, 0);
+                const doSprite = spritesDaTela[0];
+                const nivel = nivelDeReferencia(doSprite.profundidade, "x");
+                const permitidas = new Set();
+                [...arte.join("")].filter(function (letra) { return letra !== "."; }).forEach(function (letra) {
+                    const cor = misturarComANevoa(corDoHex(PALETA_DAS_TEXTURAS[letra]), nivel);
+                    permitidas.add(((255 << 24) | (cor[2] << 16) | (cor[1] << 8) | cor[0]) >>> 0);
+                });
+                const comASombra = copiaDoBuffer();
+                conferirIgual("a imagem com a sombra é igual à referência (que lê a mesma arte do catálogo)", motivoDeBufferErrado(), null);
+                OBJETOS.length = 0;
+                avancarQuadro(16);
+                const semASombra = copiaDoBuffer();
+                OBJETOS.push(sombra);
+                let diferentes = 0;
+                let foraDaPaleta = 0;
+                comASombra.forEach(function (pixel, posicao) {
+                    if (pixel !== semASombra[posicao]) {
+                        diferentes++;
+                        foraDaPaleta += permitidas.has(pixel) ? 0 : 1;
+                    }
+                });
+                conferir("a sombra desenha pixels (" + diferentes + ")", diferentes > 100);
+                conferirIgual("todo pixel dela é uma cor da arte do catálogo no nível de névoa " + nivel, foraDaPaleta, 0);
+            });
+        });
+
+        testar("o botão Planta (H) é a mesma intenção da tecla H, e mostra se está ligado (aria-pressed)", function () {
+            reiniciarEVer(1.5, 9.5, 0);
+            const botao = document.querySelector('[data-comando="planta"]');
+            conferirIgual("existe o botão 'Planta (H)'", botao !== null && botao.textContent === "Planta (H)", true);
+            conferirIgual("começa desligado: aria-pressed=false", botao.getAttribute("aria-pressed"), "false");
+            botao.click();
+            avancarQuadro(16);
+            conferirIgual("clicar liga a planta", depuracaoLigada, true);
+            conferirIgual("aria-pressed=true", botao.getAttribute("aria-pressed"), "true");
+            conferirIgual("a imagem some e a planta aparece", visao.hidden + "," + tela.hidden, "true,false");
+            conferir("e a leitura aparece", document.getElementById("leitura").textContent.indexOf("sprites:") !== -1);
+            apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("a tecla H desliga e o botão acompanha", depuracaoLigada + "," + botao.getAttribute("aria-pressed"), "false,false");
+            botao.click();
+            botao.click();
+            avancarQuadro(16);
+            conferirIgual("dois cliques voltam ao desligado", depuracaoLigada + "," + visao.hidden, "false,false");
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna", depuracaoLigada, false);
+        });
+
+        testar("robô aleatório: sprites, z-buffer e imagem em todo quadro", function () {
+            const QUADROS = 800;
+            semearSorteio(2032);
+            reiniciarEVer(1.5, 1.5, Math.PI / 4 + 0.001);
+            const teclas = ["w", "s", "a", "d", "ArrowLeft", "ArrowRight"];
+            const apertadas = new Set();
+            let primeiraViolacao = null;
+            let caminho = 0;
+            let quadrosComReferencia = 0;
+            let quadrosComSprites = 0;
+            let retrato = false;
+            let redimensionamentos = 0;
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                const sorteio = Math.random();
+                if (sorteio < 0.15) {
+                    const tecla = teclas[Math.floor(Math.random() * teclas.length)];
+                    if (apertadas.has(tecla)) {
+                        soltarTecla(tecla);
+                        apertadas.delete(tecla);
+                    } else {
+                        apertarTecla(tecla);
+                        apertadas.add(tecla);
+                    }
+                } else if (sorteio < 0.17) {
+                    soltarTudo();
+                    apertadas.clear();
+                }
+                const ligarPlanta = Math.random() < 0.02;
+                if (ligarPlanta) {
+                    apertarTecla("h");
+                }
+                if (Math.random() < 0.006) {
+                    retrato = !retrato;
+                    redimensionamentos++;
+                    janelaFalsa.largura = retrato ? 390 : 1280;
+                    janelaFalsa.altura = retrato ? 844 : 720;
+                    window.dispatchEvent(new Event("resize"));
+                }
+
+                const antes = { x: jogador.x, y: jogador.y };
+                const milissegundos = Math.random() < 0.9 ? 8 + Math.floor(Math.random() * 30) : 60 + Math.floor(Math.random() * 2000);
+                avancarQuadro(milissegundos);
+                caminho += Math.hypot(jogador.x - antes.x, jogador.y - antes.y);
+
+                if (zBuffer.length !== larguraDaVisao || raiosDaTela.length !== larguraDaVisao) {
+                    primeiraViolacao = "quadro " + quadro + ": z-buffer " + zBuffer.length + " e " + raiosDaTela.length + " raios para " + larguraDaVisao;
+                }
+                for (let coluna = 0; coluna < zBuffer.length && primeiraViolacao === null; coluna++) {
+                    if (!Number.isFinite(zBuffer[coluna]) || !(zBuffer[coluna] > 0) || zBuffer[coluna] !== raiosDaTela[coluna].perpendicular) {
+                        primeiraViolacao = "quadro " + quadro + " coluna " + coluna + ": z-buffer " + zBuffer[coluna];
+                    }
+                }
+                for (let indice = 0; indice < spritesDaTela.length && primeiraViolacao === null; indice++) {
+                    const sprite = spritesDaTela[indice];
+                    const campos = [sprite.profundidade, sprite.lateral, sprite.esquerda, sprite.direita, sprite.topo, sprite.base];
+                    if (!campos.every(Number.isFinite) || sprite.profundidade < PROFUNDIDADE_MINIMA) {
+                        primeiraViolacao = "quadro " + quadro + ": sprite " + sprite.tipo + " com " + campos;
+                    } else if (indice > 0 && spritesDaTela[indice - 1].profundidade < sprite.profundidade) {
+                        primeiraViolacao = "quadro " + quadro + ": a lista não vai do mais longe ao mais perto";
+                    } else if (!sprite.colunas.every(function (coluna, posicao) {
+                        return Number.isInteger(coluna) && coluna >= 0 && coluna < larguraDaVisao && sprite.profundidade < zBuffer[coluna] && (posicao === 0 || coluna > sprite.colunas[posicao - 1]);
+                    })) {
+                        primeiraViolacao = "quadro " + quadro + ": colunas inválidas de " + sprite.tipo + ": " + sprite.colunas.slice(0, 10);
+                    }
+                }
+                if (spritesDaTela.some(function (sprite) { return sprite.colunas.length > 0; })) {
+                    quadrosComSprites++;
+                }
+                if (primeiraViolacao === null && !todosOsPixelsOpacos()) {
+                    primeiraViolacao = "quadro " + quadro + ": há pixel transparente no buffer (NaN no cálculo?)";
+                }
+                if (primeiraViolacao === null && quadro % 40 === 0) {
+                    quadrosComReferencia++;
+                    const paredes = paredesDeReferencia();
+                    const motivo = motivoDeSpritesErrados(paredes) || (depuracaoLigada ? null : motivoDeBufferErrado());
+                    if (motivo !== null) {
+                        primeiraViolacao = "quadro " + quadro + ": " + motivo;
+                    }
+                }
+                if (ligarPlanta) {
+                    apertarTecla("h");
+                }
+            }
+
+            conferir("em " + QUADROS + " quadros: z-buffer finito, sprites em ordem e dentro da imagem, buffer opaco, " + quadrosComReferencia + " quadros inteiros contra a referência",
+                primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô andou (" + caminho.toFixed(0) + " casas), redimensionou (" + redimensionamentos + "×) e viu sprites em " + quadrosComSprites + " quadros",
+                caminho > 15 && redimensionamentos >= 1 && quadrosComSprites >= 20);
+            soltarTudo();
+            if (depuracaoLigada) {
+                apertarTecla("h");
+            }
+            janelaFalsa.largura = 1280;
+            janelaFalsa.altura = 720;
+            window.dispatchEvent(new Event("resize"));
+        });
+
+        testar("objetos sorteados (dentro de paredes, no olho, longe): sem NaN e sempre igual à referência", function () {
+            const tipos = Object.keys(CATALOGO_DE_SPRITES);
+            semearSorteio(2033);
+            let problema = null;
+            let spritesDesenhados = 0;
+            for (let rodada = 0; rodada < 200 && problema === null; rodada++) {
+                const quantidade = 1 + Math.floor(Math.random() * 8);
+                const lista = [];
+                for (let indice = 0; indice < quantidade; indice++) {
+                    const sorteio = Math.random();
+                    const posicao = sorteio < 0.15 ? { x: (Math.random() - 0.5) * 2000, y: (Math.random() - 0.5) * 2000 }   // longe
+                        : sorteio < 0.3 ? { x: Math.random() * COLUNAS, y: Math.random() * LINHAS }                           // até dentro de parede
+                            : sortearPoseLivre();                                                                              // numa casa livre
+                    lista.push({ tipo: tipos[Math.floor(Math.random() * tipos.length)], x: posicao.x, y: posicao.y });
+                }
+                const pose = sortearPoseLivre();
+                if (rodada % 5 === 0) {
+                    lista.push({ tipo: "sombra", x: pose.x, y: pose.y });   // exatamente no olho
+                }
+                comObjetos(lista, function () {
+                    reiniciarEVer(pose.x, pose.y, pose.angulo);
+                    const paredes = paredesDeReferencia();
+                    problema = motivoDeSpritesErrados(paredes) || motivoDeBufferErrado();
+                    if (problema === null && !todosOsPixelsOpacos()) {
+                        problema = "pixel transparente no buffer";
+                    }
+                    spritesDesenhados += spritesDaTela.filter(function (sprite) { return sprite.colunas.length > 0; }).length;
+                });
+            }
+            conferir("200 listas aleatórias (até 8 objetos, 15% longe, 15% até em parede, um no olho): lista, colunas e imagem iguais à referência", problema === null, problema);
+            conferir("muitos sprites foram de fato desenhados (" + spritesDesenhados + ")", spritesDesenhados >= 25);
+            reiniciarEVer(1.5, 1.5, 0);
+            conferirIgual("a lista original de objetos foi restaurada", OBJETOS.length, 6);
+        });
+
+        // ---- iframes: o passo inteiro com o style.css de verdade, num tamanho de tela conhecido ----
+
+        function montarDocumentoDoIframe() {
+            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
+                + '<link rel="stylesheet" href="../../reflexo/06-objetos/style.css"></head><body>'
+                + document.getElementById("esqueleto").innerHTML
+                + '<script>window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };<\/script>'
+                + '<script src="../../reflexo/06-objetos/script.js"><\/script></body></html>';
+        }
+
+        function abrirNumIframe(largura, altura) {
+            return new Promise(function (resolver) {
+                const quadro = document.createElement("iframe");
+                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
+                quadro.addEventListener("load", function () { resolver(quadro); });
+                quadro.srcdoc = montarDocumentoDoIframe();
+                document.body.appendChild(quadro);
+            });
+        }
+
+        function darQuadro(janela, instante) {
+            const funcao = janela.__proximoQuadro;
+            janela.__proximoQuadro = null;
+            funcao(instante);
+        }
+
+        async function testarNoIframe(nome, funcao) {
+            try {
+                await funcao();
+            } catch (erro) {
+                quantidadeDeFalhas++;
+                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
+            }
+        }
+
+        async function conferirSemRolagem(largura, altura) {
+            const quadro = await abrirNumIframe(largura, altura);
+            try {
+                const janela = quadro.contentWindow;
+                const documento = janela.document;
+                const nome = largura + "×" + altura;
+                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
+                darQuadro(janela, 16);
+                [false, true].forEach(function (comPlanta) {
+                    if (comPlanta) {
+                        documento.querySelector('[data-comando="planta"]').click();
+                        darQuadro(janela, 32);
+                    }
+                    const estado = nome + (comPlanta ? " com a planta (H)" : "");
+                    conferir(estado + ": não rola na vertical (altura do conteúdo " + documento.documentElement.scrollHeight + " ≤ " + janela.innerHeight + ")", documento.documentElement.scrollHeight <= janela.innerHeight);
+                    conferir(estado + ": nem na horizontal (" + documento.documentElement.scrollWidth + " ≤ " + janela.innerWidth + ")", documento.documentElement.scrollWidth <= janela.innerWidth);
+                });
+                const pequenos = Array.from(documento.querySelectorAll("#controles button")).filter(function (botao) {
+                    const caixa = botao.getBoundingClientRect();
+                    return caixa.width < 48 || caixa.height < 48;
+                }).map(function (botao) { return (botao.dataset.acao || botao.dataset.comando) + " " + botao.getBoundingClientRect().width.toFixed(0) + "×" + botao.getBoundingClientRect().height.toFixed(0); });
+                conferir(nome + ": todo botão de toque tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("rolagem 390×750", function () { return conferirSemRolagem(390, 750); });
+            await testarNoIframe("rolagem 360×640", function () { return conferirSemRolagem(360, 640); });
+            await testarNoIframe("rolagem 1280×800", function () { return conferirSemRolagem(1280, 800); });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

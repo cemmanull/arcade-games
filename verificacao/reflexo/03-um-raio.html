@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Reflexo, passo 3: um raio</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        canvas { display: none; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Reflexo, passo 3: um raio</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids e os botões [data-acao]. -->
+    <canvas id="jogo" width="384" height="288"></canvas>
+    <p id="leitura"></p>
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda">girarEsquerda</button>
+        <button type="button" data-acao="frente">frente</button>
+        <button type="button" data-acao="girarDireita">girarDireita</button>
+        <button type="button" data-acao="esquerda">esquerda</button>
+        <button type="button" data-acao="tras">tras</button>
+        <button type="button" data-acao="direita">direita</button>
+    </div>
+
+    <!-- Ordem importa: o apoio troca o relógio e o sorteio ANTES do jogo carregar. -->
+    <script src="../apoio.js"></script>
+
+    <!-- O teste confere regras, não pixels: um contexto 2D que ignora o desenho. -->
+    <script>
+        const contextoQueIgnoraODesenho = new Proxy({}, {
+            get: function (propriedades, nome) { return nome in propriedades ? propriedades[nome] : function () { }; },
+            set: function (propriedades, nome, valor) { propriedades[nome] = valor; return true; }
+        });
+        HTMLCanvasElement.prototype.getContext = function () { return contextoQueIgnoraODesenho; };
+    </script>
+    <script src="../../reflexo/03-um-raio/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const VOLTA_COMPLETA = 2 * Math.PI;
+        const SIMBOLOS_SOLIDOS_ESPERADOS = "#%DER";
+        const RAIZ_DE_UM_MEIO = Math.SQRT1_2;
+
+        // ---- ajudantes: sempre pelas portas do jogo (eventos e quadros) ----
+
+        function apertarTecla(tecla) {
+            const evento = new KeyboardEvent("keydown", { key: tecla, cancelable: true });
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function soltarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: tecla }));
+        }
+
+        function botaoDaAcao(acao) {
+            return document.querySelector('[data-acao="' + acao + '"]');
+        }
+
+        function dispararPonteiro(botao, tipo, identificador) {
+            botao.dispatchEvent(new PointerEvent(tipo, { bubbles: true, pointerId: identificador === undefined ? 0 : identificador }));
+        }
+
+        function soltarTudo() {
+            window.dispatchEvent(new Event("blur"));
+        }
+
+        // Põe o jogador numa pose conhecida, sem ações ativas. NÃO refaz o raio: isso é do quadro.
+        function reiniciar(x, y, angulo) {
+            soltarTudo();
+            jogador.x = x;
+            jogador.y = y;
+            jogador.angulo = angulo;
+            atualizarDirecao();
+        }
+
+        function perto(obtido, esperado, tolerancia) {
+            return Math.abs(obtido - esperado) <= (tolerancia === undefined ? TOLERANCIA : tolerancia);
+        }
+
+        // ---- a verdade independente: o texto do mapa e a interseção raio × casa (placas) ----
+
+        function casaSolidaNoTexto(coluna, linha) {
+            const simbolo = MAPA_EM_TEXTO[linha] && MAPA_EM_TEXTO[linha][coluna];
+            return simbolo === undefined || SIMBOLOS_SOLIDOS_ESPERADOS.includes(simbolo);
+        }
+
+        // Em que intervalo de distância o raio está dentro da faixa [minimo, maximo) de UM eixo.
+        // Direção 0: ou está sempre dentro, ou nunca (faixa semiaberta, como o floor do jogo).
+        function intervaloNoEixo(origem, direcao, minimo, maximo) {
+            if (direcao === 0) {
+                return origem >= minimo && origem < maximo ? { entra: -Infinity, sai: Infinity } : null;
+            }
+            const aoMinimo = (minimo - origem) / direcao;
+            const aoMaximo = (maximo - origem) / direcao;
+            return { entra: Math.min(aoMinimo, aoMaximo), sai: Math.max(aoMinimo, aoMaximo) };
+        }
+
+        // A casa sólida de entrada mais próxima, testando TODAS as casas sólidas (sem andar a grade).
+        // Só conta interseção de comprimento positivo: o raio que apenas roça uma quina não bate.
+        function raioDeReferencia(origemX, origemY, direcaoX, direcaoY) {
+            let melhor = null;
+            for (let linha = 0; linha < MAPA_EM_TEXTO.length; linha++) {
+                for (let coluna = 0; coluna < MAPA_EM_TEXTO[linha].length; coluna++) {
+                    if (!casaSolidaNoTexto(coluna, linha)) {
+                        continue;
+                    }
+                    const noX = intervaloNoEixo(origemX, direcaoX, coluna, coluna + 1);
+                    const noY = intervaloNoEixo(origemY, direcaoY, linha, linha + 1);
+                    if (noX === null || noY === null) {
+                        continue;
+                    }
+                    const entra = Math.max(noX.entra, noY.entra);
+                    const sai = Math.min(noX.sai, noY.sai);
+                    if (!(sai > entra && sai > 0)) {
+                        continue;
+                    }
+                    const distancia = Math.max(entra, 0);
+                    if (melhor === null || distancia < melhor.distancia) {
+                        melhor = {
+                            coluna: coluna, linha: linha, distancia: distancia,
+                            lado: noX.entra > noY.entra ? "x" : "y",
+                            x: origemX + direcaoX * distancia, y: origemY + direcaoY * distancia
+                        };
+                    }
+                }
+            }
+            return melhor;
+        }
+
+        function ehQuina(x, y) {
+            return perto(x, Math.round(x)) && perto(y, Math.round(y));
+        }
+
+        // Raio que passa por um ponto de cruzamento de linhas da grade (fora da origem): empate de réguas.
+        function passaPorQuina(resultado) {
+            return resultado.cruzamentos.some(function (cruzamento) { return ehQuina(cruzamento.x, cruzamento.y); });
+        }
+
+        // Devolve null se o DDA concorda com a referência, ou o motivo. `empate` marca raios que passam
+        // por uma quina: ali a referência (interseção de comprimento positivo) e o DDA (que não deixa
+        // passar entre duas paredes em diagonal) divergem por convenção, então só os invariantes valem.
+        function motivoDeDivergir(origemX, origemY, direcaoX, direcaoY, obtido) {
+            if (passaPorQuina(obtido)) {
+                return { motivo: null, empate: true };
+            }
+            const esperado = raioDeReferencia(origemX, origemY, direcaoX, direcaoY);
+            const descricao = "origem (" + origemX + ", " + origemY + ") direção (" + direcaoX + ", " + direcaoY + ")";
+            if (esperado === null) {
+                return { motivo: "a referência não achou parede: " + descricao, empate: false };
+            }
+            if (obtido.coluna !== esperado.coluna || obtido.linha !== esperado.linha) {
+                return { motivo: "casa (" + obtido.coluna + ", " + obtido.linha + ") em vez de (" + esperado.coluna + ", " + esperado.linha + "): " + descricao, empate: false };
+            }
+            if (obtido.lado !== esperado.lado) {
+                return { motivo: "lado " + obtido.lado + " em vez de " + esperado.lado + ": " + descricao, empate: false };
+            }
+            if (!perto(obtido.distancia, esperado.distancia, TOLERANCIA * Math.max(1, esperado.distancia))) {
+                return { motivo: "distância " + obtido.distancia + " em vez de " + esperado.distancia + ": " + descricao, empate: false };
+            }
+            if (!perto(obtido.x, esperado.x, 1e-8) || !perto(obtido.y, esperado.y, 1e-8)) {
+                return { motivo: "ponto (" + obtido.x + ", " + obtido.y + ") em vez de (" + esperado.x + ", " + esperado.y + "): " + descricao, empate: false };
+            }
+            return { motivo: null, empate: false };
+        }
+
+        // Os cruzamentos têm de contar a história do caminho: casas vizinhas, linhas certas, ordem certa.
+        function motivoDeCruzamentosIncoerentes(origemX, origemY, direcaoX, direcaoY, resultado) {
+            const casaInicial = { coluna: Math.floor(origemX), linha: Math.floor(origemY) };
+            const lista = resultado.cruzamentos;
+
+            if (casaSolidaNoTexto(casaInicial.coluna, casaInicial.linha)) {
+                if (lista.length !== 0 || resultado.distancia !== 0 || resultado.coluna !== casaInicial.coluna || resultado.linha !== casaInicial.linha) {
+                    return "origem em casa sólida deveria dar distância 0 e nenhum cruzamento";
+                }
+                return null;
+            }
+            if (lista.length === 0) {
+                return "origem livre e nenhum cruzamento";
+            }
+
+            let anterior = { coluna: casaInicial.coluna, linha: casaInicial.linha, x: origemX, y: origemY, distancia: 0 };
+            for (let indice = 0; indice < lista.length; indice++) {
+                const atual = lista[indice];
+                const nome = "cruzamento " + indice + " (" + atual.coluna + ", " + atual.linha + ")";
+                const passoEmColuna = atual.coluna - anterior.coluna;
+                const passoEmLinha = atual.linha - anterior.linha;
+                const distancia = Math.hypot(atual.x - origemX, atual.y - origemY);
+
+                if (Math.abs(passoEmColuna) + Math.abs(passoEmLinha) !== 1) {
+                    return nome + " não é vizinha da anterior";
+                }
+                if ((atual.lado === "x") !== (passoEmColuna !== 0)) {
+                    return nome + ": o lado " + atual.lado + " não bate com o passo";
+                }
+                if (passoEmColuna !== 0 && Math.sign(passoEmColuna) !== Math.sign(direcaoX)) {
+                    return nome + ": andou em x contra o sentido do raio";
+                }
+                if (passoEmLinha !== 0 && Math.sign(passoEmLinha) !== Math.sign(direcaoY)) {
+                    return nome + ": andou em y contra o sentido do raio";
+                }
+                const linhaCruzada = atual.lado === "x" ? (passoEmColuna > 0 ? atual.coluna : atual.coluna + 1) : (passoEmLinha > 0 ? atual.linha : atual.linha + 1);
+                const coordenadaCruzada = atual.lado === "x" ? atual.x : atual.y;
+                if (!perto(coordenadaCruzada, linhaCruzada, 1e-8)) {
+                    return nome + ": o ponto não está na linha da grade " + linhaCruzada + " (" + coordenadaCruzada + ")";
+                }
+                if (distancia < anterior.distancia - 1e-9) {
+                    return nome + ": a distância diminuiu";
+                }
+                if (distancia - anterior.distancia > 1e-6) {
+                    const meioX = (anterior.x + atual.x) / 2;
+                    const meioY = (anterior.y + atual.y) / 2;
+                    const dentroDaCasa = meioX >= anterior.coluna - 1e-9 && meioX <= anterior.coluna + 1 + 1e-9
+                        && meioY >= anterior.linha - 1e-9 && meioY <= anterior.linha + 1 + 1e-9;
+                    if (!dentroDaCasa) {
+                        return nome + ": o trecho anterior não passa pela casa (" + anterior.coluna + ", " + anterior.linha + ")";
+                    }
+                }
+                if (indice < lista.length - 1 && casaSolidaNoTexto(atual.coluna, atual.linha)) {
+                    return nome + ": o raio atravessou uma casa sólida";
+                }
+                anterior = { coluna: atual.coluna, linha: atual.linha, x: atual.x, y: atual.y, distancia: distancia };
+            }
+
+            if (!casaSolidaNoTexto(anterior.coluna, anterior.linha)) {
+                return "o último cruzamento não é uma casa sólida";
+            }
+            if (anterior.coluna !== resultado.coluna || anterior.linha !== resultado.linha) {
+                return "o último cruzamento não é a casa batida";
+            }
+            if (lista[lista.length - 1].lado !== resultado.lado) {
+                return "o lado batido não é o do último cruzamento";
+            }
+            if (!perto(anterior.distancia, resultado.distancia, 1e-8)) {
+                return "a distância batida não é a do último cruzamento";
+            }
+            if (lista.length > Math.abs(resultado.coluna - casaInicial.coluna) + Math.abs(resultado.linha - casaInicial.linha)) {
+                return "mais cruzamentos do que casas de diferença";
+            }
+            return null;
+        }
+
+        // ---- sorteios com semente ----
+
+        function sortearNoIntervalo(minimo, maximo) {
+            return minimo + Math.random() * (maximo - minimo);
+        }
+
+        function sortearOrigemLivre(arredondarParaMeios) {
+            for (let tentativa = 0; tentativa < 1000; tentativa++) {
+                let x = sortearNoIntervalo(1, COLUNAS - 1);
+                let y = sortearNoIntervalo(1, LINHAS - 1);
+                if (arredondarParaMeios) {
+                    x = Math.floor(x * 2) / 2;
+                    y = Math.floor(y * 2) / 2;
+                }
+                if (!casaSolidaNoTexto(Math.floor(x), Math.floor(y))) {
+                    return { x: x, y: y };
+                }
+            }
+            throw new Error("não achei origem livre");
+        }
+
+        const DESVIOS_DE_EIXO = [0, 1e-12, -1e-12, 1e-9, -1e-9, 1e-6, -1e-6];
+        const EIXOS_EXATOS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        const DIAGONAIS_EXATAS = [[RAIZ_DE_UM_MEIO, RAIZ_DE_UM_MEIO], [-RAIZ_DE_UM_MEIO, RAIZ_DE_UM_MEIO], [RAIZ_DE_UM_MEIO, -RAIZ_DE_UM_MEIO], [-RAIZ_DE_UM_MEIO, -RAIZ_DE_UM_MEIO]];
+
+        function sortearEntre(lista) {
+            return lista[Math.floor(Math.random() * lista.length)];
+        }
+
+        function sortearRaio(indice) {
+            const tipo = indice % 6;
+            const origem = sortearOrigemLivre(tipo === 1 || tipo === 3 || tipo === 4 || tipo === 5);
+            let direcao;
+            if (tipo === 0 || tipo === 1) {
+                const angulo = Math.random() * VOLTA_COMPLETA;
+                direcao = [Math.cos(angulo), Math.sin(angulo)];
+            } else if (tipo === 2 || tipo === 3) {
+                const angulo = Math.floor(Math.random() * 4) * Math.PI / 2 + sortearEntre(DESVIOS_DE_EIXO);
+                direcao = [Math.cos(angulo), Math.sin(angulo)];
+            } else if (tipo === 4) {
+                direcao = sortearEntre(EIXOS_EXATOS);
+            } else {
+                direcao = sortearEntre(DIAGONAIS_EXATAS);
+            }
+            return { x: origem.x, y: origem.y, dx: direcao[0], dy: direcao[1] };
+        }
+
+        // ---- casos ----
+
+        testar("estado inicial: o raio do início bate onde o GUIA conta à mão", function () {
+            conferirIgual("nenhuma ação ativa ao abrir", acoesAtivas.size, 0);
+            conferirIgual("nenhuma entrada ativa ao abrir", entradasAtivas.size, 0);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            conferirIgual("o J virou chão", mapa[1][1], ".");
+            conferir("o raio já existe antes do primeiro quadro", raio !== null && typeof raio === "object");
+            conferirIgual("bate na casa de coluna 3", raio.coluna, 3);
+            conferirIgual("bate na casa de linha 2 (a pedra)", raio.linha, 2);
+            conferirIgual("na face horizontal (lado y)", raio.lado, "y");
+            conferir("a distância é 2,021", perto(raio.distancia, 2.021, 0.0006), "distância = " + raio.distancia);
+            conferirIgual("3 cruzamentos", raio.cruzamentos.length, 3);
+            conferirIgual("o primeiro entra na casa (2, 1)", raio.cruzamentos[0].coluna + "," + raio.cruzamentos[0].linha, "2,1");
+            conferirIgual("o primeiro cruza uma linha vertical", raio.cruzamentos[0].lado, "x");
+            conferirIgual("o último cruza uma linha horizontal", raio.cruzamentos[2].lado, "y");
+        });
+
+        testar("raios fixos: casa, face, distância, ponto e cruzamentos", function () {
+            const SEMPRE_PARA_CIMA = 1e-12;
+            const casos = [
+                { nome: "para a direita pela linha 9", ox: 1.5, oy: 9.5, dx: 1, dy: 0, coluna: 15, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "para a esquerda pela linha 9", ox: 14.5, oy: 9.5, dx: -1, dy: 0, coluna: 0, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "para baixo até o emissor", ox: 1.5, oy: 1.5, dx: 0, dy: 1, coluna: 1, linha: 5, lado: "y", distancia: 3.5, passos: 4 },
+                { nome: "para cima até o receptor", ox: 14.5, oy: 9.5, dx: 0, dy: -1, coluna: 14, linha: 1, lado: "y", distancia: 7.5, passos: 8 },
+                { nome: "quase paralelo ao eixo x (dy = 1e-12)", ox: 1.5, oy: 9.5, dx: 1, dy: SEMPRE_PARA_CIMA, coluna: 15, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "quase paralelo ao eixo x, sentido oposto (dy = -1e-12)", ox: 14.5, oy: 9.5, dx: -1, dy: -SEMPRE_PARA_CIMA, coluna: 0, linha: 9, lado: "x", distancia: 13.5, passos: 14 },
+                { nome: "quase paralelo ao eixo y (dx = 1e-12)", ox: 1.5, oy: 1.5, dx: SEMPRE_PARA_CIMA, dy: 1, coluna: 1, linha: 5, lado: "y", distancia: 3.5, passos: 4 },
+                { nome: "origem sobre uma linha vertical, indo para a direita", ox: 3, oy: 1.5, dx: 1, dy: 0, coluna: 5, linha: 1, lado: "x", distancia: 2, passos: 2 },
+                { nome: "origem sobre uma linha vertical, indo para a esquerda", ox: 3, oy: 1.5, dx: -1, dy: 0, coluna: 0, linha: 1, lado: "x", distancia: 2, passos: 3 },
+                { nome: "origem sobre uma linha horizontal, indo para cima (parede colada)", ox: 2.5, oy: 9, dx: 0, dy: -1, coluna: 2, linha: 8, lado: "y", distancia: 0, passos: 1 },
+                { nome: "origem sobre uma linha horizontal, indo para baixo", ox: 2.5, oy: 9, dx: 0, dy: 1, coluna: 2, linha: 10, lado: "y", distancia: 1, passos: 1 },
+                { nome: "origem dentro de uma casa sólida (a pedra)", ox: 2.5, oy: 2.5, dx: 1, dy: 0, coluna: 2, linha: 2, lado: null, distancia: 0, passos: 0 },
+                { nome: "origem fora do mapa", ox: -3, oy: 4.5, dx: 1, dy: 0, coluna: -3, linha: 4, lado: null, distancia: 0, passos: 0 },
+                { nome: "45° exato saindo do centro: o empate vai para y", ox: 6.5, oy: 9.5, dx: RAIZ_DE_UM_MEIO, dy: -RAIZ_DE_UM_MEIO, coluna: 6, linha: 8, lado: "y", distancia: 0.5 / RAIZ_DE_UM_MEIO, passos: 1 },
+                { nome: "45° exato, passando pela quina entre duas casas livres", ox: 8.5, oy: 9.5, dx: RAIZ_DE_UM_MEIO, dy: -RAIZ_DE_UM_MEIO, coluna: 9, linha: 8, lado: "x", distancia: 0.5 / RAIZ_DE_UM_MEIO, passos: 2 }
+            ];
+
+            casos.forEach(function (caso) {
+                const resultado = lancarRaio(caso.ox, caso.oy, caso.dx, caso.dy);
+                const obtido = "casa (" + resultado.coluna + ", " + resultado.linha + ") lado " + resultado.lado + " distância " + resultado.distancia + " passos " + resultado.cruzamentos.length;
+                const certo = resultado.coluna === caso.coluna && resultado.linha === caso.linha
+                    && (caso.lado === null || resultado.lado === caso.lado)
+                    && perto(resultado.distancia, caso.distancia)
+                    && resultado.cruzamentos.length === caso.passos
+                    && perto(resultado.x, caso.ox + caso.dx * caso.distancia) && perto(resultado.y, caso.oy + caso.dy * caso.distancia);
+                conferir(caso.nome, certo, obtido + "; esperado casa (" + caso.coluna + ", " + caso.linha + ") lado " + caso.lado + " distância " + caso.distancia + " passos " + caso.passos);
+
+                const incoerencia = motivoDeCruzamentosIncoerentes(caso.ox, caso.oy, caso.dx, caso.dy, resultado);
+                conferir("  e os cruzamentos de '" + caso.nome + "' contam o caminho", incoerencia === null, incoerencia);
+            });
+
+            const aEsquerda = lancarRaio(3, 1.5, -1, 0);
+            conferirIgual("saindo de uma linha para a esquerda, a vizinha é cruzada a distância 0", aEsquerda.cruzamentos[0].x, 3);
+            conferirIgual("o mesmo raio, repetido, dá o mesmo resultado (empate decidido sempre igual)",
+                JSON.stringify(lancarRaio(6.5, 9.5, RAIZ_DE_UM_MEIO, -RAIZ_DE_UM_MEIO)), JSON.stringify(lancarRaio(6.5, 9.5, RAIZ_DE_UM_MEIO, -RAIZ_DE_UM_MEIO)));
+        });
+
+        testar("o raio só anda no próprio tempo: lancarRaio não lê o jogador nem altera o mapa", function () {
+            const mapaAntes = JSON.stringify(mapa);
+            const jogadorAntes = JSON.stringify(jogador);
+            lancarRaio(8.5, 2.5, 0, 1);
+            lancarRaio(1.5, 1.5, 1, 0);
+            conferirIgual("o mapa não muda", JSON.stringify(mapa), mapaAntes);
+            conferirIgual("o jogador não muda", JSON.stringify(jogador), jogadorAntes);
+        });
+
+        testar("direções degeneradas sempre terminam", function () {
+            const direcoes = [
+                [0, 0], [NaN, NaN], [NaN, 1], [1, NaN], [Infinity, 0], [0, Infinity], [-Infinity, 0], [0, -Infinity],
+                [Infinity, Infinity], [-Infinity, -Infinity], [1e-300, 1e-300], [1e300, 1e300], [-0, -0]
+            ];
+            const origens = [[8.5, 2.5], [1.5, 1.5], [3, 9], [14.99, 10.99]];
+            let primeiroProblema = null;
+            let quantidade = 0;
+
+            origens.forEach(function (origem) {
+                direcoes.forEach(function (direcao) {
+                    quantidade++;
+                    const resultado = lancarRaio(origem[0], origem[1], direcao[0], direcao[1]);
+                    const casaValida = Number.isInteger(resultado.coluna) && Number.isInteger(resultado.linha) && casaSolidaNoTexto(resultado.coluna, resultado.linha);
+                    if (primeiroProblema === null && !casaValida) {
+                        primeiroProblema = "direção (" + direcao + ") a partir de (" + origem + ") deu a casa (" + resultado.coluna + ", " + resultado.linha + ")";
+                    }
+                });
+            });
+            conferir("todos os " + quantidade + " raios degenerados voltam parando numa casa sólida inteira", primeiroProblema === null, primeiroProblema);
+
+            const origemInvalida = lancarRaio(NaN, 3, 1, 0);
+            conferirIgual("origem NaN volta sem andar (sem cruzamentos)", origemInvalida.cruzamentos.length, 0);
+            const origemInfinita = lancarRaio(Infinity, -Infinity, 1, 0);
+            conferirIgual("origem infinita volta sem andar", origemInfinita.cruzamentos.length, 0);
+        });
+
+        testar("DDA contra a referência independente: 24.000 raios sorteados", function () {
+            const QUANTIDADE = 24000;
+            semearSorteio(303);
+            let primeiraDivergencia = null;
+            let primeiraIncoerencia = null;
+            let comparados = 0;
+            let empates = 0;
+            const casasBatidas = new Set();
+            const ladosBatidos = new Set();
+
+            for (let indice = 0; indice < QUANTIDADE; indice++) {
+                const sorteado = sortearRaio(indice);
+                const resultado = lancarRaio(sorteado.x, sorteado.y, sorteado.dx, sorteado.dy);
+
+                const incoerencia = motivoDeCruzamentosIncoerentes(sorteado.x, sorteado.y, sorteado.dx, sorteado.dy, resultado);
+                if (primeiraIncoerencia === null && incoerencia !== null) {
+                    primeiraIncoerencia = incoerencia + " (raio " + indice + ": origem " + sorteado.x + ", " + sorteado.y + " direção " + sorteado.dx + ", " + sorteado.dy + ")";
+                }
+
+                const comparacao = motivoDeDivergir(sorteado.x, sorteado.y, sorteado.dx, sorteado.dy, resultado);
+                if (comparacao.empate) {
+                    empates++;
+                    continue;
+                }
+                comparados++;
+                casasBatidas.add(resultado.coluna + "," + resultado.linha);
+                ladosBatidos.add(resultado.lado);
+                if (primeiraDivergencia === null && comparacao.motivo !== null) {
+                    primeiraDivergencia = comparacao.motivo;
+                }
+            }
+
+            conferir(comparados + " raios batem com a referência (casa, face, distância e ponto); " + empates + " empates de quina só passam pelos invariantes",
+                primeiraDivergencia === null, primeiraDivergencia);
+            conferir("e todos os cruzamentos contam um caminho coerente", primeiraIncoerencia === null, primeiraIncoerencia);
+            conferir("a amostra de fato testa: mais de 15.000 comparados (" + comparados + ")", comparados > 15000);
+            conferir("a amostra bate em muitas casas diferentes (" + casasBatidas.size + ")", casasBatidas.size >= 60);
+            conferir("e nas duas faces", ladosBatidos.has("x") && ladosBatidos.has("y"));
+        });
+
+        testar("passo fixo: o tunelamento que o GUIA descreve", function () {
+            // Parede fina de uma casa (a coluna 5 na linha 1) e passo de 2 casas.
+            const largo = lancarRaioPorPassos(4.5, 1.5, 1, 0, 2);
+            const exato = lancarRaio(4.5, 1.5, 1, 0);
+            conferirIgual("o DDA acha a parede fina na coluna 5", exato.coluna, 5);
+            conferir("o DDA acha a 0,5 casa", perto(exato.distancia, 0.5));
+            conferirIgual("o passo de 2 atravessa a parede e só pisa na pedra da coluna 10, a 6 casas", largo.distancia, 6);
+            conferirIgual("em 3 passos", largo.passos, 3);
+
+            const fino = lancarRaioPorPassos(4.5, 1.5, 1, 0, PASSO_FIXO);
+            conferir("o passo de 0,1 acha a mesma parede nesse caso", perto(fino.distancia, 0.5, 1e-9), "distância = " + fino.distancia);
+
+            const semDirecao = lancarRaioPorPassos(8.5, 2.5, 0, 0, 0.1);
+            conferirIgual("direção nula: o passo fixo desiste no teto de 100.000 voltas", semDirecao.passos, 100000);
+
+            // Mesmo com passo pequeno, o passo fixo perde um canto que o DDA pega.
+            semearSorteio(404);
+            let raiosCuja = 0;
+            let primeiroExemplo = null;
+            let naoMenorQueODDA = true;
+            let semprePisaEmSolida = true;
+            for (let indice = 0; indice < 20000; indice++) {
+                const origem = sortearOrigemLivre(false);
+                const angulo = Math.random() * VOLTA_COMPLETA;
+                const dx = Math.cos(angulo);
+                const dy = Math.sin(angulo);
+                const dda = lancarRaio(origem.x, origem.y, dx, dy);
+                const ingenuo = lancarRaioPorPassos(origem.x, origem.y, dx, dy, PASSO_FIXO);
+                const colunaDoIngenuo = Math.floor(origem.x + dx * ingenuo.distancia);
+                const linhaDoIngenuo = Math.floor(origem.y + dy * ingenuo.distancia);
+
+                naoMenorQueODDA = naoMenorQueODDA && ingenuo.distancia >= dda.distancia - 1e-9;
+                semprePisaEmSolida = semprePisaEmSolida && casaSolidaNoTexto(colunaDoIngenuo, linhaDoIngenuo);
+                if (colunaDoIngenuo !== dda.coluna || linhaDoIngenuo !== dda.linha) {
+                    raiosCuja++;
+                    if (primeiroExemplo === null) {
+                        primeiroExemplo = "origem (" + origem.x.toFixed(3) + ", " + origem.y.toFixed(3) + ") ângulo " + angulo.toFixed(4)
+                            + ": DDA casa (" + dda.coluna + ", " + dda.linha + ") a " + dda.distancia.toFixed(3)
+                            + "; passo fixo casa (" + colunaDoIngenuo + ", " + linhaDoIngenuo + ") a " + ingenuo.distancia.toFixed(3);
+                    }
+                }
+            }
+            escreverLinha("      exemplo de canto perdido pelo passo 0,1: " + primeiroExemplo);
+            conferir("o passo fixo nunca acha parede antes do DDA", naoMenorQueODDA);
+            conferir("o passo fixo sempre pisa numa casa sólida no fim", semprePisaEmSolida);
+            conferir("em 20.000 raios o passo de 0,1 erra a casa em alguns (" + raiosCuja + "); o DDA nunca, pela referência acima", raiosCuja > 0);
+        });
+
+        testar("o raio do olhar acompanha o jogador", function () {
+            reiniciar(8.5, 2.5, Math.PI / 2);
+            avancarQuadro(16);
+            conferirIgual("olhando para baixo da casa (8, 2), bate na casa (8, 4)", raio.coluna + "," + raio.linha, "8,4");
+            conferirIgual("pela face de cima da pedra (lado y)", raio.lado, "y");
+            conferir("a 1,5 casa", perto(raio.distancia, 1.5));
+            conferir("no ponto (8,5; 4)", perto(raio.x, 8.5) && perto(raio.y, 4));
+
+            // andar: a distância cai 0,15 por quadro de 50 ms, e o raio sai da posição NOVA
+            apertarTecla("w");
+            avancarQuadro(50);
+            conferir("depois de andar 0,15, o jogador está em y = 2,65", perto(jogador.y, 2.65), "y = " + jogador.y);
+            conferir("o raio já é o da posição nova (distância 1,35, e não 1,5)", perto(raio.distancia, 1.35), "distância = " + raio.distancia);
+            conferir("a origem do raio é o jogador: ponto = posição + direção × distância",
+                perto(raio.x, jogador.x + jogador.dx * raio.distancia) && perto(raio.y, jogador.y + jogador.dy * raio.distancia));
+            avancarQuadros(4, 50);
+            conferir("mais 4 quadros: 0,75 casa de distância", perto(raio.distancia, 0.75), "distância = " + raio.distancia);
+            soltarTecla("w");
+
+            // de ré
+            reiniciar(8.5, 2.5, Math.PI / 2);
+            apertarTecla("s");
+            avancarQuadro(50);
+            conferir("andando de ré, a distância cresce para 1,65", perto(raio.distancia, 1.65), "distância = " + raio.distancia);
+            soltarTecla("s");
+
+            // girar: a cada quadro o raio é o da direção nova
+            reiniciar(8.5, 2.5, Math.PI / 2);
+            apertarTecla("ArrowRight");
+            avancarQuadro(50);
+            const direcaoDepoisDoGiro = { dx: jogador.dx, dy: jogador.dy };
+            const esperado = raioDeReferencia(jogador.x, jogador.y, direcaoDepoisDoGiro.dx, direcaoDepoisDoGiro.dy);
+            conferir("depois de girar 0,125 rad o raio é o da direção nova", raio.coluna === esperado.coluna && raio.linha === esperado.linha && perto(raio.distancia, esperado.distancia),
+                "raio " + raio.coluna + "," + raio.linha + " a " + raio.distancia + "; referência " + esperado.coluna + "," + esperado.linha + " a " + esperado.distancia);
+            conferir("e o ponto de impacto saiu de (8,5; 4)", !perto(raio.x, 8.5, 1e-3));
+
+            // uma volta inteira: confere todo quadro e vê várias casas diferentes
+            soltarTudo();
+            reiniciar(8.5, 2.5, 0);
+            apertarTecla("ArrowRight");
+            let primeiroProblema = null;
+            const casasVistas = new Set();
+            for (let quadro = 0; quadro < 100; quadro++) {
+                avancarQuadro(50);
+                const referencia = raioDeReferencia(jogador.x, jogador.y, jogador.dx, jogador.dy);
+                casasVistas.add(raio.coluna + "," + raio.linha);
+                if (primeiroProblema === null && (raio.coluna !== referencia.coluna || raio.linha !== referencia.linha || raio.lado !== referencia.lado || !perto(raio.distancia, referencia.distancia, 1e-8))) {
+                    primeiroProblema = "quadro " + quadro + ": raio " + raio.coluna + "," + raio.linha + " " + raio.lado + " a " + raio.distancia
+                        + "; referência " + referencia.coluna + "," + referencia.linha + " " + referencia.lado + " a " + referencia.distancia;
+                }
+            }
+            conferir("girando 100 quadros (12,5 rad, mais de uma volta), o raio acompanha a referência em todos", primeiroProblema === null, primeiroProblema);
+            conferir("e varre muitas casas (" + casasVistas.size + ")", casasVistas.size >= 6);
+            soltarTudo();
+        });
+
+        testar("parado, o raio e o ângulo não mexem nada (nem o último bit)", function () {
+            [0, 0.7, 3.14159, 6.2, 1e-12, VOLTA_COMPLETA - 1e-9].forEach(function (angulo) {
+                reiniciar(8.5, 2.5, angulo);
+                const antes = JSON.stringify({ jogador: jogador });
+                avancarQuadro(16);
+                const raioDoPrimeiroQuadro = JSON.stringify(raio);
+                avancarQuadros(50, 16);
+                conferirIgual("ângulo " + angulo + ": jogador idêntico depois de 51 quadros", JSON.stringify({ jogador: jogador }), antes);
+                conferirIgual("e o raio também", JSON.stringify(raio), raioDoPrimeiroQuadro);
+            });
+        });
+
+        testar("a tecla H mostra a conta do DDA contra o passo fixo", function () {
+            reiniciar(1.5, 1.5, 0.25);
+            apertarTecla("h");
+            conferirIgual("H liga a depuração", depuracaoLigada, true);
+            avancarQuadro(16);
+            const texto = document.getElementById("leitura").textContent;
+            conferir("a leitura traz o raio batido", texto.indexOf("raio: casa (3, 2) lado y dist 2.021") !== -1, texto);
+            conferir("e a comparação do GUIA: DDA 3 passos contra 21 do passo fixo", texto.indexOf("DDA 3 passos | fixo 0.1: 21 (2.10)") !== -1, texto);
+
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "h", repeat: true }));
+            conferirIgual("H segurado (repeat) não alterna de novo", depuracaoLigada, true);
+            apertarTecla("H");
+            conferirIgual("H maiúsculo desliga", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("a leitura volta a ficar vazia", document.getElementById("leitura").textContent, "");
+            conferirIgual("H não liga ação nenhuma", acoesAtivas.size, 0);
+        });
+
+        testar("entrada: tecla e botão seguram a mesma ação, e só a última entrada solta", function () {
+            reiniciar(8.5, 2.5, 0);
+
+            apertarTecla("w");
+            apertarTecla("ArrowUp");
+            soltarTecla("ArrowUp");
+            conferirIgual("soltar ↑ com W ainda apertada continua andando", acoesAtivas.has("frente"), true);
+            soltarTecla("w");
+            conferirIgual("soltar a última entrada para", acoesAtivas.has("frente"), false);
+
+            apertarTecla("w");
+            dispararPonteiro(botaoDaAcao("frente"), "pointerdown", 7);
+            soltarTecla("w");
+            conferirIgual("tecla + botão: soltar a tecla com o dedo ainda no botão continua", acoesAtivas.has("frente"), true);
+            conferirIgual("e o botão continua marcado", botaoDaAcao("frente").classList.contains("segurado"), true);
+            dispararPonteiro(botaoDaAcao("frente"), "pointerup", 7);
+            conferirIgual("soltar o dedo para", acoesAtivas.has("frente"), false);
+            conferirIgual("e o botão desmarca", botaoDaAcao("frente").classList.contains("segurado"), false);
+
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 1);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerdown", 2);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerup", 1);
+            conferirIgual("dois dedos no mesmo botão: soltar um mantém a ação", acoesAtivas.has("tras"), true);
+            dispararPonteiro(botaoDaAcao("tras"), "pointerup", 2);
+            conferirIgual("soltar o segundo para", acoesAtivas.has("tras"), false);
+
+            apertarTecla("w");
+            dispararPonteiro(botaoDaAcao("girarDireita"), "pointerdown", 3);
+            dispararPonteiro(botaoDaAcao("esquerda"), "pointerdown", 4);
+            soltarTudo();
+            conferirIgual("blur limpa as ações", acoesAtivas.size, 0);
+            conferirIgual("blur limpa as entradas", entradasAtivas.size, 0);
+            conferirIgual("blur desmarca os botões", document.querySelectorAll(".segurado").length, 0);
+        });
+
+        testar("robô aleatório: o raio de cada quadro bate com a referência", function () {
+            const QUADROS = 6000;
+            semearSorteio(2027);
+            reiniciar(1.5, 1.5, Math.PI / 4 + 0.001);
+
+            const teclas = ["w", "s", "a", "d", "ArrowLeft", "ArrowRight"];
+            const apertadas = new Set();
+            let primeiraViolacao = null;
+            let comparados = 0;
+            let empates = 0;
+            let caminho = 0;
+            const casasBatidas = new Set();
+
+            for (let quadro = 0; quadro < QUADROS && primeiraViolacao === null; quadro++) {
+                const sorteio = Math.random();
+                if (sorteio < 0.15) {
+                    const tecla = sortearEntre(teclas);
+                    if (apertadas.has(tecla)) {
+                        soltarTecla(tecla);
+                        apertadas.delete(tecla);
+                    } else {
+                        apertarTecla(tecla);
+                        apertadas.add(tecla);
+                    }
+                } else if (sorteio < 0.17) {
+                    soltarTudo();
+                    apertadas.clear();
+                }
+
+                const antes = { x: jogador.x, y: jogador.y };
+                const milissegundos = Math.random() < 0.9 ? 8 + Math.floor(Math.random() * 30) : 60 + Math.floor(Math.random() * 2000);
+                avancarQuadro(milissegundos);
+                caminho += Math.hypot(jogador.x - antes.x, jogador.y - antes.y);
+
+                const comparacao = motivoDeDivergir(jogador.x, jogador.y, jogador.dx, jogador.dy, raio);
+                const incoerencia = motivoDeCruzamentosIncoerentes(jogador.x, jogador.y, jogador.dx, jogador.dy, raio);
+                if (comparacao.empate) {
+                    empates++;
+                } else {
+                    comparados++;
+                    casasBatidas.add(raio.coluna + "," + raio.linha);
+                }
+                if (comparacao.motivo !== null) {
+                    primeiraViolacao = "quadro " + quadro + ": " + comparacao.motivo;
+                } else if (incoerencia !== null) {
+                    primeiraViolacao = "quadro " + quadro + ": " + incoerencia;
+                }
+            }
+
+            conferir("em " + QUADROS + " quadros o raio sempre bate com a referência e conta um caminho coerente (" + comparados + " comparados, " + empates + " empates)",
+                primeiraViolacao === null, primeiraViolacao);
+            conferir("o robô andou (" + caminho.toFixed(0) + " casas) e viu muitas casas (" + casasBatidas.size + ")", caminho > 100 && casasBatidas.size >= 25);
+            soltarTudo();
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

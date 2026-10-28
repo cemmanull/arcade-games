@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 6: iluminar</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/06-iluminar/regras.js" defer></script>
+    <script src="../../proa-acesa/06-iluminar/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 6: iluminar</h1>
+    <pre id="resultado"></pre>
+
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const TOLERANCIA = 1e-6;
+            const TETO_DO_QUADRO = 0.05;
+            const MARGEM = 1e-9;
+            const GRAU = Math.PI / 180;
+
+            // Números do GDD §4.2/§4.3, escritos aqui de propósito (não lidos de regras.js): se alguém
+            // alargar o foco (16° → 20°) ou o alcance, a tabela-verdade reprova.
+            const ALCANCE = 24;
+            const MEIO_ANGULO = 16 * GRAU;
+            const SEGUNDOS_DE_BRASA = 3;
+            const QUANTIDADE_DE_RECIFES = 13;
+            const QUANTIDADE_DE_COLUNAS = 3;
+            const FILHOS_FIXOS_DA_CENA = 6;      // luz do céu, mar, ilha, barca, recifes, porto
+            const BARCOS_POR_COMBOIO = 4;
+
+            const BOTOES = [document.getElementById("botao-esquerda"), document.getElementById("botao-direita"), document.getElementById("botao-devagar")];
+            const TECLAS_DO_ROBO = ["a", "d", "s", "ArrowLeft", "ArrowRight", "q", "e", "ArrowUp", "ArrowDown", "A", "Q", "h", "H", " ", "Shift", "Enter", "constructor", "__proto__"];
+            const DURACOES_DO_ROBO = [0, 1, 8, 16, 16, 33, 50, 50, 50, 120, 1000, -50, 5000];
+
+            const THREE_REAL = window.THREE;
+
+            let violacoes = {};
+            let tempoEsperado = 0;
+            let contandoRaios = true;
+            let raiosLancados = 0;
+            const estatisticas = { quadros: 0, quadrosComRaio: 0, quadrosComRecifeIluminado: 0, quadrosComRecifeTapado: 0, quadrosComBrasaApagando: 0 };
+
+            // O teste confere regras, não pixels: desenhar milhares de quadros por software seria lento.
+            renderizador.render = function () { };
+
+            // Espião no raio: quantas vezes o jogo pergunta "tem coluna no caminho?".
+            const lancarRaioOriginal = raycaster.intersectObjects;
+            raycaster.intersectObjects = function () {
+                if (contandoRaios) {
+                    raiosLancados++;
+                }
+                return lancarRaioOriginal.apply(this, arguments);
+            };
+
+
+            // ============================================================
+            // Ajudantes
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? TOLERANCIA : tolerancia);
+            }
+
+            function normalizar(angulo) {
+                return Math.atan2(Math.sin(angulo), Math.cos(angulo));
+            }
+
+            function registrar(categoria, mensagem) {
+                if (!(categoria in violacoes)) {
+                    violacoes[categoria] = mensagem;
+                }
+            }
+
+            function todosFinitos(lista) {
+                return lista.every(function (numero) { return Number.isFinite(numero); });
+            }
+
+            function sortear(lista) {
+                return lista[Math.floor(Math.random() * lista.length)];
+            }
+
+            function zerarBrasas() {
+                recifes.forEach(function (recife) {
+                    recife.brasa = 0;
+                    recife.iluminado = false;
+                });
+            }
+
+            function fotografar() {
+                return { brasas: recifes.map(function (recife) { return recife.brasa; }) };
+            }
+
+            function passar(milissegundos) {
+                const antes = fotografar();
+                const raiosAntes = raiosLancados;
+                if (!avancarQuadro(milissegundos)) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+                const raiosDoQuadro = raiosLancados - raiosAntes;
+                const duracao = Math.max(0, Math.min(milissegundos / 1000, TETO_DO_QUADRO));
+                tempoEsperado += duracao;
+                vigiar(antes, duracao, raiosDoQuadro);
+            }
+
+            function passarSegundos(segundos, milissegundos) {
+                const passo = milissegundos === undefined ? 50 : milissegundos;
+                const quadros = Math.round(segundos * 1000 / passo);
+                for (let i = 0; i < quadros; i++) {
+                    passar(passo);
+                }
+            }
+
+            const origemDoTeste = new THREE_REAL.Vector3();
+
+            /*
+              Em TODO quadro, recalcula por fora o que o jogo decidiu: quem está no cone, quem a coluna tapa,
+              quanto resta de brasa, o que a malha mostra, e quantos raios foram lançados.
+            */
+            function vigiar(antes, duracao, raiosDoQuadro) {
+                estatisticas.quadros++;
+                if (!todosFinitos([barcaNoMundo.x, barcaNoMundo.z, barcaNoMundo.proa, guinada.angulo, arfagem.angulo, camera.position.x, camera.position.y,
+                    camera.position.z, barca.position.x, barca.position.z, cena.background.r, cone.material.opacity])) {
+                    registrar("NaN", "algum número da barca, da câmera ou da lanterna virou NaN ou infinito");
+                }
+
+                lanterna.getWorldPosition(origemDoTeste);
+                const direcao = barcaNoMundo.proa + guinada.angulo;
+                let recifesNoCone = 0;
+
+                recifes.forEach(function (recife, indice) {
+                    const noCone = recifeNoCone(origemDoTeste, direcao, recife);
+                    if (noCone) {
+                        recifesNoCone++;
+                    }
+                    contandoRaios = false;
+                    const tapado = noCone && estaTapado(origemDoTeste, recife);
+                    contandoRaios = true;
+
+                    if (recife.iluminado !== (noCone && !tapado)) {
+                        registrar("iluminado = no cone E não tapado", "recife " + indice + ": iluminado " + recife.iluminado + ", noCone " + noCone + ", tapado " + tapado);
+                    }
+                    if (!todosFinitos([recife.brasa]) || recife.brasa < 0 || recife.brasa > SEGUNDOS_DE_BRASA) {
+                        registrar("brasa entre 0 e 3", "recife " + indice + ": brasa " + recife.brasa);
+                    }
+                    if (recife.iluminado && recife.brasa !== SEGUNDOS_DE_BRASA) {
+                        registrar("recife visto: brasa cheia", "recife " + indice + ": brasa " + recife.brasa);
+                    }
+                    if (!recife.iluminado && !proximo(recife.brasa, Math.max(0, antes.brasas[indice] - duracao), MARGEM)) {
+                        registrar("sem ver, a brasa só esfria (brasa − dt, mínimo 0)", "recife " + indice + ": antes " + antes.brasas[indice] + ", agora " + recife.brasa + ", dt " + duracao);
+                    }
+
+                    const pedra = recife.malha.children[0];
+                    const espuma = recife.malha.children[1];
+                    if (recife.malha.visible !== (recife.brasa > 0 || depurando)) {
+                        registrar("recife aparece com brasa > 0 (ou na depuração H)", "recife " + indice + ": visible " + recife.malha.visible + ", brasa " + recife.brasa);
+                    }
+                    if (espuma.visible !== recife.iluminado || pedra.material.wireframe !== !recife.iluminado) {
+                        registrar("visto = pedra cheia com espuma; lembrado = só o contorno", "recife " + indice);
+                    }
+                    const opacidadeEsperada = recife.iluminado ? 1 : recife.brasa / SEGUNDOS_DE_BRASA;
+                    if (!proximo(pedra.material.opacity, opacidadeEsperada, MARGEM)) {
+                        registrar("opacidade = brasa ÷ 3 (1 se visto)", "recife " + indice + ": opacidade " + pedra.material.opacity + ", esperado " + opacidadeEsperada);
+                    }
+
+                    if (recife.iluminado) {
+                        estatisticas.quadrosComRecifeIluminado++;
+                    }
+                    if (noCone && tapado) {
+                        estatisticas.quadrosComRecifeTapado++;
+                    }
+                    if (!recife.iluminado && recife.brasa > 0) {
+                        estatisticas.quadrosComBrasaApagando++;
+                    }
+                });
+
+                if (raiosDoQuadro !== recifesNoCone) {
+                    registrar("o raio só é lançado para quem passou no cone", raiosDoQuadro + " raio(s) para " + recifesNoCone + " recife(s) no cone");
+                }
+                if (raiosDoQuadro > 0) {
+                    estatisticas.quadrosComRaio++;
+                }
+                if (cena.children.length !== FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length) {
+                    registrar("a cena não vaza malhas", "filhos " + cena.children.length);
+                }
+            }
+
+            function conferirSemViolacoes(contexto) {
+                const categorias = Object.keys(violacoes);
+                conferir(contexto + ": nenhuma regra quebrada em nenhum quadro", categorias.length === 0,
+                    categorias.map(function (categoria) { return categoria + " (" + violacoes[categoria] + ")"; }).join("; "));
+                violacoes = {};
+            }
+
+            function tecla(tipo, nome, opcoes) {
+                window.dispatchEvent(new KeyboardEvent(tipo, Object.assign({ key: nome }, opcoes)));
+            }
+
+            function apertar(nome, opcoes) {
+                tecla("keydown", nome, opcoes);
+            }
+
+            function soltar(nome) {
+                tecla("keyup", nome);
+            }
+
+            function eventoDeBotao(botao, tipo, identificador) {
+                botao.dispatchEvent(new PointerEvent(tipo, { pointerType: "touch", pointerId: identificador === undefined ? 1 : identificador, bubbles: false }));
+            }
+
+            function eventoNoPalco(tipo, fracaoX, fracaoY, tipoDePonteiro) {
+                const retangulo = palco.getBoundingClientRect();
+                palco.dispatchEvent(new PointerEvent(tipo, {
+                    clientX: retangulo.left + fracaoX * retangulo.width,
+                    clientY: retangulo.top + fracaoY * retangulo.height,
+                    pointerType: tipoDePonteiro || "mouse"
+                }));
+            }
+
+            function soltarTudo() {
+                window.dispatchEvent(new Event("blur"));
+                TECLAS_DO_ROBO.forEach(soltar);
+                BOTOES.forEach(function (botao) {
+                    eventoDeBotao(botao, "pointerleave", 1);
+                    botao.dispatchEvent(new Event("blur"));
+                });
+                eventoNoPalco("pointerleave", 0.5, 0.5, "touch");
+            }
+
+            function acalmar() {
+                soltarTudo();
+                passarSegundos(5);
+            }
+
+            /* A barca fica parada (encalhada "para sempre"), de proa para onde se quer: o experimento é só da luz. */
+            function posicionarBarcaQuieta(x, z, proa) {
+                barcaNoMundo.x = x;
+                barcaNoMundo.z = z;
+                barcaNoMundo.proa = proa;
+                barcaNoMundo.giro = 0;
+                barcaNoMundo.segundosEncalhada = 1e9;
+            }
+
+            function soltarABarca() {
+                barcaNoMundo.segundosEncalhada = 0;
+            }
+
+            function noCone(origem, direcao, recife) {
+                return recifeNoCone(origem, direcao, recife);
+            }
+
+            /* Um recife `raio` de raio, a `distanciaDoCentro` da origem, `grausDoEixo` à esquerda (+) do eixo do feixe. */
+            function recifeA(origem, direcao, distanciaDoCentro, grausDoEixo, raio) {
+                const rumo = direcao + grausDoEixo * GRAU;
+                return { x: origem.x - distanciaDoCentro * Math.sin(rumo), z: origem.z - distanciaDoCentro * Math.cos(rumo), raio: raio };
+            }
+
+            function umaColuna(x) {
+                return recifes.find(function (recife) { return recife.alta === true && recife.x === x; });
+            }
+
+            /* Um recife de mentira para perguntar ao Raycaster; o `malha` próprio nunca é pai de uma coluna. */
+            function recifeFalso(x, z, raio) {
+                return { x: x, z: z, raio: raio, malha: new THREE_REAL.Group() };
+            }
+
+            function ponto(x, y, z) {
+                return new THREE_REAL.Vector3(x, y, z);
+            }
+
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("o mar tem 130 m e a névoa é 0,03 de tarde e de noite (constante em todo o entardecer)", function () {
+                verifMarENevoaDoEntardecer(passar);
+            });
+
+            testar("o mundo da luz: 13 recifes (3 colunas altas), colunas são as pedras dos altos, o cone desenhado é o cone da regra", function () {
+                conferir("o three.js carregou e não há aviso", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
+                conferirIgual("13 recifes", recifes.length, QUANTIDADE_DE_RECIFES);
+                conferirIgual("3 deles são colunas altas", recifes.filter(function (recife) { return recife.alta === true; }).length, QUANTIDADE_DE_COLUNAS);
+                conferirIgual("a lista `colunas` tem 3 pedras", colunas.length, QUANTIDADE_DE_COLUNAS);
+                conferir("cada coluna é a pedra (primeira filha) do grupo de um recife ALTO",
+                    colunas.every(function (coluna) {
+                        const dono = recifes.find(function (recife) { return recife.malha === coluna.parent; });
+                        return dono !== undefined && dono.alta === true && dono.malha.children[0] === coluna;
+                    }));
+                conferir("e nenhum recife baixo entra em `colunas`: só as pedras altas tapam a luz",
+                    recifes.filter(function (recife) { return recife.alta !== true; }).every(function (recife) { return colunas.indexOf(recife.malha.children[0]) === -1; }));
+                conferir("no começo ninguém foi visto: brasa 0 e iluminado falso",
+                    recifes.every(function (recife) { return recife.brasa === 0 && recife.iluminado === false; }));
+
+                conferir("o cone desenhado tem a altura do alcance (24 m)", proximo(cone.geometry.parameters.height, ALCANCE, 1e-9));
+                conferir("e o raio da boca é 24 · tan 16° (o desenho = a regra)", proximo(cone.geometry.parameters.radius, ALCANCE * Math.tan(MEIO_ANGULO), 1e-9),
+                    "raio " + cone.geometry.parameters.radius);
+                const luz = feixe.children.find(function (filho) { return filho.isSpotLight === true; });
+                conferir("o SpotLight tem meio-ângulo de 16° e alcance de 36 m", luz !== undefined && proximo(luz.angle, MEIO_ANGULO, 1e-9) && proximo(luz.distance, ALCANCE * 1.5, 1e-9));
+                conferir("o recife nasce com malha em grupo {pedra, espuma} — a espuma é o anel", recifes.every(function (recife) {
+                    return recife.malha.children.length === 2 && recife.malha.children[1].geometry.type === "RingGeometry";
+                }));
+            });
+
+            testar("recifeNoCone — tabela-verdade (6 direções do feixe × 28 casos)", function () {
+                const origem = { x: 3, z: -2 };
+                const direcoes = [0, 0.7, -2.5, Math.PI / 2, Math.PI, 7];
+                // [nome, distância ao centro, graus à esquerda do eixo, raio, esperado]
+                const tabela = [
+                    ["de frente", 10, 0, 0.5, true],
+                    ["10° à esquerda", 10, 10, 0.5, true],
+                    ["10° à direita", 10, -10, 0.5, true],
+                    ["15,9° à esquerda (logo dentro do meio-ângulo de 16°)", 10, 15.9, 0.01, true],
+                    ["15,9° à direita", 10, -15.9, 0.01, true],
+                    ["16,2° à esquerda (logo fora)", 10, 16.2, 0.01, false],
+                    ["16,2° à direita (logo fora)", 10, -16.2, 0.01, false],
+                    ["20° (o que um foco de 20° veria)", 10, 20, 0.01, false],
+                    ["de lado, 90° à esquerda", 10, 90, 0.5, false],
+                    ["de lado, 90° à direita", 10, -90, 0.5, false],
+                    ["atrás, 180°", 10, 180, 0.5, false],
+                    ["quase atrás, 170°", 10, 170, 0.5, false],
+                    ["alcance: centro a 24,49 m e raio 0,5 (a borda está a 23,99)", 24.49, 0, 0.5, true],
+                    ["alcance: centro a 24,51 m e raio 0,5 (a borda está a 24,01)", 24.51, 0, 0.5, false],
+                    ["alcance: raio 3, centro a 26,9 m (borda a 23,9)", 26.9, 0, 3, true],
+                    ["alcance: raio 3, centro a 27,1 m (borda a 24,1)", 27.1, 0, 3, false],
+                    ["longe demais mesmo de frente: 60 m", 60, 0, 0.5, false],
+                    ["raio 3 a 10 m alarga o cone (margem de 17,5°): 30° entra", 10, 30, 3, true],
+                    ["raio 3 a 10 m: 36° ainda fica fora", 10, 36, 3, false],
+                    ["raio 0,5 a 10 m: 30° fica fora", 10, 30, 0.5, false],
+                    ["raio 3 a 10 m, do outro lado: −30° entra", 10, -30, 3, true],
+                    ["lanterna em cima do recife (distância 0)", 0, 0, 2, true],
+                    ["lanterna dentro do recife, ele 'atrás' (1,5 m, raio 2)", 1.5, 180, 2, true],
+                    ["lanterna dentro do recife, ele 'de lado' (1 m, raio 2)", 1, 90, 2, true],
+                    ["recife grande colado ATRÁS (2,5 m, raio 2) não é visto", 2.5, 180, 2, false],
+                    ["recife grande colado, de frente (2,5 m, raio 2)", 2.5, 0, 2, true],
+                    ["perto e à esquerda, 45°, raio 0,3 (3 m)", 3, 45, 0.3, false],
+                    ["perto e à frente, 5°, raio 0,3 (3 m)", 3, 5, 0.3, true]
+                ];
+                direcoes.forEach(function (direcao) {
+                    const erros = [];
+                    tabela.forEach(function (caso) {
+                        const recife = recifeA(origem, direcao, caso[1], caso[2], caso[3]);
+                        if (noCone(origem, direcao, recife) !== caso[4]) {
+                            erros.push(caso[0] + " (esperado " + caso[4] + ")");
+                        }
+                    });
+                    conferir("feixe apontando para " + direcao.toFixed(2) + " rad: os " + tabela.length + " casos batem", erros.length === 0, erros.join("; "));
+                });
+
+                const rotacionado = recifeA(origem, Math.PI / 2, 10, 0, 0.5);
+                conferir("feixe virado para −x (proa π/2): o recife em (−7, −2) está no cone", rotacionado.x < origem.x - 9.99 && noCone(origem, Math.PI / 2, rotacionado));
+                conferir("e o mesmo recife NÃO está no cone de quem olha para −z", noCone(origem, 0, rotacionado) === false);
+                conferir("a direção é um ângulo qualquer: 0 e 2π dão a mesma resposta", [3, 8, 14].every(function (distanciaDoCentro) {
+                    const recife = recifeA(origem, 0, distanciaDoCentro, 12, 1);
+                    return noCone(origem, 0, recife) === noCone(origem, 2 * Math.PI, recife) && noCone(origem, 0, recife) === noCone(origem, -2 * Math.PI, recife);
+                }));
+            });
+
+            testar("recifeNoCone × oráculo por AMOSTRAGEM do disco (20.000 sorteios semeados, geometria exata: disco ∩ leque)", function () {
+                // A regra é geométrica: o disco encosta no leque (setor de 16° e 24 m). O oráculo é independente: o disco encosta no leque se
+                // (a) a lanterna está dentro dele, ou (b) algum ponto da CIRCUNFERÊNCIA dele está dentro do leque (se o leque não está todo dentro do
+                // disco, ele cruza a circunferência). Cada ponto é testado por ângulo (atan2) e distância, sem produto escalar.
+                // A circunferência tem 720 amostras: o erro de amostragem é a flecha r·(1 − cos(π/720)) ≤ 6e-5 m. Faixa de tolerância: 1 mm.
+                // O oráculo roda com o raio + 1 mm e com o raio − 1 mm; se os dois concordam o veredito é firme e a regra TEM de concordar;
+                // se discordam, o caso está dentro da faixa de 1 mm e não é cobrado.
+                const AMOSTRAS = 720;
+                const TOLERANCIA_EM_METROS = 0.001;
+                const cossenos = [], senos = [];
+                for (let k = 0; k < AMOSTRAS; k++) {
+                    cossenos.push(Math.cos(2 * Math.PI * k / AMOSTRAS));
+                    senos.push(Math.sin(2 * Math.PI * k / AMOSTRAS));
+                }
+
+                function oraculo(origem, direcao, centro, raio) {
+                    if (Math.hypot(centro.x - origem.x, centro.z - origem.z) <= raio) {
+                        return true;
+                    }
+                    for (let k = 0; k < AMOSTRAS; k++) {
+                        const dx = centro.x + raio * cossenos[k] - origem.x;
+                        const dz = centro.z + raio * senos[k] - origem.z;
+                        if (Math.hypot(dx, dz) <= ALCANCE && Math.abs(normalizar(Math.atan2(-dx, -dz) - direcao)) <= MEIO_ANGULO) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                semearSorteio(20261026);
+                let divergencias = 0, firmes = 0, naFaixa = 0, dentro = 0, perto = 0;
+                let primeiraDivergencia = "";
+
+                for (let n = 0; n < 20000; n++) {
+                    const origem = { x: Math.random() * 60 - 30, z: Math.random() * 60 - 30 };
+                    const direcao = (Math.random() * 2 - 1) * 4 * Math.PI;
+                    const raio = 0.3 + Math.random() * 2.7;
+                    const sorteioPerto = n % 2 === 0;   // metade dos casos nasce em volta do leque, onde as bordas decidem
+                    const rumo = sorteioPerto ? direcao + (Math.random() * 2 - 1) * 45 * GRAU : Math.random() * 2 * Math.PI;
+                    const distanciaAoCentro = sorteioPerto ? Math.random() * (ALCANCE + 6) : Math.random() * 56;
+                    const recife = { x: origem.x - distanciaAoCentro * Math.sin(rumo), z: origem.z - distanciaAoCentro * Math.cos(rumo), raio: raio };
+
+                    const generoso = oraculo(origem, direcao, recife, raio + TOLERANCIA_EM_METROS);
+                    const apertado = oraculo(origem, direcao, recife, raio - TOLERANCIA_EM_METROS);
+                    if (generoso !== apertado) {
+                        naFaixa++;
+                        continue;
+                    }
+                    firmes++;
+                    dentro += generoso ? 1 : 0;
+                    perto += sorteioPerto ? 1 : 0;
+                    if (noCone(origem, direcao, recife) !== generoso) {
+                        divergencias++;
+                        if (primeiraDivergencia === "") {
+                            primeiraDivergencia = "origem " + JSON.stringify(origem) + ", direção " + direcao + ", recife " + JSON.stringify(recife) + ", esperado " + generoso;
+                        }
+                    }
+                }
+                conferir("20.000 sorteios: a regra e o oráculo discordam em " + divergencias + " (de " + firmes + " firmes; " + naFaixa + " na faixa de 1 mm, não cobrados)",
+                    divergencias === 0, primeiraDivergencia);
+                conferir("a faixa de tolerância é estreita: menos de 1% dos sorteios (" + naFaixa + ")", naFaixa < 200);
+                conferir("e o sorteio cobre os dois lados (" + dentro + " dentro, " + (firmes - dentro) + " fora), com " + perto + " casos em volta do leque", dentro > 2000 && firmes - dentro > 2000 && perto > 5000);
+            });
+
+            testar("a memória: brasa cheia enquanto visto, esfria sem ver, 0 em 3 s, nunca negativa, dt = 0 não muda nada", function () {
+                zerarBrasas();
+                const alvo = recifes[0];                       // (9, −4)
+                const origem = { x: 9, z: 12 };
+                const naoTapa = function () { return false; };
+                const tapaTudo = function () { return true; };
+
+                atualizarBrasas(0.05, origem, 0, naoTapa);
+                conferir("de frente para o recife: iluminado e brasa cheia (3 s)", alvo.iluminado === true && alvo.brasa === SEGUNDOS_DE_BRASA, "brasa " + alvo.brasa);
+                atualizarBrasas(0, origem, 0, naoTapa);
+                conferirIgual("dt = 0 enquanto visto: continua 3", alvo.brasa, SEGUNDOS_DE_BRASA);
+
+                atualizarBrasas(1, origem, Math.PI, naoTapa);
+                conferir("de costas por 1 s: não iluminado e brasa 2", alvo.iluminado === false && proximo(alvo.brasa, 2, MARGEM), "brasa " + alvo.brasa);
+                atualizarBrasas(0.5, origem, Math.PI, naoTapa);
+                conferir("mais 0,5 s: 1,5", proximo(alvo.brasa, 1.5, MARGEM));
+                atualizarBrasas(0, origem, Math.PI, naoTapa);
+                conferir("dt = 0 sem ver: a brasa NÃO muda (1,5)", proximo(alvo.brasa, 1.5, MARGEM), "brasa " + alvo.brasa);
+                atualizarBrasas(1.4, origem, Math.PI, naoTapa);
+                conferir("1,4 s: 0,1 (ainda lembrado)", proximo(alvo.brasa, 0.1, MARGEM) && alvo.brasa > 0);
+                atualizarBrasas(0.1, origem, Math.PI, naoTapa);
+                conferir("3 s depois da última vez que viu: brasa 0", alvo.brasa <= MARGEM, "brasa " + alvo.brasa);
+                atualizarBrasas(0.5, origem, Math.PI, naoTapa);
+                conferirIgual("e nunca fica negativa", alvo.brasa, 0);
+                atualizarBrasas(1000, origem, Math.PI, naoTapa);
+                conferirIgual("nem com um dt gigante", alvo.brasa, 0);
+                atualizarBrasas(-1, origem, Math.PI, naoTapa);
+                conferir("(dt negativo, que o jogo nunca manda, não aumenta a brasa por esfriar além do limite)", alvo.brasa >= 0 && alvo.brasa <= SEGUNDOS_DE_BRASA);
+
+                zerarBrasas();
+                atualizarBrasas(0.05, origem, 0, naoTapa);
+                for (let quadro = 0; quadro < 59; quadro++) {
+                    atualizarBrasas(0.05, origem, Math.PI, naoTapa);
+                }
+                conferir("59 quadros de 50 ms sem ver (2,95 s): ainda há brasa", alvo.brasa > 0, "brasa " + alvo.brasa);
+                atualizarBrasas(0.05, origem, Math.PI, naoTapa);
+                atualizarBrasas(0.05, origem, Math.PI, naoTapa);
+                conferirIgual("61 quadros: esquecido (brasa 0)", alvo.brasa, 0);
+                atualizarBrasas(0.05, origem, 0, naoTapa);
+                conferirIgual("visto de novo: brasa volta a 3", alvo.brasa, SEGUNDOS_DE_BRASA);
+
+                atualizarBrasas(1, origem, 0, tapaTudo);
+                conferir("no cone mas TAPADO: não ilumina e a brasa esfria (3 → 2)", alvo.iluminado === false && proximo(alvo.brasa, 2, MARGEM), "brasa " + alvo.brasa);
+                zerarBrasas();
+                atualizarBrasas(0.05, origem, 0, tapaTudo);
+                conferir("tapado desde o início: nunca foi visto, brasa 0", alvo.iluminado === false && alvo.brasa === 0);
+                zerarBrasas();
+            });
+
+            testar("o raio só é lançado para quem passou no cone (barato filtra primeiro)", function () {
+                zerarBrasas();
+                const origem = { x: 9, z: 12 };
+                const chamados = [];
+                const espiao = function (de, recife) {
+                    chamados.push(recife);
+                    return false;
+                };
+                atualizarBrasas(0.05, origem, 0, espiao);
+                const esperados = recifes.filter(function (recife) { return recifeNoCone(origem, 0, recife); });
+                conferir("estaTapado foi chamado exatamente para os recifes do cone, uma vez cada, em ordem",
+                    chamados.length === esperados.length && chamados.every(function (recife, indice) { return recife === esperados[indice]; }),
+                    chamados.length + " chamadas × " + esperados.length + " no cone");
+                conferir("e o filtro filtra: há recifes no cone, mas não todos (" + esperados.length + " de " + recifes.length + ")",
+                    esperados.length > 0 && esperados.length < recifes.length);
+
+                chamados.length = 0;
+                atualizarBrasas(0.05, { x: 70, z: 70 }, 0, espiao);
+                conferirIgual("apontando para mar vazio: nenhum raio", chamados.length, 0);
+
+                chamados.length = 0;
+                atualizarBrasas(0.05, { x: 70, z: 70 }, 0, function () { throw new Error("estaTapado não pode ser chamada para quem está fora do cone"); });
+                conferir("(e o `&&` curto-circuita: a função nem roda)", true);
+                zerarBrasas();
+            });
+
+            testar("Raycaster: coluna entre a lanterna e o recife tapa; ao lado não; recife na frente da coluna fica livre", function () {
+                const coluna = umaColuna(14);                    // (14, −6), 5 m de altura
+                conferir("achei a coluna de teste em (14, −6)", coluna !== undefined && coluna.z === -6);
+                const lanterna = ponto(14, 1.5, 8);              // 14 m ao sul da coluna, na altura da lanterna
+
+                conferir("recife ATRÁS da coluna, na mesma linha: tapado", estaTapado(lanterna, recifeFalso(14, -20, 2)) === true);
+                conferir("recife atrás e 8 m ao lado (a linha passa a 4 m da coluna): livre", estaTapado(lanterna, recifeFalso(22, -20, 2)) === false);
+                conferir("o outro lado também: livre", estaTapado(lanterna, recifeFalso(6, -20, 2)) === false);
+                conferir("recife entre a lanterna e a coluna (5 m à frente): livre — o raio só vale até o recife", estaTapado(lanterna, recifeFalso(14, 3, 2)) === false);
+                conferir("a própria coluna não se tapa a si mesma (o raio acerta o próprio recife)", estaTapado(lanterna, coluna) === false);
+                conferir("recife logo atrás da coluna, ainda na linha: tapado", estaTapado(lanterna, recifeFalso(14, -9, 1)) === true);
+
+                // coluna INVISÍVEL (recife esquecido: malha.visible = false) continua tapando
+                const pedra = coluna.malha.children[0];
+                coluna.malha.visible = false;
+                pedra.visible = false;
+                conferir("coluna invisível (esquecida) ainda tapa a luz", estaTapado(lanterna, recifeFalso(14, -20, 2)) === true);
+                coluna.malha.visible = true;
+                pedra.visible = true;
+
+                // outra coluna, com recifes reais do mundo: de (−12, −4) a linha até o recife (−6, −22) passa pelo centro da coluna (−8, −16)
+                const alvoReal = recifes.find(function (recife) { return recife.x === -6 && recife.z === -22; });
+                conferir("recife real (−6, −22) visto de (−12, −4): a coluna (−8, −16) está no meio, tapado", estaTapado(ponto(-12, 1.5, -4), alvoReal) === true);
+                conferir("visto de (−2, −4): a linha passa a 1,2 m da torre da ilha, que agora TAPA a luz (está em oclusores)", estaTapado(ponto(-2, 1.5, -4), alvoReal) === true);
+                conferir("lanterna na altura de uma lanterna de barca (0,5 a 2 m) é sempre mais baixa que a coluna de 5 m",
+                    [0.5, 1, 2].every(function (altura) { return estaTapado(ponto(14, altura, 8), recifeFalso(14, -20, 2)) === true; }));
+            });
+
+            testar("a luz no jogo: virar de costas apaga o recife aos poucos; de frente ele acende, com espuma e pedra cheia", function () {
+                acalmar();
+                zerarBrasas();
+                const alvo = recifes[0];                    // (9, −4)
+                posicionarBarcaQuieta(9, 14, 0);            // de proa para o recife, a lanterna a ~16,6 m dele
+                passar(50);
+                conferir("de frente para o recife: iluminado, brasa 3", alvo.iluminado === true && alvo.brasa === SEGUNDOS_DE_BRASA);
+                conferir("a malha aparece cheia: pedra opaca, espuma visível, sem contorno", alvo.malha.visible === true && alvo.malha.children[1].visible === true &&
+                    alvo.malha.children[0].material.wireframe === false && alvo.malha.children[0].material.opacity === 1);
+
+                barcaNoMundo.proa = Math.PI;                // vira de costas (a barca está quieta)
+                passarSegundos(1);
+                conferir("de costas por 1 s: não iluminado, brasa 2", alvo.iluminado === false && proximo(alvo.brasa, 2, 1e-9), "brasa " + alvo.brasa);
+                conferir("ainda aparece, só como contorno: sem espuma, wireframe ligado", alvo.malha.visible === true && alvo.malha.children[1].visible === false &&
+                    alvo.malha.children[0].material.wireframe === true);
+                conferir("e a pedra apaga com a brasa (opacidade 2 ÷ 3)", proximo(alvo.malha.children[0].material.opacity, 2 / 3, 1e-9));
+                passarSegundos(2.2);
+                conferir("3,2 s de costas: esquecido — brasa 0 e a malha SOME", alvo.brasa === 0 && alvo.malha.visible === false);
+
+                apertar("h");
+                passar(50);
+                conferir("H liga a depuração: o esquecido aparece (só contorno)", alvo.malha.visible === true && alvo.malha.children[0].material.wireframe === true);
+                apertar("h");
+                passar(50);
+                conferir("H de novo desliga: some", alvo.malha.visible === false);
+
+                barcaNoMundo.proa = 0;
+                passar(50);
+                conferir("de frente de novo: acende na hora (brasa 3, espuma, pedra cheia)", alvo.iluminado === true && alvo.brasa === SEGUNDOS_DE_BRASA &&
+                    alvo.malha.children[1].visible === true && alvo.malha.visible === true);
+                soltarABarca();
+                acalmar();
+                zerarBrasas();
+                conferirSemViolacoes("luz no jogo");
+            });
+
+            testar("a coluna no jogo: o recife atrás dela fica no escuro; o vizinho sem coluna na frente acende; sem a coluna no caminho acende", function () {
+                acalmar();
+                zerarBrasas();
+                const atrasDaColuna = recifes.find(function (recife) { return recife.x === 16 && recife.z === -16; });
+                const vizinho = recifes.find(function (recife) { return recife.x === 17 && recife.z === -10; });
+                const colunaDoMeio = umaColuna(14);
+
+                posicionarBarcaQuieta(14.5, 8, 0);
+                const raiosAntes = raiosLancados;
+                passar(50);
+                const lanternaNoMundo = lanterna.getWorldPosition(ponto(0, 0, 0));
+                conferir("(16, −16) está dentro do cone da lanterna", recifeNoCone(lanternaNoMundo, barcaNoMundo.proa + guinada.angulo, atrasDaColuna));
+                conferir("mas a coluna (14, −6) está no caminho: NÃO iluminado, brasa 0", atrasDaColuna.iluminado === false && atrasDaColuna.brasa === 0);
+                conferir("(17, −10) também está no cone, a linha passa a ~2,4 m da coluna: iluminado", vizinho.iluminado === true && vizinho.brasa === SEGUNDOS_DE_BRASA);
+                conferir("a própria coluna (14, −6) é vista: a coluna não tapa a si mesma", colunaDoMeio.iluminado === true);
+                conferir("o jogo lançou raios nesse quadro (" + (raiosLancados - raiosAntes) + ")", raiosLancados - raiosAntes >= 3);
+                passarSegundos(1);
+                conferir("e continua no escuro depois de 1 s", atrasDaColuna.iluminado === false && atrasDaColuna.brasa === 0);
+
+                posicionarBarcaQuieta(18, 8, 0);
+                passar(50);
+                conferir("andando para x = 18 a coluna sai do caminho: (16, −16) acende", atrasDaColuna.iluminado === true && atrasDaColuna.brasa === SEGUNDOS_DE_BRASA);
+
+                // coluna esquecida (invisível) continua tapando no jogo
+                posicionarBarcaQuieta(14.5, 8, 0);
+                barcaNoMundo.proa = Math.PI;
+                passarSegundos(3.5);
+                conferir("(depois de 3,5 s de costas a coluna do meio foi esquecida: malha invisível)", colunaDoMeio.malha.visible === false && colunaDoMeio.brasa === 0);
+                barcaNoMundo.proa = 0;
+                passar(50);
+                conferir("e ao voltar a olhar, a coluna acende e o recife atrás dela continua tapado, mesmo com a coluna recém-acesa",
+                    colunaDoMeio.iluminado === true && atrasDaColuna.iluminado === false);
+                soltarABarca();
+                acalmar();
+                zerarBrasas();
+                conferirSemViolacoes("coluna");
+            });
+
+            testar("estaTapado reaproveita a MESMA lista de acertos (nenhum array novo por raio)", function () {
+                const lista = acertos;
+                const lanterna = ponto(14, 1.5, 8);
+                estaTapado(lanterna, recifeFalso(14, -20, 2));
+                const tamanhoDepoisDeBloqueado = acertos.length;
+                conferir("depois de um raio bloqueado pela coluna a lista é a mesma e tem acertos (" + tamanhoDepoisDeBloqueado + ")", acertos === lista && tamanhoDepoisDeBloqueado > 0);
+                estaTapado(lanterna, recifeFalso(22, -20, 2));
+                conferir("depois de um raio livre é a mesma lista, esvaziada", acertos === lista && acertos.length === 0);
+                let sempreAMesma = true;
+                for (let i = 0; i < 200; i++) {
+                    estaTapado(ponto(i % 20, 1.5, 8), recifeFalso(14, -20, 2));
+                    sempreAMesma = sempreAMesma && acertos === lista;
+                }
+                conferir("200 raios depois ainda é o mesmo array", sempreAMesma);
+            });
+
+            testar("a ilha tapa a luz: a torre E o chão (oclusores), e uma origem realmente livre não é tapada", function () {
+                const alvoReal = recifes.find(function (recife) { return recife.x === -6 && recife.z === -22; });
+                conferir("visto de (−2, −4): a linha passa a 1,2 m da torre da ilha (−5, −12): tapado", estaTapado(ponto(-2, 1.5, -4), alvoReal) === true);
+                conferir("visto de (4, −4): a linha passa a 4,5 m da torre, longe das colunas: LIVRE", estaTapado(ponto(4, 1.5, -4), alvoReal) === false);
+                conferir("lanterna baixa (0,5 m) a 3 m do eixo da ilha: só o CHÃO da ilha corta o raio: tapado",
+                    estaTapado(ponto(-2, 0.5, -4), recifeFalso(-2, -22, 2)) === true);
+                conferir("a mesma linha, mais ao lado (a 8 m do eixo): livre", estaTapado(ponto(3, 0.5, -4), recifeFalso(3, -22, 2)) === false);
+                conferir("oclusores = 3 colunas + chão + torre da ilha", oclusores.length === QUANTIDADE_DE_COLUNAS + 2);
+            });
+
+            testar("H mostra um anel de colisão por recife, mesmo com o recife esquecido (opacidade 0)", function () {
+                acalmar();
+                zerarBrasas();
+                posicionarBarcaQuieta(70, 70, 0);   // longe de todo recife: nada é visto
+                passarSegundos(4);
+                const pedras = recifes.map(function (recife) { return recife.malha.children[0]; });
+                conferir("antes do H: todos esquecidos, opacidade 0 e malha invisível",
+                    recifes.every(function (recife, i) { return recife.brasa === 0 && pedras[i].material.opacity === 0 && recife.malha.visible === false; }));
+                apertar("h");
+                passar(50);
+                const aneis = pedras.map(function (pedra) { return pedra.children[0]; });
+                function visivelNoMundo(objeto) {
+                    for (let atual = objeto; atual !== null && atual !== cena.parent; atual = atual.parent) {
+                        if (atual.visible === false) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                conferirIgual("um anel por recife (13)", aneis.filter(function (anel) { return anel !== undefined && anel.geometry.type === "RingGeometry"; }).length, QUANTIDADE_DE_RECIFES);
+                conferir("com H todos os anéis estão visíveis na cena, com as pedras ainda em opacidade 0", aneis.every(visivelNoMundo) && pedras.every(function (pedra) { return pedra.material.opacity === 0; }));
+                conferir("o anel tem material próprio, opaco (o desvanecer da pedra não o apaga) e raio = recife + 1,2 m", aneis.every(function (anel, i) {
+                    return anel.material !== pedras[i].material && anel.material.opacity === 1 && anel.material.transparent === false &&
+                        proximo(anel.geometry.parameters.outerRadius, recifes[i].raio + 1.2, 1e-9);
+                }));
+                apertar("h");
+                passar(50);
+                conferir("H de novo: os anéis somem", aneis.every(function (anel) { return visivelNoMundo(anel) === false; }));
+                soltarABarca();
+                acalmar();
+                zerarBrasas();
+            });
+
+            testar("o cone DESENHADO fica na horizontal (= a regra); só o SpotLight levanta com a arfagem", function () {
+                acalmar();
+                posicionarBarcaQuieta(30, 40, 0.7);
+                apertar("ArrowUp");
+                passarSegundos(1.5);   // segurada: o alvo sobe 2 rad/s e a lanterna o persegue
+                cena.updateMatrixWorld(true);
+                conferir("a arfagem subiu bem acima do repouso (" + arfagem.angulo.toFixed(2) + " rad)", arfagem.angulo > 0.5);
+
+                const frenteDoCone = new THREE_REAL.Vector3(0, 0, -1).transformDirection(cone.matrixWorld);
+                const direcao = barcaNoMundo.proa + guinada.angulo;
+                conferir("o eixo do cone desenhado tem y = 0 (horizontal), como o leque da regra (y = " + frenteDoCone.y.toExponential(1) + ")", Math.abs(frenteDoCone.y) < 1e-9);
+                conferir("e aponta para a direção da regra (proa + guinada): (−sen, −cos)",
+                    proximo(frenteDoCone.x, -Math.sin(direcao), 1e-9) && proximo(frenteDoCone.z, -Math.cos(direcao), 1e-9));
+
+                const luz = feixe.children.find(function (filho) { return filho.isSpotLight === true; });
+                const posicaoDaLuz = luz.getWorldPosition(new THREE_REAL.Vector3());
+                const posicaoDoAlvo = luz.target.getWorldPosition(new THREE_REAL.Vector3());
+                const frenteDaLuz = posicaoDoAlvo.sub(posicaoDaLuz).normalize();
+                soltar("ArrowUp");
+                conferir("o SpotLight, esse sim, levanta: y ≈ sen(arfagem) = " + Math.sin(arfagem.angulo).toFixed(3) + " (obtido " + frenteDaLuz.y.toFixed(3) + ")",
+                    proximo(frenteDaLuz.y, Math.sin(arfagem.angulo), 0.03) && frenteDaLuz.y > 0.4,   // folga de 0,03: a posição do alvo do SpotLight no mundo vem com ~0,02 de desvio medido
+                    "feixe.rotation.x " + feixe.rotation.x + ", arfagem " + arfagem.angulo + ", luz " + posicaoDaLuz.toArray() + ", alvo " + posicaoDoAlvo.toArray());
+                soltarABarca();
+                acalmar();
+            });
+
+            testar("o enquadramento da câmera cabe a barca, um recife 14 m à frente e o 3º barco, em 1280×800 e em 390×750", function () {
+                acalmar();
+                const estiloAntes = palco.style.cssText;
+                const renderAntes = renderizador.render;
+                const projetado = new THREE_REAL.Vector3();
+
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": a câmera tem a proporção da tela", proximo(camera.aspect, tamanho[0] / tamanho[1], 1e-6));
+
+                    [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.8].forEach(function (proa) {
+                        posicionarBarcaQuieta(10, 45, proa);
+                        barcosDePesca.concat(barcosAfundando).forEach(function (barco) { if (barco.malha) { cena.remove(barco.malha); } });
+                        barcosDePesca.length = 0;
+                        barcosAfundando.length = 0;
+                        criarComboio();
+                        passarSegundos(4);
+                        camera.updateMatrixWorld(true);
+                        const pontos = [
+                            ["a barca", { x: barcaNoMundo.x, z: barcaNoMundo.z }],
+                            ["um recife 14 m à frente", { x: barcaNoMundo.x - 14 * Math.sin(proa), z: barcaNoMundo.z - 14 * Math.cos(proa) }],
+                            ["o 3º barco", { x: barcosDePesca[2].x, z: barcosDePesca[2].z }]
+                        ];
+                        const fora = pontos.filter(function (item) {
+                            projetado.set(item[1].x, 0, item[1].z).project(camera);
+                            item.push(projetado.x, projetado.y);
+                            return !(Math.abs(projetado.x) <= 1 && Math.abs(projetado.y) <= 1 && projetado.z > -1 && projetado.z < 1);
+                        });
+                        conferir(tamanho[0] + "×" + tamanho[1] + ", proa " + proa.toFixed(2) + ": barca, recife à frente e 3º barco dentro do quadro (" +
+                            pontos.map(function (item) { return item[0] + " [" + item[2].toFixed(2) + ", " + item[3].toFixed(2) + "]"; }).join("; ") + ")", fora.length === 0,
+                            "fora: " + fora.map(function (item) { return item[0]; }));
+                    });
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                renderizador.render = renderAntes;
+                soltarABarca();
+                acalmar();
+            });
+
+            testar("o comboio nasce válido e a ilha bate (a mesma regra do passo 5, na cópia do passo 6)", function () {
+                const obstaculos = recifes.concat([ilha]);
+                let poses = 0, invalidas = 0, primeira = "";
+                for (let x = -79; x <= 79; x += 2) {
+                    for (let z = -79; z <= 79; z += 2) {
+                        if (obstaculos.some(function (o) { return Math.hypot(x - o.x, z - o.z) < o.raio + 1.2; })) {
+                            continue;
+                        }
+                        for (let rumo = 0; rumo < 8; rumo++) {
+                            const guardados = barcosDePesca.splice(0);
+                            barcaNoMundo.x = x;
+                            barcaNoMundo.z = z;
+                            barcaNoMundo.proa = rumo * Math.PI / 4;
+                            criarComboio();
+                            poses++;
+                            const novos = barcosDePesca.splice(0);
+                            barcosDePesca.push.apply(barcosDePesca, guardados);
+                            novos.forEach(function (barco) {
+                                const ruim = Math.abs(barco.x) > 79 + MARGEM || Math.abs(barco.z) > 79 + MARGEM || Math.hypot(barco.x - porto.x, barco.z - porto.z) < porto.raio + 1 - MARGEM ||
+                                    obstaculos.some(function (o) { return Math.hypot(barco.x - o.x, barco.z - o.z) < o.raio + 1.2 + 1 - MARGEM; });
+                                if (ruim) {
+                                    invalidas++;
+                                    primeira = primeira || "barca (" + x + ", " + z + ") rumo " + rumo;
+                                }
+                            });
+                        }
+                    }
+                }
+                conferir("nenhum dos " + poses + " comboios nasceu inválido (" + invalidas + ")", poses > 40000 && invalidas === 0, primeira);
+                conferir("a ilha bate: dentro de 5,5 + 1,2 m é tocada, fora não, e vale para a barca e para o barco",
+                    recifeTocadoPor({ x: ilha.x + 6.69, z: ilha.z }) === ilha && recifeTocadoPor({ x: ilha.x + 6.71, z: ilha.z }) === null);
+                posicionarBarcaQuieta(8, 14, 0);
+                soltarABarca();
+            });
+
+            testar("a ilha vem dos dados: mover `ilha` em regras.js move a ilha desenhada e o colisor juntos (sem sujar os oclusores da luz)", function () {
+                verifIlhaVemDosDados();
+                conferir("e a ilha de verdade continua onde a regra a pôs (−5, −12)", ilha.x === -5 && ilha.z === -12 && cena.children.some(function (filho) { return filho.position.x === -5 && filho.position.z === -12 && filho.children.length === 4; }));
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio(function () { atualizarMundo(0, 0, false); });   // o quadro do jogo tenta de novo, com a barca onde está
+                posicionarBarcaQuieta(8, 14, 0);
+                verifNascerEm({ x: 8, z: 14, proa: 0 });
+                passar(50);
+                soltarABarca();
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                posicionarBarcaQuieta(8, 14, 0);
+                passar(50);
+                verifCameraNoPontoDaFormula();
+                soltarABarca();
+            });
+
+            testar("o enquadramento ao longo do tempo (retas e voltas em U, 7200 quadros de 50 ms): barca, 14 m à frente e os 3 primeiros barcos ficam no quadro (|NDC| ≤ 0,97) em ≥ 99% dos quadros, em 1280×800 e 390×750", function () {
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    acalmar();
+                    soltarABarca();
+                    barcaNoMundo.x = 8;
+                    barcaNoMundo.z = 14;
+                    barcaNoMundo.proa = 0;
+                    verifNascerEm({ x: 8, z: 14, proa: 0 });
+                    passar(50);
+                    seguirComACamera(1);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 7200, 50);
+                    verifRestaurarRecifes(pedras);
+                    const limite = Math.floor(0.01 * medidas.quadros);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": cada ponto fora do quadro em no máximo 1% dos quadros (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.quadros === 7200 && ["barca", "frente", "primeiro", "segundo", "terceiro", "algum"].every(function (ponto) { return medidas[ponto] <= limite; }),
+                        "limite " + limite + " quadros");
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 30 voltas em U, ≥ 10 retas longas e o 3º barco a ≥ 40 m da barca)",
+                        medidas.voltas >= 30 && medidas.retas >= 10 && medidas.maiorDistanciaDoTerceiro >= 40,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m");
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                acalmar();
+            });
+
+            testar("robô semeado: piloto e entradas aleatórias; brasa, cone e raios conferidos por fora em 3 sementes × 4000 quadros", function () {
+                const sementes = [11, 20261026, 987654321];
+                const quadrosPorSemente = 4000;
+                let eventosEnviados = 0;
+
+                function umEventoAleatorio() {
+                    const tipo = Math.floor(Math.random() * 7);
+                    eventosEnviados++;
+                    if (tipo === 0) {
+                        apertar(sortear(TECLAS_DO_ROBO), { repeat: Math.random() < 0.15, ctrlKey: Math.random() < 0.05 });
+                    } else if (tipo === 1) {
+                        soltar(sortear(TECLAS_DO_ROBO));
+                    } else if (tipo === 2) {
+                        eventoDeBotao(sortear(BOTOES), sortear(["pointerdown", "pointerdown", "pointerup", "pointerleave", "pointercancel"]), sortear([1, 2]));
+                    } else if (tipo === 3) {
+                        eventoNoPalco(sortear(["pointermove", "pointermove", "pointerdown", "pointerup", "pointerleave", "pointercancel"]),
+                            Math.random() * 4 - 1.5, Math.random() * 4 - 1.5, sortear(["mouse", "touch"]));
+                    } else if (tipo === 4) {
+                        window.dispatchEvent(new Event(sortear(["blur", "keydown", "keyup"])));
+                    } else if (tipo === 5) {
+                        BOTOES[Math.floor(Math.random() * 3)].dispatchEvent(new KeyboardEvent(sortear(["keydown", "keyup"]),
+                            { key: sortear(["Enter", " ", "Tab"]), bubbles: true, cancelable: true }));
+                    } else {
+                        eventosEnviados--;
+                    }
+                }
+
+                sementes.forEach(function (semente) {
+                    acalmar();
+                    violacoes = {};
+                    semearSorteio(semente);
+                    zerarBrasas();
+                    barcaNoMundo.x = 8;
+                    barcaNoMundo.z = 14;
+                    barcaNoMundo.proa = 0;
+                    barcaNoMundo.giro = 0;
+                    barcaNoMundo.segundosEncalhada = 0;
+                    let destino = porto;
+                    let teclaDoPiloto = null;
+
+                    for (let quadro = 0; quadro < quadrosPorSemente; quadro++) {
+                        if (quadro % 250 === 0) {
+                            destino = sortear(recifes.concat([porto, { x: Math.random() * 100 - 50, z: Math.random() * 100 - 50 }]));
+                        }
+                        const erroDeRumo = normalizar(Math.atan2(-(destino.x - barcaNoMundo.x), -(destino.z - barcaNoMundo.z)) - barcaNoMundo.proa);
+                        const desejada = Math.abs(erroDeRumo) < 0.05 ? null : erroDeRumo > 0 ? "ArrowLeft" : "ArrowRight";
+                        if (teclaDoPiloto !== null && teclaDoPiloto !== desejada) {
+                            soltar(teclaDoPiloto);
+                        }
+                        teclaDoPiloto = desejada;
+                        if (teclaDoPiloto !== null) {
+                            apertar(teclaDoPiloto);
+                        }
+
+                        const quantos = Math.floor(Math.random() * 4);
+                        for (let i = 0; i < quantos; i++) {
+                            umEventoAleatorio();
+                        }
+                        passar(sortear(DURACOES_DO_ROBO));
+                    }
+                    conferirSemViolacoes("robô, semente " + semente + " (" + quadrosPorSemente + " quadros)");
+                });
+
+                conferir("o robô realmente mexeu: mais de 10.000 eventos enviados", eventosEnviados > 10000, eventosEnviados + " eventos");
+                conferir("e a luz foi exercitada de verdade: houve quadros com raio (" + estatisticas.quadrosComRaio + "), com recife iluminado (" +
+                    estatisticas.quadrosComRecifeIluminado + "), com recife tapado por coluna (" + estatisticas.quadrosComRecifeTapado + ") e com brasa apagando (" +
+                    estatisticas.quadrosComBrasaApagando + ")",
+                    estatisticas.quadrosComRaio > 100 && estatisticas.quadrosComRecifeIluminado > 100 && estatisticas.quadrosComRecifeTapado > 5 && estatisticas.quadrosComBrasaApagando > 100);
+                acalmar();
+                conferir("no fim a cena tem exatamente 6 filhos fixos + os barcos das listas", cena.children.length === FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length);
+                conferir("e as listas vivas têm no máximo 4 barcos", barcosDePesca.length + barcosAfundando.length <= BARCOS_POR_COMBOIO);
+                conferirSemViolacoes("depois do robô");
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

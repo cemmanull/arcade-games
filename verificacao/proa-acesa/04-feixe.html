@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 4: o feixe</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #painel[hidden], #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/04-feixe/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 4: o feixe</h1>
+    <pre id="resultado"></pre>
+
+    <main id="palco"></main>
+    <p id="painel" hidden></p>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const TOLERANCIA = 1e-5;
+            const TETO_DO_QUADRO = 0.05;
+            const GRAU = Math.PI / 180;
+
+            // Os limites do GDD §3/§4.2 e do passo, escritos aqui de propósito (não lidos do script):
+            // se alguém afrouxar uma constante do jogo, o teste reprova.
+            const LIMITE_DA_GUINADA = 75 * GRAU;
+            const ARFAGEM_MINIMA = -20 * GRAU;
+            const ARFAGEM_MAXIMA = 60 * GRAU;
+            const REPOUSO_DA_ARFAGEM = -0.12;
+            const GIRO_MAXIMO_DA_BARCA = 1.4;
+            const ACELERACAO_DO_GIRO = 4;
+            const VELOCIDADE_MAXIMA_DA_MIRA = 2.5;
+            const GIRO_LOCAL_MAXIMO_DA_GUINADA = VELOCIDADE_MAXIMA_DA_MIRA + GIRO_MAXIMO_DA_BARCA;   // a barca gira por baixo da lanterna
+            const ACELERACAO_DA_MIRA = 8;
+            const TAXA_DO_ALVO = 2;                 // rad/s: Q/E giram o alvo; soltos, ele desce na mesma taxa
+            const DURACAO_DO_PONTEIRO = 2;          // s: mexer ou arrastar assume a mira por 2 s (GDD §3)
+            const VELOCIDADE_DA_BARCA = 5;
+            const SUAVIDADE_DA_CAMERA = 5;          // 1/s
+            const FOLGA_DA_CAMERA_EM_METROS = 5;    // atraso máximo aceitável da câmera (a reta estabiliza em 1 m)
+            const PASSO_DA_GRADE = 90 / 64;         // um quadradinho do mar, em metros
+            const DURACAO_DO_ENTARDECER = 40;
+            const ILHA = { x: -5, z: -12, raio: 5.5 };   // o chão do farol; a barca tem 3,2 m de comprimento
+            const MEIO_COMPRIMENTO_DA_BARCA = 1.6;
+            const MARGEM = 1e-9;
+
+            const CEU_DE_TARDE = 0xf3c98b;
+            const CEU_DE_NOITE = 0x07111c;
+            const MAR_DE_TARDE = 0x3d7ea6;
+            const MAR_DE_NOITE = 0x14344f;
+
+            const BOTAO_ESQUERDA = document.getElementById("botao-esquerda");
+            const BOTAO_DIREITA = document.getElementById("botao-direita");
+
+            const TECLAS_DO_JOGO = ["a", "d", "ArrowLeft", "ArrowRight", "q", "e", "ArrowUp", "ArrowDown"];
+            const TECLAS_DO_ROBO = TECLAS_DO_JOGO.concat(["A", "D", "Q", "E", "h", "H", " ", "Shift", "Escape", "Enter", "constructor", "__proto__"]);
+            const DURACOES_DO_ROBO = [0, 1, 8, 16, 16, 16, 33, 50, 50, 120, 1000, -50, 5000];
+
+            let tempoEsperado = 0;
+            let violacoes = {};
+            let maiorAtrasoDaCamera = 0;
+            let menorDistanciaDaIlha = Infinity;
+            let medindoAIlha = false;
+
+            // O teste confere regras, não pixels: desenhar milhares de quadros por software seria lento.
+            renderizador.render = function () { };
+
+
+            // ============================================================
+            // Espiões: o jogo não pode criar Color/Vector3 a cada quadro, e o céu só se repinta enquanto muda
+            // ============================================================
+            // `window.THREE` é um módulo (somente leitura): trocamos a referência GLOBAL por uma cópia com dois
+            // construtores contadores. O jogo procura `THREE` pelo nome a cada uso; o teste usa THREE_REAL.
+            const THREE_REAL = window.THREE;
+            const construcoes = { Color: 0, Vector3: 0 };
+
+            function espiarConstrutor(construtor, nome) {
+                return new Proxy(construtor, {
+                    construct: function (alvo, argumentos, novoAlvo) {
+                        construcoes[nome]++;
+                        return Reflect.construct(alvo, argumentos, novoAlvo);
+                    }
+                });
+            }
+
+            window.THREE = Object.assign({}, THREE_REAL, {
+                Color: espiarConstrutor(THREE_REAL.Color, "Color"),
+                Vector3: espiarConstrutor(THREE_REAL.Vector3, "Vector3")
+            });
+
+            let pinturasDoCeu = 0;
+            const pintarFundoOriginal = cena.background.set;
+            cena.background.set = function () {
+                pinturasDoCeu++;
+                return pintarFundoOriginal.apply(this, arguments);
+            };
+
+
+            // ============================================================
+            // Ajudantes: relógio, eventos, medidas
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? TOLERANCIA : tolerancia);
+            }
+
+            function normalizar(angulo) {
+                return Math.atan2(Math.sin(angulo), Math.cos(angulo));
+            }
+
+            function registrar(categoria, mensagem) {
+                if (!(categoria in violacoes)) {
+                    violacoes[categoria] = mensagem;
+                }
+            }
+
+            function todosFinitos(lista) {
+                for (let i = 0; i < lista.length; i++) {
+                    if (!Number.isFinite(lista[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function fotografar() {
+                return {
+                    giro: giroDaBarca,
+                    proa: proa,
+                    guinada: guinada.angulo,
+                    guinadaVelocidade: guinada.velocidade,
+                    arfagem: arfagem.angulo,
+                    arfagemVelocidade: arfagem.velocidade,
+                    x: barca.position.x,
+                    z: barca.position.z,
+                    tempoTotal: tempoTotal,
+                    pinturasDoCeu: pinturasDoCeu
+                };
+            }
+
+            function direcaoDoFeixeNoMundo() {
+                // getWorldDirection devolve o +z; a luz sai pelo −z, por isso o negate.
+                return feixe.getWorldDirection(new THREE_REAL.Vector3()).negate();
+            }
+
+            /* Direção esperada: proa + guinada em volta de y, depois arfagem em volta de x (positiva = para cima). */
+            function direcaoEsperada() {
+                const giro = proa + guinada.angulo;
+                return {
+                    x: -Math.cos(arfagem.angulo) * Math.sin(giro),
+                    y: Math.sin(arfagem.angulo),
+                    z: -Math.cos(arfagem.angulo) * Math.cos(giro)
+                };
+            }
+
+            function alturaEsperada(x, z, tempo) {
+                return 0.5 * (Math.sin(0.6 * x + 1.3 * tempo) + Math.sin(0.5 * z + 0.9 * tempo)) / 2;
+            }
+
+            /* Entrega um quadro e confere, em TODO quadro, as regras que valem sempre. */
+            function passar(milissegundos) {
+                const antes = fotografar();
+                const construidosAntes = construcoes.Color + construcoes.Vector3;
+                const rodou = avancarQuadro(milissegundos);
+                if (!rodou) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+                if (construcoes.Color + construcoes.Vector3 !== construidosAntes) {
+                    registrar("nenhum new THREE.Color/Vector3 por quadro",
+                        "Color " + construcoes.Color + ", Vector3 " + construcoes.Vector3);
+                }
+                const duracao = Math.max(0, Math.min(milissegundos / 1000, TETO_DO_QUADRO));
+                tempoEsperado += duracao;
+                vigiar(antes, duracao);
+            }
+
+            function vigiar(antes, duracao) {
+                const direcao = direcaoDoFeixeNoMundo();
+                const esperada = direcaoEsperada();
+
+                if (!todosFinitos([giroDaBarca, proa, guinada.angulo, guinada.velocidade, arfagem.angulo, arfagem.velocidade,
+                    barca.position.x, barca.position.y, barca.position.z, camera.position.x, camera.position.y, camera.position.z,
+                    direcao.x, direcao.y, direcao.z, cena.background.r, cena.fog.density, luzDoCeu.intensity, cone.material.opacity])) {
+                    registrar("NaN", "algum número virou NaN ou infinito");
+                }
+
+                if (Math.abs(guinada.angulo) > LIMITE_DA_GUINADA + MARGEM || Math.abs(lanterna.rotation.y) > LIMITE_DA_GUINADA + MARGEM) {
+                    registrar("guinada em ±75°", "guinada " + guinada.angulo);
+                }
+                if (arfagem.angulo < ARFAGEM_MINIMA - MARGEM || arfagem.angulo > ARFAGEM_MAXIMA + MARGEM ||
+                    feixe.rotation.x < ARFAGEM_MINIMA - MARGEM || feixe.rotation.x > ARFAGEM_MAXIMA + MARGEM) {
+                    registrar("arfagem entre −20° e +60°", "arfagem " + arfagem.angulo);
+                }
+
+                const guinadaNoMundo = normalizar(Math.atan2(-direcao.x, -direcao.z) - proa);
+                const elevacaoNoMundo = Math.asin(Math.max(-1, Math.min(1, direcao.y)));
+                if (Math.abs(guinadaNoMundo) > LIMITE_DA_GUINADA + 1e-6 ||
+                    elevacaoNoMundo < ARFAGEM_MINIMA - 1e-6 || elevacaoNoMundo > ARFAGEM_MAXIMA + 1e-6) {
+                    registrar("feixe a ±75° da proa e −20°…+60° de altura no mundo", "guinada no mundo " + guinadaNoMundo + ", y " + direcao.y);
+                }
+
+                if (!proximo(direcao.x, esperada.x, 1e-6) || !proximo(direcao.y, esperada.y, 1e-6) || !proximo(direcao.z, esperada.z, 1e-6)) {
+                    registrar("direção no mundo = proa + guinada",
+                        "obtido (" + direcao.x + ", " + direcao.y + ", " + direcao.z + "), esperado (" + esperada.x + ", " + esperada.y + ", " + esperada.z + ")");
+                }
+
+                if (Math.abs(giroDaBarca) > GIRO_MAXIMO_DA_BARCA + MARGEM) {
+                    registrar("giro da barca ≤ 1,4 rad/s", "giro " + giroDaBarca);
+                }
+                if (Math.abs(giroDaBarca - antes.giro) > ACELERACAO_DO_GIRO * duracao + MARGEM) {
+                    registrar("aceleração da barca ≤ 4 rad/s²", "mudou " + (giroDaBarca - antes.giro) + " em " + duracao + " s");
+                }
+                if (Math.abs(normalizar(proa - antes.proa)) > GIRO_MAXIMO_DA_BARCA * duracao + MARGEM) {
+                    registrar("proa não gira mais que 1,4 rad/s", "girou " + normalizar(proa - antes.proa) + " em " + duracao + " s");
+                }
+                // a frente da barca é (−sen proa, −cos proa), a 5 m/s
+                if (!proximo(barca.position.x - antes.x, -Math.sin(proa) * VELOCIDADE_DA_BARCA * duracao, 1e-6) ||
+                    !proximo(barca.position.z - antes.z, -Math.cos(proa) * VELOCIDADE_DA_BARCA * duracao, 1e-6)) {
+                    registrar("a barca anda 5 m/s para a proa", "andou (" + (barca.position.x - antes.x) + ", " + (barca.position.z - antes.z) + ") com proa " + proa);
+                }
+                if (!proximo(barca.rotation.y, proa, MARGEM)) {
+                    registrar("a barca mostra a proa", "rotation.y " + barca.rotation.y + ", proa " + proa);
+                }
+
+                // A lanterna fica para trás da proa: no MUNDO ela só anda com a mira (≤ 2,5 rad/s); no LOCAL, a mira mais o giro da barca.
+                const mudancaDaLanternaNoMundo = Math.abs(normalizar((proa + guinada.angulo) - (antes.proa + antes.guinada)));
+                if (mudancaDaLanternaNoMundo > VELOCIDADE_MAXIMA_DA_MIRA * duracao + MARGEM) {
+                    registrar("lanterna no mundo anda ≤ 2,5 rad/s", "andou " + mudancaDaLanternaNoMundo + " em " + duracao + " s");
+                }
+                if (Math.abs(guinada.angulo - antes.guinada) > GIRO_LOCAL_MAXIMO_DA_GUINADA * duracao + MARGEM) {
+                    registrar("guinada local anda ≤ (2,5 + 1,4) rad/s", "andou " + (guinada.angulo - antes.guinada) + " em " + duracao + " s");
+                }
+                if (Math.abs(arfagem.angulo - antes.arfagem) > VELOCIDADE_MAXIMA_DA_MIRA * duracao + MARGEM) {
+                    registrar("arfagem anda ≤ 2,5 rad/s", "andou " + (arfagem.angulo - antes.arfagem) + " em " + duracao + " s");
+                }
+
+                [["guinada", guinada, antes.guinadaVelocidade], ["arfagem", arfagem, antes.arfagemVelocidade]]
+                    .forEach(function (eixo) {
+                        const nome = eixo[0];
+                        if (Math.abs(eixo[1].velocidade) > VELOCIDADE_MAXIMA_DA_MIRA + MARGEM) {
+                            registrar("lanterna ≤ 2,5 rad/s", nome + " velocidade " + eixo[1].velocidade);
+                        }
+                        if (Math.abs(eixo[1].velocidade - eixo[2]) > ACELERACAO_DA_MIRA * duracao + MARGEM) {
+                            registrar("lanterna ≤ 8 rad/s²", nome + " mudou " + (eixo[1].velocidade - eixo[2]) + " em " + duracao + " s");
+                        }
+                    });
+
+                if (!proximo(lanterna.rotation.y, guinada.angulo, MARGEM) || !proximo(feixe.rotation.x, arfagem.angulo, MARGEM)) {
+                    registrar("a malha mostra o estado", "lanterna.y " + lanterna.rotation.y + ", feixe.x " + feixe.rotation.x);
+                }
+
+                const idealX = barca.position.x + 8 * Math.sin(proa);
+                const idealY = barca.position.y + 5;
+                const idealZ = barca.position.z + 8 * Math.cos(proa);
+                const atraso = Math.hypot(camera.position.x - idealX, camera.position.y - idealY, camera.position.z - idealZ);
+                maiorAtrasoDaCamera = Math.max(maiorAtrasoDaCamera, atraso);
+                if (atraso > FOLGA_DA_CAMERA_EM_METROS) {
+                    registrar("câmera perto do ponto ideal", "atraso de " + atraso.toFixed(2) + " m");
+                }
+
+                // O mar anda em degraus da grade: múltiplo de 90/64 por eixo, a no máximo meio degrau da barca, na altura 0.
+                [["x", mar.position.x, barca.position.x], ["z", mar.position.z, barca.position.z]].forEach(function (eixo) {
+                    const emDegraus = eixo[1] / PASSO_DA_GRADE;
+                    if (Math.abs(emDegraus - Math.round(emDegraus)) > MARGEM) {
+                        registrar("o mar anda em múltiplos da grade", "mar." + eixo[0] + " = " + eixo[1] + " (" + emDegraus + " degraus)");
+                    }
+                    if (Math.abs(eixo[1] - eixo[2]) > PASSO_DA_GRADE / 2 + MARGEM) {
+                        registrar("o mar fica a ≤ meio degrau da barca", "mar." + eixo[0] + " " + eixo[1] + ", barca " + eixo[2]);
+                    }
+                });
+                if (mar.position.y !== 0) {
+                    registrar("o mar fica na altura 0", "mar.y = " + mar.position.y);
+                }
+
+                if (!proximo(tempoTotal, tempoEsperado, 1e-6)) {
+                    registrar("o relógio do jogo", "tempoTotal " + tempoTotal + ", esperado " + tempoEsperado);
+                }
+
+                const pinturas = pinturasDoCeu - antes.pinturasDoCeu;
+                if (antes.tempoTotal >= DURACAO_DO_ENTARDECER && pinturas > 0) {
+                    registrar("com a noite fechada o céu não é repintado", pinturas + " pintura(s) depois de " + antes.tempoTotal + " s");
+                }
+                if (antes.tempoTotal < DURACAO_DO_ENTARDECER && duracao > 0 && pinturas === 0) {
+                    registrar("durante o entardecer o céu é repintado", "nenhuma pintura em t = " + antes.tempoTotal);
+                }
+
+                if (medindoAIlha) {
+                    menorDistanciaDaIlha = Math.min(menorDistanciaDaIlha, Math.hypot(barca.position.x - ILHA.x, barca.position.z - ILHA.z));
+                }
+            }
+
+            function passarSegundos(segundos, milissegundos) {
+                const passo = milissegundos === undefined ? 50 : milissegundos;
+                const quadros = Math.round(segundos * 1000 / passo);
+                for (let i = 0; i < quadros; i++) {
+                    passar(passo);
+                }
+            }
+
+            function passarAte(segundos) {
+                passarSegundos(segundos - tempoEsperado);
+            }
+
+            function tecla(tipo, nome, opcoes) {
+                window.dispatchEvent(new KeyboardEvent(tipo, Object.assign({ key: nome }, opcoes)));
+            }
+
+            function apertar(nome, opcoes) {
+                tecla("keydown", nome, opcoes);
+            }
+
+            function soltar(nome) {
+                tecla("keyup", nome);
+            }
+
+            function eventoDeBotao(botao, tipo) {
+                botao.dispatchEvent(new PointerEvent(tipo, { pointerType: "touch", bubbles: false }));
+            }
+
+            /* Teclado NO botão (foco): é assim que Enter e Espaço chegam ao botão. Devolve o evento, para ver o preventDefault. */
+            function teclaNoBotao(botao, tipo, nome, opcoes) {
+                const evento = new KeyboardEvent(tipo, Object.assign({ key: nome, bubbles: true, cancelable: true }, opcoes));
+                botao.dispatchEvent(evento);
+                return evento;
+            }
+
+            /* fx e fy são frações do palco: (0, 0) = canto de cima à esquerda; valores fora de 0..1 caem fora do palco. */
+            function eventoNoPalco(tipo, fracaoX, fracaoY, tipoDePonteiro) {
+                const retangulo = palco.getBoundingClientRect();
+                palco.dispatchEvent(new PointerEvent(tipo, {
+                    clientX: retangulo.left + fracaoX * retangulo.width,
+                    clientY: retangulo.top + fracaoY * retangulo.height,
+                    pointerType: tipoDePonteiro || "mouse"
+                }));
+            }
+
+            /* Um mouse de verdade não fica parado: renova o comando a cada 0,5 s (a mira dura 2 s). */
+            function mirarComMouse(fracaoX, fracaoY, segundos) {
+                const rodadas = Math.round(segundos / 0.5);
+                for (let i = 0; i < rodadas; i++) {
+                    eventoNoPalco("pointermove", fracaoX, fracaoY);
+                    passarSegundos(0.5);
+                }
+            }
+
+            function soltarTudo() {
+                window.dispatchEvent(new Event("blur"));
+                TECLAS_DO_ROBO.forEach(soltar);
+                [BOTAO_ESQUERDA, BOTAO_DIREITA].forEach(function (botao) { eventoDeBotao(botao, "pointerleave"); });
+                eventoNoPalco("pointerleave", 0.5, 0.5, "touch");
+            }
+
+            /* Solta tudo e espera barca e lanterna voltarem ao repouso. */
+            function acalmar() {
+                soltarTudo();
+                passarSegundos(5);
+            }
+
+            function conferirSemViolacoes(contexto) {
+                const categorias = Object.keys(violacoes);
+                conferir(contexto + ": nenhuma regra quebrada em nenhum quadro", categorias.length === 0,
+                    categorias.map(function (categoria) { return categoria + " (" + violacoes[categoria] + ")"; }).join("; "));
+                violacoes = {};
+            }
+
+            function proximoDeGraus(radianos, graus) {
+                return proximo(radianos, graus * GRAU, 1e-3);
+            }
+
+            /* Substitui setTimeout enquanto `funcao` roda e devolve os temporizadores que o jogo pediu (sem esperar de verdade). */
+            function capturarTemporizadores(funcao) {
+                const original = window.setTimeout;
+                const pedidos = [];
+                window.setTimeout = function (chamada, milissegundos) {
+                    pedidos.push({ chamada: chamada, milissegundos: milissegundos });
+                    return 0;
+                };
+                try {
+                    funcao();
+                } finally {
+                    window.setTimeout = original;
+                }
+                return pedidos;
+            }
+
+            /* Atraso da câmera na reta, no plano horizontal, em relação ao ponto ideal atrás da barca. */
+            function atrasoHorizontalDaCamera() {
+                const idealX = barca.position.x + 8 * Math.sin(proa);
+                const idealZ = barca.position.z + 8 * Math.cos(proa);
+                return Math.hypot(camera.position.x - idealX, camera.position.z - idealZ);
+            }
+
+
+            // ============================================================
+            // Entardecer (mesma tabela do passo 3) e mar em coordenadas do mundo
+            // ============================================================
+            function corMisturada(corInicial, corFinal, t) {
+                const inicio = new THREE_REAL.Color(corInicial);
+                const fim = new THREE_REAL.Color(corFinal);
+                return {
+                    r: inicio.r + (fim.r - inicio.r) * t,
+                    g: inicio.g + (fim.g - inicio.g) * t,
+                    b: inicio.b + (fim.b - inicio.b) * t
+                };
+            }
+
+            function corIgual(cor, esperada) {
+                return proximo(cor.r, esperada.r) && proximo(cor.g, esperada.g) && proximo(cor.b, esperada.b);
+            }
+
+            function piorErroDoMar() {
+                const posicoes = mar.geometry.attributes.position;
+                let pior = 0;
+                const indices = [0, posicoes.count - 1, Math.floor(posicoes.count / 2)];
+                for (let i = 0; i < posicoes.count; i += 97) {
+                    indices.push(i);
+                }
+                indices.forEach(function (i) {
+                    const noMundoX = posicoes.getX(i) + mar.position.x;
+                    const noMundoZ = posicoes.getZ(i) + mar.position.z;
+                    pior = Math.max(pior, Math.abs(posicoes.getY(i) - alturaEsperada(noMundoX, noMundoZ, tempoEsperado)));
+                });
+                return pior;
+            }
+
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("grafo de cena: barca (proa) → lanterna (guinada) → feixe (arfagem) → cone, SpotLight, alvo", function () {
+                conferir("o three.js carregou e o renderizador existe", typeof THREE !== "undefined" && renderizador !== null);
+                conferir("a barca é filha da cena", barca.parent === cena);
+                conferir("a lanterna é filha da barca", lanterna.parent === barca);
+                conferir("o feixe é filho da lanterna", feixe.parent === lanterna);
+
+                const luz = feixe.children.find(function (filho) { return filho.isSpotLight === true; });
+                conferir("o SpotLight mora no feixe", luz !== undefined);
+                conferir("o alvo do SpotLight mora no feixe", luz !== undefined && feixe.children.includes(luz.target));
+                conferir("o cone mora no feixe", feixe.children.includes(cone));
+
+                conferirIgual("a intenção tem leme, guinadaAlvo e arfagemAlvo",
+                    Object.keys(intencao).sort().join(","), "arfagemAlvo,guinadaAlvo,leme");
+                conferir("começa em repouso: proa 0, guinada 0, arfagem −0,12",
+                    proa === 0 && guinada.angulo === 0 && proximo(arfagem.angulo, REPOUSO_DA_ARFAGEM));
+                conferir("a câmera nasce no ponto ideal (0, 5, 8) da barca",
+                    proximo(camera.position.x, barca.position.x) && proximo(camera.position.y, barca.position.y + 5) &&
+                    proximo(camera.position.z, barca.position.z + 8));
+                conferir("o mar nasce numa posição da grade", Math.abs(mar.position.x / PASSO_DA_GRADE - Math.round(mar.position.x / PASSO_DA_GRADE)) < MARGEM &&
+                    Math.abs(mar.position.z / PASSO_DA_GRADE - Math.round(mar.position.z / PASSO_DA_GRADE)) < MARGEM);
+            });
+
+            testar("os espiões estão vivos (um new THREE.Color/Vector3 de verdade seria contado)", function () {
+                const antes = { cor: construcoes.Color, vetor: construcoes.Vector3 };
+                new window.THREE.Color();
+                new window.THREE.Vector3();
+                conferirIgual("new THREE.Color() conta 1", construcoes.Color, antes.cor + 1);
+                conferirIgual("new THREE.Vector3() conta 1", construcoes.Vector3, antes.vetor + 1);
+                conferir("o objeto criado continua sendo um Vector3 de verdade", new window.THREE.Vector3(1, 2, 3).add(new THREE_REAL.Vector3(1, 1, 1)).y === 3);
+                construcoes.Color = antes.cor;
+                construcoes.Vector3 = antes.vetor;
+            });
+
+            testar("entardecer e mar em coordenadas do mundo (t = 0, 10, 20, 30, 40 e depois); sem leme a barca passa longe da ilha", function () {
+                const instantes = [
+                    { t: 0,  densidade: 0.012,  luz: 4,    cone: 0.04 },
+                    { t: 10, densidade: 0.0165, luz: 3.85, cone: 0.075 },
+                    { t: 20, densidade: 0.021,  luz: 3.7,  cone: 0.11 },
+                    { t: 30, densidade: 0.0255, luz: 3.55, cone: 0.145 },
+                    { t: 40, densidade: 0.03,   luz: 3.4,  cone: 0.18 },
+                    { t: 80, densidade: 0.03,   luz: 3.4,  cone: 0.18 }
+                ];
+                medindoAIlha = true;
+
+                instantes.forEach(function (instante) {
+                    if (instante.t === 0) {
+                        passar(0);
+                    } else {
+                        passarAte(instante.t);
+                    }
+                    const rotulo = "t = " + instante.t + " s: ";
+                    const noite = Math.min(tempoEsperado / DURACAO_DO_ENTARDECER, 1);
+
+                    const ceuEsperado = corMisturada(CEU_DE_TARDE, CEU_DE_NOITE, noite);
+                    conferir(rotulo + "fundo tarde→noite", corIgual(cena.background, ceuEsperado));
+                    conferir(rotulo + "a névoa tem a cor do fundo",
+                        cena.fog.color.r === cena.background.r && cena.fog.color.g === cena.background.g && cena.fog.color.b === cena.background.b);
+                    conferir(rotulo + "cor do mar", corIgual(mar.material.color, corMisturada(MAR_DE_TARDE, MAR_DE_NOITE, noite)));
+                    conferir(rotulo + "densidade da névoa " + instante.densidade, proximo(cena.fog.density, instante.densidade));
+                    conferir(rotulo + "luz do céu " + instante.luz, proximo(luzDoCeu.intensity, instante.luz));
+                    conferir(rotulo + "opacidade do cone " + instante.cone, proximo(cone.material.opacity, instante.cone));
+
+                    const erro = piorErroDoMar();
+                    conferir(rotulo + "vértices do mar seguem a fórmula com x+mar.x, z+mar.z (erro " + erro.toExponential(1) + ")", erro < TOLERANCIA);
+                    conferir(rotulo + "a barca boia na onda",
+                        proximo(barca.position.y, alturaEsperada(barca.position.x, barca.position.z, tempoEsperado)));
+
+                    if (instante.t === 30) {
+                        medindoAIlha = false;
+                        const distanciaDeContato = ILHA.raio + MEIO_COMPRIMENTO_DA_BARCA;
+                        conferir("sem nenhuma entrada, em 30 s a barca nunca chega a " + distanciaDeContato + " m do centro da ilha (mínimo " + menorDistanciaDaIlha.toFixed(2) + " m)",
+                            menorDistanciaDaIlha > distanciaDeContato);
+                        conferir("e ela de fato passou pela ilha (está bem além dela em z)", barca.position.z < ILHA.z - 50, "z = " + barca.position.z);
+                    }
+                });
+
+                conferir("a barca andou de verdade (o mar saiu da origem)", Math.hypot(mar.position.x, mar.position.z) > 100,
+                    "mar em (" + mar.position.x + ", " + mar.position.z + ")");
+                conferir("o entardecer repintou o céu centenas de vezes (o espião de pintura está vivo): " + pinturasDoCeu, pinturasDoCeu > 500);
+                conferirSemViolacoes("durante o entardecer");
+            });
+
+            testar("com a noite fechada o céu NÃO é repintado, e continua noturno", function () {
+                conferir("ponto de partida: a noite já fechou", tempoEsperado >= DURACAO_DO_ENTARDECER);
+                const pinturasAntes = pinturasDoCeu;
+                passarSegundos(3);
+                conferirIgual("60 quadros de noite fechada: nenhuma chamada de cor no fundo", pinturasDoCeu, pinturasAntes);
+                conferir("o fundo continua com a cor da noite", corIgual(cena.background, corMisturada(CEU_DE_TARDE, CEU_DE_NOITE, 1)));
+                conferir("e a névoa continua com a cor do fundo", cena.fog.color.r === cena.background.r && cena.fog.color.b === cena.background.b);
+                conferirSemViolacoes("noite fechada");
+            });
+
+            testar("nenhum new THREE.Color/Vector3 por quadro, com a barca virando, mirando e o painel H ligado", function () {
+                acalmar();
+                const antes = { cor: construcoes.Color, vetor: construcoes.Vector3 };
+                apertar("h");   // o painel H usa getWorldDirection: também não pode alocar
+                apertar("a");
+                apertar("q");
+                apertar("ArrowUp");
+                passarSegundos(2);
+                eventoNoPalco("pointermove", 0.3, 0.2);
+                passarSegundos(2);
+                soltarTudo();
+                passarSegundos(2, 16);
+                apertar("h");
+                conferirIgual("nenhum Color criado em ~300 quadros", construcoes.Color, antes.cor);
+                conferirIgual("nenhum Vector3 criado em ~300 quadros", construcoes.Vector3, antes.vetor);
+                acalmar();
+                conferirSemViolacoes("sem alocação por quadro");
+            });
+
+            testar("o mar anda em degraus da grade (90/64 m), não a cada quadro", function () {
+                acalmar();
+                const posicoesDoMar = [];
+                let mudancas = 0;
+                let anterior = { x: mar.position.x, z: mar.position.z };
+                for (let i = 0; i < 80; i++) {
+                    passar(50);   // a 5 m/s: 0,25 m por quadro, 20 m no total, em qualquer rumo
+                    posicoesDoMar.push(mar.position.x, mar.position.z);
+                    if (mar.position.x !== anterior.x || mar.position.z !== anterior.z) {
+                        mudancas++;
+                        anterior = { x: mar.position.x, z: mar.position.z };
+                    }
+                }
+                conferir("em 80 quadros o mar saltou de 8 a 30 vezes (um salto a cada 1,40625 m por eixo), não 80: " + mudancas, mudancas >= 8 && mudancas <= 30);
+                conferir("toda posição do mar é um múltiplo inteiro da grade", posicoesDoMar.every(function (metros) {
+                    return Math.abs(metros / PASSO_DA_GRADE - Math.round(metros / PASSO_DA_GRADE)) < MARGEM;
+                }));
+                conferir("e o mar nunca fica a mais de meio degrau da barca",
+                    Math.abs(mar.position.z - barca.position.z) <= PASSO_DA_GRADE / 2 + MARGEM && Math.abs(mar.position.x - barca.position.x) <= PASSO_DA_GRADE / 2 + MARGEM);
+                conferirIgual("o mar fica na altura 0", mar.position.y, 0);
+                conferirSemViolacoes("mar em degraus");
+            });
+
+            testar("leme: A/← viram à esquerda (+), D/→ à direita (−), com aceleração de 4 rad/s²", function () {
+                acalmar();
+                const proaAntes = proa;
+                apertar("a");
+                passar(50);
+                conferir("1 quadro de 50 ms com A: giro = 4 × 0,05 = 0,2 rad/s", proximo(giroDaBarca, 0.2), "giro = " + giroDaBarca);
+                conferirIgual("o leme vale +1", intencao.leme, 1);
+                passarSegundos(1);
+                conferir("depois de 1 s o giro chega a 1,4 rad/s e não passa", proximo(giroDaBarca, GIRO_MAXIMO_DA_BARCA, MARGEM), "giro = " + giroDaBarca);
+                conferir("a proa aumentou (esquerda é positivo)", normalizar(proa - proaAntes) > 0.5);
+                soltar("a");
+                acalmar();
+
+                const proaDepois = proa;
+                apertar("D");
+                passarSegundos(1);
+                conferirIgual("D maiúsculo: leme −1", intencao.leme, -1);
+                conferir("a proa diminuiu (direita é negativo)", normalizar(proa - proaDepois) < -0.5);
+                acalmar();
+
+                apertar("ArrowLeft");
+                passar(50);
+                conferirIgual("← vira à esquerda", intencao.leme, 1);
+                soltar("ArrowLeft");
+                apertar("ArrowRight");
+                passar(50);
+                conferirIgual("→ vira à direita", intencao.leme, -1);
+                acalmar();
+
+                apertar("a");
+                apertar("d");
+                passar(50);
+                conferirIgual("A e D juntas se anulam", intencao.leme, 0);
+                acalmar();
+                conferirSemViolacoes("leme");
+            });
+
+            testar("a lanterna fica para trás da proa: virando, a guinada local compensa o giro (regime −(giro ÷ 5)·(1 − 5·dt))", function () {
+                acalmar();
+                apertar("a");
+                passarSegundos(3);
+                // regime: g = (g − 1,4·dt)·(1 − 5·dt)  →  g = −(1,4 ÷ 5)·(1 − 5·dt) = −0,28 · 0,75 com quadros de 50 ms
+                conferir("virando a 1,4 rad/s à esquerda a lanterna fica à DIREITA da proa (guinada ≈ −0,21 com quadros de 50 ms)",
+                    proximo(guinada.angulo, -0.21, 5e-3), "guinada = " + guinada.angulo);
+                conferir("o feixe, no mundo, está atrás da proa: o ângulo relativo à proa é a guinada",
+                    proximo(normalizar(Math.atan2(-direcaoDoFeixeNoMundo().x, -direcaoDoFeixeNoMundo().z) - proa), guinada.angulo, 1e-6));
+                soltar("a");
+                passarSegundos(2);
+                conferir("solto o leme, a lanterna alcança a proa de novo (guinada 0)", proximo(guinada.angulo, 0, 1e-3), "guinada = " + guinada.angulo);
+
+                apertar("d");
+                passarSegundos(3);
+                conferir("virando à direita a lanterna fica à ESQUERDA da proa (guinada ≈ +0,21)",
+                    proximo(guinada.angulo, 0.21, 5e-3), "guinada = " + guinada.angulo);
+                acalmar();
+                conferirSemViolacoes("lanterna atrasada");
+            });
+
+            testar("mirar pelo teclado: Q/E giram o alvo a 2 rad/s; guinada presa em ±75°, arfagem de −20° a +60°", function () {
+                acalmar();
+                apertar("q");
+                passar(50);
+                conferir("1 quadro de 50 ms com Q: o alvo gira 2 × 0,05 = 0,1 rad (não vai de uma vez ao limite)",
+                    proximo(intencao.guinadaAlvo, 0.1, MARGEM), "alvo = " + intencao.guinadaAlvo);
+                passar(50);
+                conferir("2 quadros: 0,2 rad", proximo(intencao.guinadaAlvo, 0.2, MARGEM));
+                passarSegundos(4);
+                conferir("Q: guinada chega a +75°", proximoDeGraus(guinada.angulo, 75), "guinada = " + guinada.angulo);
+                conferir("e o alvo para em +75°", proximoDeGraus(intencao.guinadaAlvo, 75));
+                conferir("a lanterna mostra +75°", proximoDeGraus(lanterna.rotation.y, 75));
+                const direcao = direcaoDoFeixeNoMundo();
+                const proaDoFeixe = normalizar(Math.atan2(-direcao.x, -direcao.z) - proa);
+                conferir("no mundo, o feixe está 75° à esquerda da proa", proximoDeGraus(proaDoFeixe, 75), "relativo " + proaDoFeixe);
+                acalmar();
+
+                apertar("e");
+                passarSegundos(4);
+                conferir("E: guinada chega a −75°", proximoDeGraus(guinada.angulo, -75), "guinada = " + guinada.angulo);
+                acalmar();
+
+                apertar("ArrowUp");
+                passar(50);
+                conferir("↑ por 1 quadro: o alvo sobe do repouso 2 × 0,05 = 0,1 rad", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM + 0.1, MARGEM),
+                    "alvo = " + intencao.arfagemAlvo);
+                passarSegundos(4);
+                conferir("↑: arfagem chega a +60° (e não passa)", proximoDeGraus(arfagem.angulo, 60) && arfagem.angulo <= ARFAGEM_MAXIMA + MARGEM,
+                    "arfagem = " + arfagem.angulo);
+                conferir("o feixe aponta para cima (y > 0,8)", direcaoDoFeixeNoMundo().y > 0.8, "y = " + direcaoDoFeixeNoMundo().y);
+                acalmar();
+
+                apertar("ArrowDown");
+                passarSegundos(4);
+                conferir("↓: arfagem chega a −20° (e não passa)", proximoDeGraus(arfagem.angulo, -20) && arfagem.angulo >= ARFAGEM_MINIMA - MARGEM,
+                    "arfagem = " + arfagem.angulo);
+                conferir("o feixe aponta um pouco para baixo (y ≈ sen −20°)", proximo(direcaoDoFeixeNoMundo().y, Math.sin(-20 * GRAU), 1e-6));
+                acalmar();
+
+                conferir("sem teclas a guinada volta a 0", proximo(guinada.angulo, 0, 1e-3), "guinada = " + guinada.angulo);
+                conferir("sem teclas a arfagem volta ao repouso (−0,12)", proximo(arfagem.angulo, REPOUSO_DA_ARFAGEM, 1e-3), "arfagem = " + arfagem.angulo);
+
+                apertar("q");
+                apertar("e");
+                passarSegundos(2);
+                conferir("Q e E juntas se anulam", proximo(guinada.angulo, 0, 1e-3));
+                acalmar();
+                conferirSemViolacoes("mira pelo teclado");
+            });
+
+            testar("botões ◀ ▶ (PointerEvent) giram a barca e soltam em up/cancel/leave", function () {
+                acalmar();
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown");
+                passar(50);
+                conferirIgual("◀ apertado: leme +1", intencao.leme, 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerup");
+                passar(50);
+                conferirIgual("◀ solto (pointerup): leme 0", intencao.leme, 0);
+
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown");
+                passar(50);
+                conferirIgual("▶ apertado: leme −1", intencao.leme, -1);
+                eventoDeBotao(BOTAO_DIREITA, "pointerleave");
+                passar(50);
+                conferirIgual("▶ com o dedo fora (pointerleave): leme 0", intencao.leme, 0);
+
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown");
+                eventoDeBotao(BOTAO_ESQUERDA, "pointercancel");
+                passar(50);
+                conferirIgual("◀ cancelado (pointercancel): leme 0", intencao.leme, 0);
+
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown");
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown");
+                passar(50);
+                conferirIgual("os dois botões juntos se anulam", intencao.leme, 0);
+                acalmar();
+                conferirSemViolacoes("botões");
+            });
+
+            testar("botões pelo teclado e pelo leitor de tela: Enter e Espaço SEGURAM; click com detail 0 dá um toque curto", function () {
+                acalmar();
+
+                const enter = teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter");
+                passar(50);
+                conferirIgual("Enter segurado em ◀: leme +1", intencao.leme, 1);
+                conferir("Enter no botão não deixa o navegador disparar um click (preventDefault)", enter.defaultPrevented === true);
+                teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter", { repeat: true });
+                passar(50);
+                conferirIgual("a repetição automática do Enter continua segurando", intencao.leme, 1);
+                const soltouEnter = teclaNoBotao(BOTAO_ESQUERDA, "keyup", "Enter");
+                passar(50);
+                conferirIgual("soltar o Enter solta o giro", intencao.leme, 0);
+                conferir("keyup do Enter também não vira click", soltouEnter.defaultPrevented === true);
+
+                const espaco = teclaNoBotao(BOTAO_DIREITA, "keydown", " ");
+                passar(50);
+                conferirIgual("Espaço segurado em ▶: leme −1", intencao.leme, -1);
+                conferir("Espaço também tem o click suprimido", espaco.defaultPrevented === true);
+                teclaNoBotao(BOTAO_DIREITA, "keyup", " ");
+                passar(50);
+                conferirIgual("soltar o Espaço solta o giro", intencao.leme, 0);
+
+                const outra = teclaNoBotao(BOTAO_ESQUERDA, "keydown", "x");
+                teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Tab");
+                passar(50);
+                conferir("outras teclas no botão (x, Tab) não seguram nada e o navegador as trata", intencao.leme === 0 && outra.defaultPrevented === false);
+
+                teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter");
+                BOTAO_ESQUERDA.dispatchEvent(new Event("blur"));
+                passar(50);
+                conferirIgual("o botão perder o foco (blur) com o Enter segurado solta o giro", intencao.leme, 0);
+
+                // click: leitor de tela e comando de voz mandam só `click`, com detail 0; mouse e dedo mandam detail ≥ 1.
+                const pedidosDoToque = capturarTemporizadores(function () {
+                    BOTAO_ESQUERDA.dispatchEvent(new MouseEvent("click", { detail: 0, bubbles: true }));
+                });
+                passar(50);
+                conferirIgual("click com detail 0: o giro começa (leme +1)", intencao.leme, 1);
+                conferirIgual("e agenda UMA soltura", pedidosDoToque.length, 1);
+                conferir("a soltura vem em poucos milissegundos (um toque curto, ≤ 500 ms)",
+                    pedidosDoToque.length === 1 && pedidosDoToque[0].milissegundos > 0 && pedidosDoToque[0].milissegundos <= 500,
+                    JSON.stringify(pedidosDoToque.map(function (pedido) { return pedido.milissegundos; })));
+                if (pedidosDoToque.length === 1) {
+                    pedidosDoToque[0].chamada();
+                }
+                passar(50);
+                conferirIgual("passado o toque curto, o leme volta a 0", intencao.leme, 0);
+
+                const pedidosDoMouse = capturarTemporizadores(function () {
+                    BOTAO_DIREITA.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
+                });
+                passar(50);
+                conferir("click com detail 1 (mouse, dedo) não faz nada: o pointerdown já cuidou", intencao.leme === 0 && pedidosDoMouse.length === 0);
+
+                acalmar();
+                conferirSemViolacoes("botões acessíveis");
+            });
+
+            testar("o menu de contexto (segurar o dedo, botão direito) é cancelado nos botões e no palco", function () {
+                [["◀", BOTAO_ESQUERDA], ["▶", BOTAO_DIREITA], ["palco", palco]].forEach(function (alvo) {
+                    const evento = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+                    alvo[1].dispatchEvent(evento);
+                    conferir("contextmenu em " + alvo[0] + " recebe preventDefault", evento.defaultPrevented === true);
+                });
+                const fora = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+                document.body.dispatchEvent(fora);
+                conferir("fora do jogo o menu do navegador continua livre", fora.defaultPrevented === false);
+            });
+
+            testar("ponteiro: o mouse passa e mira; ângulos presos; sair do palco desce a 2 rad/s", function () {
+                acalmar();
+                eventoNoPalco("pointermove", 0.25, 0.5);
+                passar(50);
+                conferir("mouse a 1/4 da largura: guinada alvo +37,5°", proximoDeGraus(intencao.guinadaAlvo, 37.5), "alvo = " + intencao.guinadaAlvo);
+                conferir("mouse na metade de baixo: arfagem alvo = repouso", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM));
+
+                eventoNoPalco("pointermove", 0.5, 0.25);
+                passar(50);
+                const meioDoCaminho = REPOUSO_DA_ARFAGEM + (ARFAGEM_MAXIMA - REPOUSO_DA_ARFAGEM) * 0.5;
+                conferir("mouse na linha de 1/4 da altura: arfagem alvo = repouso + (60° − repouso) × 0,5 = 0,4636",
+                    proximo(intencao.arfagemAlvo, meioDoCaminho) && proximo(intencao.arfagemAlvo, 0.4636, 1e-4),
+                    "alvo = " + intencao.arfagemAlvo);
+                conferir("mouse no centro: guinada alvo 0", proximo(intencao.guinadaAlvo, 0));
+
+                mirarComMouse(-3, -3, 2.5);
+                conferir("mouse muito além do canto esquerdo/alto: guinada alvo +75° e arfagem alvo +60° (presos)",
+                    proximoDeGraus(intencao.guinadaAlvo, 75) && proximoDeGraus(intencao.arfagemAlvo, 60),
+                    "alvo " + intencao.guinadaAlvo + ", " + intencao.arfagemAlvo);
+                conferir("e a lanterna chega a +75° sem passar", proximoDeGraus(guinada.angulo, 75) && guinada.angulo <= LIMITE_DA_GUINADA + MARGEM);
+                conferir("e o feixe chega a +60° sem passar", proximoDeGraus(arfagem.angulo, 60) && arfagem.angulo <= ARFAGEM_MAXIMA + MARGEM);
+
+                mirarComMouse(4, 9, 3);
+                conferir("mouse muito além do canto direito/baixo: guinada −75°", proximoDeGraus(guinada.angulo, -75), "guinada = " + guinada.angulo);
+                conferir("e a arfagem alvo é o repouso (a metade de baixo não abaixa o feixe)", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM));
+
+                eventoNoPalco("pointerup", 1, 1, "mouse");
+                passar(50);
+                conferir("soltar o botão do mouse NÃO solta a mira", proximoDeGraus(intencao.guinadaAlvo, -75));
+
+                eventoNoPalco("pointerleave", 1, 1, "mouse");
+                passar(50);
+                conferir("o mouse sair do palco solta a mira, mas o alvo DESCE a 2 rad/s: −75° + 0,1 rad", proximo(intencao.guinadaAlvo, -LIMITE_DA_GUINADA + 0.1, 1e-6),
+                    "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(1);
+                conferirIgual("e em 1 s o alvo chega a 0 (a proa)", intencao.guinadaAlvo, 0);
+                conferir("e a arfagem alvo está no repouso", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM));
+                acalmar();
+                conferirSemViolacoes("mouse");
+            });
+
+            testar("ponteiro: a mira dura 2 s e depois decai até a proa a 2 rad/s (sem pulo)", function () {
+                acalmar();
+                eventoNoPalco("pointermove", 0.25, 0.5);   // guinada alvo +37,5° = 0,6545 rad
+                passarSegundos(1.9);
+                conferir("1,9 s depois do movimento o alvo ainda é +37,5°", proximoDeGraus(intencao.guinadaAlvo, 37.5), "alvo = " + intencao.guinadaAlvo);
+                conferir("e a lanterna já está lá", proximoDeGraus(guinada.angulo, 37.5));
+                passarSegundos(0.3);
+                conferir("2,2 s depois: o comando acabou e o alvo desce aos poucos (entre 0 e 37,5° − 0,15 rad), não pula",
+                    intencao.guinadaAlvo > 0.05 && intencao.guinadaAlvo < 37.5 * GRAU - 0.15, "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(0.8);
+                conferirIgual("3 s depois: o alvo voltou à proa (0)", intencao.guinadaAlvo, 0);
+                passarSegundos(2);
+                conferir("e a lanterna acompanha: guinada 0", proximo(guinada.angulo, 0, 1e-3), "guinada = " + guinada.angulo);
+                conferirSemViolacoes("2 s de comando");
+            });
+
+            testar("toque: arrastar na metade de cima mira; levantar o dedo mantém a mira até 2 s depois do ÚLTIMO movimento", function () {
+                acalmar();
+                eventoNoPalco("pointerdown", 0.9, 0.1, "touch");
+                eventoNoPalco("pointermove", 0.1, 0.1, "touch");
+                passar(50);
+                conferir("dedo arrastado para a esquerda: alvo +60°", proximoDeGraus(intencao.guinadaAlvo, 60), "alvo = " + intencao.guinadaAlvo);
+                conferir("e para o alto (y = 0,1): arfagem alvo = repouso + (60° − repouso) × 0,8",
+                    proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM + (ARFAGEM_MAXIMA - REPOUSO_DA_ARFAGEM) * 0.8, 1e-6));
+
+                eventoNoPalco("pointerup", 0.1, 0.1, "touch");
+                eventoNoPalco("pointerleave", 0.1, 0.1, "touch");
+                passarSegundos(1.5);
+                conferir("levantar o dedo (pointerup, pointerleave) não solta: 1,5 s depois o alvo ainda é +60°",
+                    proximoDeGraus(intencao.guinadaAlvo, 60), "alvo = " + intencao.guinadaAlvo);
+
+                eventoNoPalco("pointermove", 0.1, 0.1, "touch");   // renova os 2 s
+                passarSegundos(1.5);
+                conferir("3 s depois do primeiro movimento, mas 1,5 s depois do último: ainda +60°",
+                    proximoDeGraus(intencao.guinadaAlvo, 60), "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(1);
+                conferir("2,5 s depois do último movimento a mira já está descendo", intencao.guinadaAlvo < 60 * GRAU - 0.3, "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(1);
+                conferirIgual("e 3,5 s depois voltou à proa", intencao.guinadaAlvo, 0);
+                acalmar();
+                conferirSemViolacoes("toque");
+            });
+
+            testar("toque na metade de baixo não mira nem renova; pointercancel desce a 2 rad/s", function () {
+                acalmar();
+                eventoNoPalco("pointermove", 0.2, 0.8, "touch");
+                passar(50);
+                conferirIgual("toque na metade de baixo (ficam os botões): guinada alvo continua 0", intencao.guinadaAlvo, 0);
+                conferir("e a arfagem alvo continua no repouso", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM));
+
+                eventoNoPalco("pointermove", 0.1, 0.1, "touch");
+                passarSegundos(1.5);
+                eventoNoPalco("pointermove", 0.1, 0.9, "touch");   // embaixo: NÃO renova
+                passarSegundos(0.8);
+                conferir("2,3 s depois do último movimento válido: o toque de baixo não renovou, o alvo já desceu",
+                    intencao.guinadaAlvo < 60 * GRAU - 0.1, "alvo = " + intencao.guinadaAlvo);
+                acalmar();
+
+                eventoNoPalco("pointerdown", 0.1, 0.1, "touch");
+                passar(50);
+                conferir("antes do cancel o alvo está em +60°", proximoDeGraus(intencao.guinadaAlvo, 60));
+                eventoNoPalco("pointercancel", 0.1, 0.1, "touch");
+                passar(50);
+                conferir("pointercancel: 1 quadro depois o alvo caiu 2 × 0,05 = 0,1 rad (não vai a 0 de uma vez)",
+                    proximo(intencao.guinadaAlvo, 60 * GRAU - 0.1, 1e-6), "alvo = " + intencao.guinadaAlvo);
+                passar(50);
+                conferir("2 quadros: −0,2 rad", proximo(intencao.guinadaAlvo, 60 * GRAU - 0.2, 1e-6));
+                passarSegundos(0.6);
+                conferirIgual("e em menos de 1 s chega a 0", intencao.guinadaAlvo, 0);
+                acalmar();
+                conferirSemViolacoes("cancelamento");
+            });
+
+            testar("tecla segurada vence o ponteiro (e o ponteiro não volta sozinho)", function () {
+                acalmar();
+                eventoNoPalco("pointermove", 0.9, 0.5);   // guinada alvo −60°
+                passar(50);
+                conferir("o ponteiro manda: alvo −60°", proximoDeGraus(intencao.guinadaAlvo, -60));
+                apertar("q");
+                passar(50);
+                conferir("com Q segurada o alvo parte de −60° a 2 rad/s (−60° + 0,1 rad), o ponteiro perdeu",
+                    proximo(intencao.guinadaAlvo, -60 * GRAU + 0.1, 1e-6), "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(1.5);
+                conferir("1,5 s depois o alvo foi até +75° (um ponteiro ainda mandando o manteria em −60°)", proximoDeGraus(intencao.guinadaAlvo, 75));
+                soltar("q");
+                passarSegundos(1);
+                conferirIgual("soltando Q o alvo volta à proa; o comando antigo do ponteiro não ressuscita", intencao.guinadaAlvo, 0);
+                acalmar();
+                conferirSemViolacoes("tecla × ponteiro");
+            });
+
+            testar("local × mundo: proa + guinada = direção do feixe (e o painel H diz o mesmo)", function () {
+                acalmar();
+                apertar("a");
+                passarSegundos(1.5);
+                soltar("a");
+                apertar("q");
+                apertar("ArrowUp");
+                passarSegundos(1);   // a barca ainda está girando e a lanterna ainda andando: o caso difícil
+                const direcao = direcaoDoFeixeNoMundo();
+                const esperada = direcaoEsperada();
+                conferir("direção do feixe = (−cos a·sen(proa+guinada), sen a, −cos a·cos(proa+guinada))",
+                    proximo(direcao.x, esperada.x, 1e-6) && proximo(direcao.y, esperada.y, 1e-6) && proximo(direcao.z, esperada.z, 1e-6),
+                    "obtido (" + direcao.x.toFixed(4) + ", " + direcao.y.toFixed(4) + ", " + direcao.z.toFixed(4) + ")");
+                conferir("a proa não é zero (o teste exercita uma soma de verdade)", Math.abs(proa) > 0.3 && Math.abs(guinada.angulo) > 0.3,
+                    "proa " + proa + ", guinada " + guinada.angulo);
+
+                conferir("o painel começa escondido", painel.hidden === true);
+                apertar("h");
+                passar(50);
+                conferir("H mostra o painel", painel.hidden === false);
+                const texto = painel.textContent;
+                const partes = /^proa (-?\d+)° \+ guinada (-?\d+)° = mundo (-?\d+)°$/.exec(texto);
+                conferir("formato do painel: \"proa X° + guinada Y° = mundo Z°\"", partes !== null, "texto = " + JSON.stringify(texto));
+                if (partes !== null) {
+                    const soma = normalizar((Number(partes[1]) + Number(partes[2])) * Math.PI / 180) * 180 / Math.PI;
+                    const diferenca = Math.abs(normalizar((Number(partes[3]) * Math.PI / 180) - (soma * Math.PI / 180))) * 180 / Math.PI;
+                    conferir("mundo ≡ proa + guinada (mod 360°, arredondando cada termo)", diferenca <= 1.5001, "diferença " + diferenca + "° em " + texto);
+                }
+                apertar("h");
+                conferir("H de novo esconde o painel", painel.hidden === true);
+                acalmar();
+                conferirSemViolacoes("local × mundo");
+            });
+
+            testar("robô semeado: entradas aleatórias em milhares de quadros com dt aleatório", function () {
+                acalmar();
+                violacoes = {};
+                maiorAtrasoDaCamera = 0;
+                const sementes = [1, 20261026, 987654321];
+                const quadrosPorSemente = 3000;
+                let eventosEnviados = 0;
+
+                function sortear(lista) {
+                    return lista[Math.floor(Math.random() * lista.length)];
+                }
+
+                function umEventoAleatorio() {
+                    const tipo = Math.floor(Math.random() * 7);
+                    eventosEnviados++;
+                    if (tipo === 0) {
+                        apertar(sortear(TECLAS_DO_ROBO), { repeat: Math.random() < 0.15, ctrlKey: Math.random() < 0.08 });
+                    } else if (tipo === 1) {
+                        soltar(sortear(TECLAS_DO_ROBO));
+                    } else if (tipo === 2) {
+                        eventoDeBotao(sortear([BOTAO_ESQUERDA, BOTAO_DIREITA]),
+                            sortear(["pointerdown", "pointerdown", "pointerup", "pointerleave", "pointercancel", "blur"]));
+                    } else if (tipo === 3) {
+                        eventoNoPalco(sortear(["pointermove", "pointermove", "pointermove", "pointerdown", "pointerup", "pointerleave", "pointercancel"]),
+                            Math.random() * 4 - 1.5, Math.random() * 4 - 1.5, sortear(["mouse", "touch"]));
+                    } else if (tipo === 4) {
+                        window.dispatchEvent(new Event(sortear(["blur", "keydown", "keyup"])));   // blur, ou tecla sem `key`
+                    } else if (tipo === 5) {
+                        teclaNoBotao(sortear([BOTAO_ESQUERDA, BOTAO_DIREITA]), sortear(["keydown", "keyup"]), sortear(["Enter", " ", "Tab"]),
+                            { repeat: Math.random() < 0.2 });
+                    } else {
+                        eventosEnviados--;
+                    }
+                }
+
+                sementes.forEach(function (semente) {
+                    semearSorteio(semente);
+                    for (let quadro = 0; quadro < quadrosPorSemente; quadro++) {
+                        const quantos = Math.floor(Math.random() * 5);
+                        for (let i = 0; i < quantos; i++) {
+                            umEventoAleatorio();
+                        }
+                        passar(sortear(DURACOES_DO_ROBO));
+                    }
+                    conferirSemViolacoes("robô, semente " + semente + " (" + quadrosPorSemente + " quadros)");
+                });
+
+                conferir("o robô realmente mexeu: mais de 10.000 eventos enviados", eventosEnviados > 10000, eventosEnviados + " eventos");
+                conferir("a câmera ficou a no máximo " + maiorAtrasoDaCamera.toFixed(2) + " m do ponto ideal (limite " + FOLGA_DA_CAMERA_EM_METROS + " m)",
+                    maiorAtrasoDaCamera <= FOLGA_DA_CAMERA_EM_METROS);
+                conferir("o mar ainda segue a fórmula no fim do robô", piorErroDoMar() < TOLERANCIA);
+
+                acalmar();
+                conferir("depois de soltar tudo, a barca para de girar", Math.abs(giroDaBarca) < 1e-9);
+                conferir("e a lanterna volta ao repouso", proximo(guinada.angulo, 0, 1e-3) && proximo(arfagem.angulo, REPOUSO_DA_ARFAGEM, 1e-3));
+                conferirSemViolacoes("depois do robô");
+            });
+
+            testar("blur solta teclas e botões; os alvos da mira descem ao repouso em até 0,75 s", function () {
+                acalmar();
+                apertar("a");
+                apertar("q");
+                apertar("ArrowUp");
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown");
+                passarSegundos(1);
+                conferir("antes do blur as entradas estão ativas: alvos no limite (+75°, +60°) e A × ▶ se anulam",
+                    proximoDeGraus(intencao.guinadaAlvo, 75) && proximoDeGraus(intencao.arfagemAlvo, 60) && intencao.leme === 0,
+                    "leme " + intencao.leme + " (A e ▶ se anulam), guinadaAlvo " + intencao.guinadaAlvo);
+                soltar("a");
+                passar(50);
+                conferirIgual("só ▶ segura: leme −1", intencao.leme, -1);
+
+                window.dispatchEvent(new Event("blur"));
+                passar(50);
+                conferirIgual("depois do blur o leme é 0", intencao.leme, 0);
+                conferir("e as teclas de mira soltaram: o alvo começa a descer (−0,1 rad no quadro)", proximo(intencao.guinadaAlvo, 75 * GRAU - 0.1, 1e-6),
+                    "alvo = " + intencao.guinadaAlvo);
+                passarSegundos(0.7);   // 0,75 s no total depois do blur
+                conferirIgual("0,75 s depois do blur a mira lateral está no alvo 0", intencao.guinadaAlvo, 0);
+                conferir("e a mira vertical no repouso", proximo(intencao.arfagemAlvo, REPOUSO_DA_ARFAGEM, MARGEM), "alvo = " + intencao.arfagemAlvo);
+                acalmar();
+                conferirSemViolacoes("blur");
+            });
+
+            testar("teclas estranhas e combinações do navegador não agem", function () {
+                acalmar();
+                const eixosAntes = eixos.map(function (eixo) { return eixo.visible; }).join();
+                const painelAntes = painel.hidden;
+
+                window.dispatchEvent(new Event("keydown"));   // evento.key é undefined
+                window.dispatchEvent(new Event("keyup"));
+                apertar("constructor");
+                apertar("__proto__");
+                apertar("toString");
+                apertar("Dead");
+                passar(50);
+                conferir("tecla sem `key`, `constructor`, `__proto__`: nada vira ação",
+                    intencao.leme === 0 && intencao.guinadaAlvo === 0 && Object.values(acoes).every(function (ativa) { return ativa !== true; }),
+                    JSON.stringify(acoes));
+
+                apertar("a", { ctrlKey: true });
+                apertar("d", { metaKey: true });
+                apertar("q", { altKey: true });
+                passar(50);
+                conferir("Ctrl+A, Meta+D e Alt+Q não agem", intencao.leme === 0 && intencao.guinadaAlvo === 0, "leme " + intencao.leme);
+
+                apertar("h", { ctrlKey: true });
+                apertar("H", { metaKey: true });
+                apertar("h", { altKey: true });
+                passar(50);
+                conferir("Ctrl/Meta/Alt+H não mexem em eixos nem painel",
+                    eixos.map(function (eixo) { return eixo.visible; }).join() === eixosAntes && painel.hidden === painelAntes);
+
+                apertar("a", { repeat: true });
+                passar(50);
+                conferirIgual("repetição automática sozinha não liga a ação", intencao.leme, 0);
+                conferirSemViolacoes("teclas estranhas");
+            });
+
+            testar("H com repetição automática não pisca", function () {
+                acalmar();
+                if (painel.hidden === false) {
+                    apertar("h");   // o robô pode ter deixado o painel ligado: começa do desligado
+                }
+                conferir("ponto de partida: painel e eixos desligados",
+                    painel.hidden === true && eixos.every(function (eixo) { return eixo.visible === false; }));
+                apertar("h");
+                for (let i = 0; i < 12; i++) {
+                    apertar("h", { repeat: true });
+                }
+                passar(50);
+                conferir("segurar H deixa os eixos e o painel ligados",
+                    eixos.length === 2 && eixos.every(function (eixo) { return eixo.visible === true; }) && painel.hidden === false);
+                soltar("h");
+                apertar("h");
+                conferir("outro aperto de H desliga os dois",
+                    eixos.every(function (eixo) { return eixo.visible === false; }) && painel.hidden === true);
+                soltar("h");
+            });
+
+            testar("o teto do quadro: relógio que volta e quadro gigante", function () {
+                acalmar();
+                // reta: sem leme, a barca anda 5 m/s para a frente (−sen, −cos)
+                const antes = { x: barca.position.x, z: barca.position.z, tempo: tempoTotal, proa: proa };
+
+                passar(-500);
+                conferir("quadro para trás: a barca não se mexe", barca.position.x === antes.x && barca.position.z === antes.z,
+                    "andou (" + (barca.position.x - antes.x) + ", " + (barca.position.z - antes.z) + ")");
+                conferirIgual("quadro para trás: o tempo não anda", tempoTotal, antes.tempo);
+
+                passar(500);   // devolve o relógio falso
+                const depoisDoRecuo = { x: barca.position.x, z: barca.position.z };
+                passar(60000);
+                const andou = Math.hypot(barca.position.x - depoisDoRecuo.x, barca.position.z - depoisDoRecuo.z);
+                conferir("quadro de 60 s anda só 50 ms de jogo (0,25 m)", proximo(andou, VELOCIDADE_DA_BARCA * TETO_DO_QUADRO, 1e-6), "andou " + andou + " m");
+
+                apertar("a");
+                apertar("q");
+                const giroAntes = giroDaBarca;
+                const guinadaAntes = guinada.velocidade;
+                const alvoAntes = intencao.guinadaAlvo;
+                passar(-500);
+                conferir("com A e Q seguradas, um quadro para trás não muda os giros nem o alvo da mira",
+                    giroDaBarca === giroAntes && guinada.velocidade === guinadaAntes && intencao.guinadaAlvo === alvoAntes,
+                    "giro " + giroDaBarca + ", guinada " + guinada.velocidade + ", alvo " + intencao.guinadaAlvo);
+                passar(500);
+                acalmar();
+                apertar("a");
+                apertar("q");
+                passar(60000);
+                conferir("com A e Q seguradas, um quadro de 60 s ganha no máximo 0,2 rad/s (barca) e 0,4 rad/s (lanterna)",
+                    giroDaBarca <= ACELERACAO_DO_GIRO * TETO_DO_QUADRO + MARGEM && guinada.velocidade <= ACELERACAO_DA_MIRA * TETO_DO_QUADRO + MARGEM,
+                    "giro " + giroDaBarca + ", guinada " + guinada.velocidade);
+                conferir("e o alvo da mira ganha só 2 × 0,05 = 0,1 rad", proximo(intencao.guinadaAlvo, TAXA_DO_ALVO * TETO_DO_QUADRO, MARGEM),
+                    "alvo = " + intencao.guinadaAlvo);
+                acalmar();
+                conferirSemViolacoes("dt");
+            });
+
+            testar("a câmera segue: na reta o atraso estabiliza perto de 1 m, atrás e acima da barca", function () {
+                acalmar();
+                passarSegundos(6, 16);
+                const atrasoNaReta = atrasoHorizontalDaCamera();
+                conferir("atraso em regime ≈ 1 m (velocidade ÷ suavidade)", atrasoNaReta > 0.5 && atrasoNaReta < 1.5, "atraso = " + atrasoNaReta);
+                conferir("a câmera está acima da água", camera.position.y > barca.position.y + 3);
+
+                const paraFrente = { x: -Math.sin(proa), z: -Math.cos(proa) };
+                const relativoX = camera.position.x - barca.position.x;
+                const relativoZ = camera.position.z - barca.position.z;
+                conferir("a câmera está atrás da barca (produto escalar com a proa < 0)", relativoX * paraFrente.x + relativoZ * paraFrente.z < -5);
+                conferirSemViolacoes("câmera");
+            });
+
+            testar("a câmera segue igual a 30, 60 e 144 quadros por segundo (fração = 1 − exp(−k·dt))", function () {
+                const atrasos = {};
+                [30, 60, 144].forEach(function (quadrosPorSegundo) {
+                    acalmar();
+                    const intervalo = 1000 / quadrosPorSegundo;
+                    passarSegundos(8, intervalo);
+                    atrasos[quadrosPorSegundo] = atrasoHorizontalDaCamera();
+
+                    // regime da reta: L = a·d ÷ (1 − a), com a = exp(−k·dt) e d = 5 m/s · dt
+                    const dt = intervalo / 1000;
+                    const a = Math.exp(-SUAVIDADE_DA_CAMERA * dt);
+                    const esperado = a * VELOCIDADE_DA_BARCA * dt / (1 - a);
+                    conferir(quadrosPorSegundo + " fps: atraso " + atrasos[quadrosPorSegundo].toFixed(3) + " m = regime teórico " + esperado.toFixed(3) + " m",
+                        proximo(atrasos[quadrosPorSegundo], esperado, 0.01));
+                });
+                const menor = Math.min(atrasos[30], atrasos[60], atrasos[144]);
+                const maior = Math.max(atrasos[30], atrasos[60], atrasos[144]);
+                conferir("o atraso é praticamente o mesmo nas três taxas (diferença " + (maior - menor).toFixed(3) + " m < 0,12 m) e perto de 1 m",
+                    maior - menor < 0.12 && menor > 0.85 && maior < 1.05);
+                acalmar();
+                conferirSemViolacoes("câmera × taxa de quadros");
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

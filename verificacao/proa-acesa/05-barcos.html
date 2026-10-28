@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 5: os barcos</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+        #palco { width: 400px; height: 200px; }
+        #palco canvas { display: block; width: 100%; height: 100%; }
+        #aviso[hidden] { display: none; }
+    </style>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }
+    </script>
+    <script type="module">import * as THREE from "three"; window.THREE = THREE;</script>
+    <script src="../../proa-acesa/05-barcos/regras.js" defer></script>
+    <script src="../../proa-acesa/05-barcos/script.js" defer></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 5: os barcos</h1>
+    <pre id="resultado"></pre>
+
+    <p id="placar" aria-live="polite"></p>
+    <main id="palco"></main>
+    <div id="controles">
+        <button id="botao-esquerda" type="button" aria-label="Virar à esquerda">◀</button>
+        <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
+        <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
+    </div>
+    <p id="aviso" role="alert" hidden></p>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const TOLERANCIA = 1e-6;
+            const TETO_DO_QUADRO = 0.05;
+            const MARGEM = 1e-9;
+
+            // Números do GDD §4.1–4.4, escritos aqui de propósito (não lidos do script).
+            const GIRO_MAXIMO_DO_BARCO = 1.1;
+            const VELOCIDADE_DA_BARCA = 5;
+            const VELOCIDADE_DEVAGAR = 2.5;
+            const DISTANCIA_DO_COMBOIO = 7;
+            const BARCOS_POR_COMBOIO = 4;
+            const METADE_DO_MUNDO = 80;
+            const PASSO_DA_GRADE = TAMANHO_DO_MAR / DIVISOES_DO_MAR;   // o mar do passo 5 tem 130 m (era 90); lido do passo, não escrito aqui
+            const VELOCIDADE_MAXIMA_DA_MIRA = 2.5;
+            const FILHOS_FIXOS_DA_CENA = 6;      // luz do céu, mar, ilha, barca, recifes, porto
+            const RECIFE_DO_MEIO = { x: 9, z: -4, raio: 2 };
+
+            const BOTAO_ESQUERDA = document.getElementById("botao-esquerda");
+            const BOTAO_DIREITA = document.getElementById("botao-direita");
+            const BOTAO_DEVAGAR = document.getElementById("botao-devagar");
+            const BOTOES = [BOTAO_ESQUERDA, BOTAO_DIREITA, BOTAO_DEVAGAR];
+
+            const TECLAS_DO_ROBO = ["a", "d", "s", "ArrowLeft", "ArrowRight", "q", "e", "ArrowUp", "ArrowDown", "A", "D", "S", "h", " ", "Shift", "Escape", "Enter", "constructor", "__proto__"];
+            const DURACOES_DO_ROBO = [0, 1, 8, 16, 16, 33, 50, 50, 50, 120, 1000, -50, 5000];
+
+            let violacoes = {};
+            let tempoEsperado = 0;
+            let barcosQueSairam = 0;
+            let idsJaVistos = new Set();
+            const ILHA = { x: -5, z: -12, raio: 5.5 };
+            const SEGUNDOS_PARA_SE_PERDER = 5;
+
+            // O teste confere regras, não pixels: desenhar milhares de quadros por software seria lento.
+            renderizador.render = function () { };
+
+
+            // ============================================================
+            // Ajudantes
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? TOLERANCIA : tolerancia);
+            }
+
+            function normalizar(angulo) {
+                return Math.atan2(Math.sin(angulo), Math.cos(angulo));
+            }
+
+            function registrar(categoria, mensagem) {
+                if (!(categoria in violacoes)) {
+                    violacoes[categoria] = mensagem;
+                }
+            }
+
+            function todosFinitos(lista) {
+                return lista.every(function (numero) { return Number.isFinite(numero); });
+            }
+
+            function sortear(lista) {
+                return lista[Math.floor(Math.random() * lista.length)];
+            }
+
+            function alturaEsperada(x, z, tempo) {
+                return 0.5 * (Math.sin(0.6 * x + 1.3 * tempo) + Math.sin(0.5 * z + 0.9 * tempo)) / 2;
+            }
+
+            function distancia(a, b) {
+                return Math.hypot(a.x - b.x, a.z - b.z);
+            }
+
+            function fotografar() {
+                return {
+                    proa: barcaNoMundo.proa,
+                    guinada: guinada.angulo,
+                    tempoTotal: tempoTotal,
+                    fila: barcosDePesca.map(function (barco) { return { barco: barco, proa: barco.proa }; }),
+                    listaAnterior: barcosDePesca.concat(barcosAfundando)
+                };
+            }
+
+            function passar(milissegundos) {
+                const antes = fotografar();
+                if (!avancarQuadro(milissegundos)) {
+                    throw new Error("o jogo não pediu o próximo quadro (loop parado)");
+                }
+                const duracao = Math.max(0, Math.min(milissegundos / 1000, TETO_DO_QUADRO));
+                tempoEsperado += duracao;
+                vigiar(antes, duracao);
+            }
+
+            function passarSegundos(segundos, milissegundos) {
+                const passo = milissegundos === undefined ? 50 : milissegundos;
+                const quadros = Math.round(segundos * 1000 / passo);
+                for (let i = 0; i < quadros; i++) {
+                    passar(passo);
+                }
+            }
+
+            /* Em TODO quadro: o desenho copia o mundo, a cena não vaza malha, o comboio respeita o giro, nada vira NaN. */
+            function vigiar(antes, duracao) {
+                const naAgua = barcosDePesca.concat(barcosAfundando);
+
+                if (!todosFinitos([barcaNoMundo.x, barcaNoMundo.z, barcaNoMundo.proa, barcaNoMundo.giro, barcaNoMundo.segundosEncalhada,
+                    barca.position.x, barca.position.y, barca.position.z, camera.position.x, camera.position.y, camera.position.z,
+                    guinada.angulo, guinada.velocidade, arfagem.angulo, arfagem.velocidade, cena.background.r, cone.material.opacity])) {
+                    registrar("NaN", "algum número da barca, da câmera ou da lanterna virou NaN ou infinito");
+                }
+                if (Math.abs(barcaNoMundo.x) > METADE_DO_MUNDO || Math.abs(barcaNoMundo.z) > METADE_DO_MUNDO) {
+                    registrar("a barca fica no mundo de ±80 m", "(" + barcaNoMundo.x + ", " + barcaNoMundo.z + ")");
+                }
+                if (barca.position.x !== barcaNoMundo.x || barca.position.z !== barcaNoMundo.z || barca.rotation.y !== barcaNoMundo.proa ||
+                    !proximo(barca.position.y, alturaEsperada(barcaNoMundo.x, barcaNoMundo.z, tempoTotal), MARGEM)) {
+                    registrar("a malha da barca copia o mundo", "malha (" + barca.position.x + ", " + barca.position.z + ") × mundo (" + barcaNoMundo.x + ", " + barcaNoMundo.z + ")");
+                }
+
+                // a lanterna fica para trás da proa: no mundo ela só anda com a mira
+                const lanternaNoMundo = Math.abs(normalizar((barcaNoMundo.proa + guinada.angulo) - (antes.proa + antes.guinada)));
+                if (lanternaNoMundo > VELOCIDADE_MAXIMA_DA_MIRA * duracao + MARGEM) {
+                    registrar("lanterna no mundo anda ≤ 2,5 rad/s", "andou " + lanternaNoMundo + " em " + duracao);
+                }
+
+                [["x", mar.position.x, barcaNoMundo.x], ["z", mar.position.z, barcaNoMundo.z]].forEach(function (eixo) {
+                    const emDegraus = eixo[1] / PASSO_DA_GRADE;
+                    if (Math.abs(emDegraus - Math.round(emDegraus)) > MARGEM || Math.abs(eixo[1] - eixo[2]) > PASSO_DA_GRADE / 2 + MARGEM) {
+                        registrar("o mar anda em degraus da grade, a ≤ meio degrau da barca", "mar." + eixo[0] + " " + eixo[1] + ", barca " + eixo[2]);
+                    }
+                });
+
+                naAgua.forEach(function (barco) {
+                    if (!idsJaVistos.has(barco.id)) {
+                        idsJaVistos.add(barco.id);
+                        const obstaculos = recifes.concat([ILHA]);
+                        const ruim = Math.abs(barco.x) > METADE_DO_MUNDO - 1 + MARGEM || Math.abs(barco.z) > METADE_DO_MUNDO - 1 + MARGEM ||
+                            distancia(barco, porto) < porto.raio + 1 - MARGEM ||
+                            obstaculos.some(function (o) { return distancia(barco, o) < o.raio + 1.2 + 1 - MARGEM; });
+                        if (ruim) {
+                            registrar("todo comboio nasce em lugar válido", "barco " + barco.id + " nasceu em (" + barco.x + ", " + barco.z + ")");
+                        }
+                    }
+                    if (barcosDePesca.indexOf(barco) !== -1 && (barco.segundosPerdido || 0) > SEGUNDOS_PARA_SE_PERDER) {
+                        registrar("ninguém passa de 5 s além de 35 m e continua na fila", "barco " + barco.id + ": " + barco.segundosPerdido);
+                    }
+                    const malha = barco.malha;
+                    if (malha === undefined || malha.parent !== cena) {
+                        registrar("todo barco da lista tem malha na cena", "barco " + barco.id + " sem malha na cena");
+                        return;
+                    }
+                    if (malha.position.x !== barco.x || malha.position.z !== barco.z || malha.rotation.y !== barco.proa ||
+                        !proximo(malha.position.y, alturaEsperada(barco.x, barco.z, tempoTotal) - barco.afundamento * 2, MARGEM) ||
+                        !proximo(malha.rotation.z, barco.afundamento * 0.6, MARGEM)) {
+                        registrar("a malha do barco copia o mundo", "barco " + barco.id + " malha (" + malha.position.x + ", " + malha.position.z + ") × mundo (" + barco.x + ", " + barco.z + ")");
+                    }
+                    if (!todosFinitos([barco.x, barco.z, barco.proa, barco.velocidade, barco.afundamento])) {
+                        registrar("NaN", "barco " + barco.id);
+                    }
+                });
+
+                antes.listaAnterior.forEach(function (barco) {
+                    if (naAgua.indexOf(barco) === -1) {
+                        barcosQueSairam++;
+                        if (barco.malha !== undefined && barco.malha.parent !== null) {
+                            registrar("quem sai das listas sai da cena", "barco " + barco.id + " saiu do mundo mas a malha continua na cena");
+                        }
+                    }
+                });
+                if (barcosRemovidos.length !== 0) {
+                    registrar("a lista dos removidos é esvaziada no mesmo quadro", barcosRemovidos.length + " sobraram");
+                }
+                if (naAgua.length > BARCOS_POR_COMBOIO) {
+                    registrar("as listas vivas não crescem sem limite", "fila + afundando = " + naAgua.length);
+                }
+                if (cena.children.length !== FILHOS_FIXOS_DA_CENA + naAgua.length) {
+                    registrar("a cena não vaza malhas: filhos = 6 + barcos nas listas", "filhos " + cena.children.length + ", barcos " + naAgua.length);
+                }
+
+                antes.fila.forEach(function (registro) {
+                    if (Math.abs(normalizar(registro.barco.proa - registro.proa)) > GIRO_MAXIMO_DO_BARCO * duracao + MARGEM) {
+                        registrar("o comboio gira ≤ 1,1 rad/s", "barco " + registro.barco.id + " girou " + normalizar(registro.barco.proa - registro.proa) + " em " + duracao + " s");
+                    }
+                });
+
+                const textoDoPlacar = "Salvos " + salvos + " · Naufrágios " + naufragios + " · Na fila " + barcosDePesca.length;
+                if (placar.textContent !== textoDoPlacar) {
+                    registrar("o placar mostra os contadores", JSON.stringify(placar.textContent) + " × " + JSON.stringify(textoDoPlacar));
+                }
+            }
+
+            function conferirSemViolacoes(contexto) {
+                const categorias = Object.keys(violacoes);
+                conferir(contexto + ": nenhuma regra quebrada em nenhum quadro", categorias.length === 0,
+                    categorias.map(function (categoria) { return categoria + " (" + violacoes[categoria] + ")"; }).join("; "));
+                violacoes = {};
+            }
+
+            function tecla(tipo, nome, opcoes) {
+                window.dispatchEvent(new KeyboardEvent(tipo, Object.assign({ key: nome }, opcoes)));
+            }
+
+            function apertar(nome, opcoes) {
+                tecla("keydown", nome, opcoes);
+            }
+
+            function soltar(nome) {
+                tecla("keyup", nome);
+            }
+
+            /* Cada dedo tem o seu pointerId; `identificador` 1 é o dedo padrão. */
+            function eventoDeBotao(botao, tipo, identificador) {
+                botao.dispatchEvent(new PointerEvent(tipo, { pointerType: "touch", pointerId: identificador === undefined ? 1 : identificador, bubbles: false }));
+            }
+
+            function teclaNoBotao(botao, tipo, nome, opcoes) {
+                const evento = new KeyboardEvent(tipo, Object.assign({ key: nome, bubbles: true, cancelable: true }, opcoes));
+                botao.dispatchEvent(evento);
+                return evento;
+            }
+
+            function eventoNoPalco(tipo, fracaoX, fracaoY, tipoDePonteiro) {
+                const retangulo = palco.getBoundingClientRect();
+                palco.dispatchEvent(new PointerEvent(tipo, {
+                    clientX: retangulo.left + fracaoX * retangulo.width,
+                    clientY: retangulo.top + fracaoY * retangulo.height,
+                    pointerType: tipoDePonteiro || "mouse"
+                }));
+            }
+
+            function soltarTudo() {
+                window.dispatchEvent(new Event("blur"));
+                TECLAS_DO_ROBO.forEach(soltar);
+                BOTOES.forEach(function (botao) {
+                    [1, 2, 3].forEach(function (identificador) { eventoDeBotao(botao, "pointerleave", identificador); });
+                    botao.dispatchEvent(new Event("blur"));
+                });
+                eventoNoPalco("pointerleave", 0.5, 0.5, "touch");
+            }
+
+            function acalmar() {
+                soltarTudo();
+                passarSegundos(5);
+            }
+
+            function capturarTemporizadores(funcao) {
+                const original = window.setTimeout;
+                const pedidos = [];
+                window.setTimeout = function (chamada, milissegundos) {
+                    pedidos.push({ chamada: chamada, milissegundos: milissegundos });
+                    return 0;
+                };
+                try {
+                    funcao();
+                } finally {
+                    window.setTimeout = original;
+                }
+                return pedidos;
+            }
+
+            /*
+              Monta um cenário: tira os barcos de pesca (e suas malhas) e faz nascer um comboio novo atrás da barca,
+              que pode ficar quieta (encalhada "para sempre") para o experimento ser só dos barcos.
+            */
+            function recomecarMundo(x, z, proa, barcaQuieta) {
+                barcosDePesca.concat(barcosAfundando).forEach(function (barco) {
+                    if (barco.malha !== undefined) {
+                        cena.remove(barco.malha);
+                    }
+                });
+                barcosDePesca.length = 0;
+                barcosAfundando.length = 0;
+                barcosRemovidos.length = 0;
+                barcaNoMundo.x = x;
+                barcaNoMundo.z = z;
+                barcaNoMundo.proa = proa;
+                barcaNoMundo.giro = 0;
+                barcaNoMundo.segundosEncalhada = barcaQuieta ? 1e9 : 0;
+                criarComboio();
+            }
+
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("o jogo carrega com three.js e as malhas copiam o mundo de regras.js", function () {
+                conferir("o three.js carregou, o renderizador existe e não há aviso", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
+                conferirIgual("a cena tem 6 filhos fixos + 4 barcos", cena.children.length, FILHOS_FIXOS_DA_CENA + BARCOS_POR_COMBOIO);
+                conferir("cada barco da fila tem a sua malha, filha da cena, na posição do mundo",
+                    barcosDePesca.length === BARCOS_POR_COMBOIO && barcosDePesca.every(function (barco) {
+                        return barco.malha !== undefined && barco.malha.parent === cena && barco.malha.position.x === barco.x && barco.malha.position.z === barco.z;
+                    }));
+                conferir("a barca copia barcaNoMundo", barca.position.x === barcaNoMundo.x && barca.position.z === barcaNoMundo.z && barca.rotation.y === barcaNoMundo.proa);
+                conferir("os barcos compartilham as MESMAS geometrias e materiais (nada de new por barco)",
+                    barcosDePesca.every(function (barco) {
+                        return barco.malha.children[0].geometry === partes.casco && barco.malha.children[0].material === partes.madeira &&
+                            barco.malha.children[2].material === partes.brilho;
+                    }));
+                conferir("o desenho da bandeira muda de barco para barco (4 barcos, 3 formas)",
+                    new Set(barcosDePesca.map(function (barco) { return barco.malha.children[3].geometry.uuid; })).size === 3);
+                conferir("os recifes do mundo viram uma pedra cada na cena", cena.children.some(function (filho) { return filho.children.length === recifes.length; }));
+                conferirIgual("o placar começa mostrando 0 salvos, 0 naufrágios e 4 na fila", document.getElementById("placar").textContent === "" ||
+                    document.getElementById("placar").textContent === "Salvos 0 · Naufrágios 0 · Na fila 4", true);
+                passar(50);
+                conferirIgual("depois do primeiro quadro o placar diz 0 · 0 · 4", document.getElementById("placar").textContent, "Salvos 0 · Naufrágios 0 · Na fila 4");
+                conferirSemViolacoes("estado inicial");
+            });
+
+            testar("o mar tem 130 m e a névoa é 0,03 de tarde e de noite (constante em todo o entardecer)", function () {
+                verifMarENevoaDoEntardecer(passar);
+            });
+
+            testar("exercício 8: cada entrada solta só a SUA (A + ←, soltar só a seta, mantém o leme)", function () {
+                acalmar();
+                apertar("a");
+                apertar("ArrowLeft");
+                passar(50);
+                conferirIgual("A + ← : leme +1", intencao.leme, 1);
+                soltar("ArrowLeft");
+                passar(50);
+                conferirIgual("soltou só a seta: A ainda segura o leme (+1)", intencao.leme, 1);
+                soltar("a");
+                passar(50);
+                conferirIgual("soltou o A também: leme 0", intencao.leme, 0);
+
+                apertar("a");
+                apertar("ArrowLeft");
+                soltar("a");
+                passar(50);
+                conferirIgual("na ordem inversa (soltar só o A): a seta segura (+1)", intencao.leme, 1);
+                soltar("ArrowLeft");
+                passar(50);
+                conferirIgual("e depois zera", intencao.leme, 0);
+
+                apertar("a");
+                apertar("a");
+                soltar("a");
+                passar(50);
+                conferirIgual("a mesma tecla apertada duas vezes (sem keyup) solta com UM keyup", intencao.leme, 0);
+
+                apertar("d");
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown", 1);
+                passar(50);
+                conferirIgual("tecla D + botão ▶: leme −1", intencao.leme, -1);
+                soltar("d");
+                passar(50);
+                conferirIgual("soltou a tecla: o dedo no ▶ ainda segura (−1)", intencao.leme, -1);
+                eventoDeBotao(BOTAO_DIREITA, "pointerup", 1);
+                passar(50);
+                conferirIgual("levantou o dedo: 0", intencao.leme, 0);
+
+                apertar("a");
+                apertar("d");
+                passar(50);
+                conferirIgual("A e D juntas se anulam", intencao.leme, 0);
+                soltar("d");
+                passar(50);
+                conferirIgual("soltando o D sobra o A: +1", intencao.leme, 1);
+                acalmar();
+                conferirSemViolacoes("exercício 8");
+            });
+
+            testar("dois dedos (pointerId) no mesmo botão: cada pointerup solta só o seu", function () {
+                acalmar();
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown", 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown", 2);
+                passar(50);
+                conferirIgual("dois dedos em ◀: leme +1", intencao.leme, 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerup", 1);
+                passar(50);
+                conferirIgual("o dedo 1 levanta: o dedo 2 ainda segura", intencao.leme, 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerup", 99);
+                passar(50);
+                conferirIgual("o pointerup de um dedo que nunca tocou não solta nada", intencao.leme, 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointercancel", 2);
+                passar(50);
+                conferirIgual("o dedo 2 é cancelado: 0", intencao.leme, 0);
+
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown", 7);
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown", 8);
+                eventoDeBotao(BOTAO_DIREITA, "pointerleave", 7);
+                passar(50);
+                conferirIgual("dois dedos em ▶, o 7 sai do botão (pointerleave): o 8 segura (−1)", intencao.leme, -1);
+                eventoDeBotao(BOTAO_DIREITA, "pointerleave", 8);
+                passar(50);
+                conferirIgual("o 8 também sai: 0", intencao.leme, 0);
+
+                eventoDeBotao(BOTAO_DIREITA, "pointerdown", 4);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown", 4);
+                passar(50);
+                conferirIgual("o MESMO id em dois botões (◀ e ▶) vale para cada ação separadamente: se anulam", intencao.leme, 0);
+                eventoDeBotao(BOTAO_DIREITA, "pointerup", 4);
+                passar(50);
+                conferirIgual("soltar o dedo 4 no ▶ deixa o dedo 4 do ◀: +1", intencao.leme, 1);
+                acalmar();
+                conferirSemViolacoes("dedos");
+            });
+
+            testar("Enter e Espaço SEGURAM os botões ◀ ▶ Devagar; blur do botão solta só o teclado; blur da janela solta tudo", function () {
+                acalmar();
+
+                const enter = teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter");
+                passar(50);
+                conferirIgual("Enter em ◀: leme +1", intencao.leme, 1);
+                conferir("e o navegador não dispara o click (preventDefault)", enter.defaultPrevented === true);
+                teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter", { repeat: true });
+                passar(50);
+                conferirIgual("a repetição automática do Enter continua segurando", intencao.leme, 1);
+                teclaNoBotao(BOTAO_ESQUERDA, "keyup", "Enter");
+                passar(50);
+                conferirIgual("soltar o Enter solta", intencao.leme, 0);
+
+                teclaNoBotao(BOTAO_DIREITA, "keydown", " ");
+                passar(50);
+                conferirIgual("Espaço em ▶: leme −1", intencao.leme, -1);
+                teclaNoBotao(BOTAO_DIREITA, "keyup", " ");
+                passar(50);
+                conferirIgual("soltar o Espaço solta", intencao.leme, 0);
+
+                teclaNoBotao(BOTAO_DEVAGAR, "keydown", "Enter");
+                passar(50);
+                conferirIgual("Enter em Devagar: intencao.devagar", intencao.devagar, true);
+                teclaNoBotao(BOTAO_DEVAGAR, "keyup", "Enter");
+                passar(50);
+                conferirIgual("soltou o Enter: devagar desligado", intencao.devagar, false);
+
+                const outra = teclaNoBotao(BOTAO_ESQUERDA, "keydown", "x");
+                passar(50);
+                conferir("outra tecla no botão não segura nada e não é cancelada", intencao.leme === 0 && outra.defaultPrevented === false);
+
+                // Enter no botão + dedo no mesmo botão + tecla A
+                apertar("a");
+                teclaNoBotao(BOTAO_ESQUERDA, "keydown", "Enter");
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown", 5);
+                BOTAO_ESQUERDA.dispatchEvent(new Event("blur"));
+                passar(50);
+                conferirIgual("o botão perde o foco (blur): o Enter solta, mas o dedo e a tecla A seguram (+1)", intencao.leme, 1);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerup", 5);
+                passar(50);
+                conferirIgual("levantou o dedo: ainda a tecla A (+1)", intencao.leme, 1);
+                soltar("a");
+                passar(50);
+                conferirIgual("soltou o A: 0", intencao.leme, 0);
+
+                // blur da janela solta TUDO
+                apertar("a");
+                apertar("s");
+                teclaNoBotao(BOTAO_DIREITA, "keydown", "Enter");
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerdown", 6);
+                eventoDeBotao(BOTAO_DEVAGAR, "pointerdown", 6);
+                apertar("q");
+                passar(50);
+                conferir("antes do blur: devagar ligado e a mira girando", intencao.devagar === true && intencao.guinadaAlvo > 0);
+                window.dispatchEvent(new Event("blur"));
+                passar(50);
+                conferir("blur da janela: leme 0 e devagar desligado, de todas as fontes (tecla, botão, dedo)", intencao.leme === 0 && intencao.devagar === false,
+                    "leme " + intencao.leme + ", devagar " + intencao.devagar);
+                eventoDeBotao(BOTAO_ESQUERDA, "pointerup", 6);
+                teclaNoBotao(BOTAO_DIREITA, "keyup", "Enter");
+                passar(50);
+                conferirIgual("e os eventos de soltar que chegam depois não quebram nada", intencao.leme, 0);
+                acalmar();
+                conferirSemViolacoes("Enter, Espaço e blur");
+            });
+
+            testar("click com detail 0 (leitor de tela) é um toque curto e não derruba uma tecla segurada; o menu de contexto é cancelado", function () {
+                acalmar();
+                const pedidos = capturarTemporizadores(function () {
+                    BOTAO_DIREITA.dispatchEvent(new MouseEvent("click", { detail: 0, bubbles: true }));
+                });
+                passar(50);
+                conferirIgual("click detail 0 em ▶: leme −1", intencao.leme, -1);
+                conferir("e agenda uma soltura curta (≤ 500 ms)", pedidos.length === 1 && pedidos[0].milissegundos > 0 && pedidos[0].milissegundos <= 500);
+                pedidos[0].chamada();
+                passar(50);
+                conferirIgual("passado o toque: 0", intencao.leme, 0);
+
+                apertar("d");
+                const outros = capturarTemporizadores(function () {
+                    BOTAO_DIREITA.dispatchEvent(new MouseEvent("click", { detail: 0, bubbles: true }));
+                });
+                outros[0].chamada();
+                passar(50);
+                conferirIgual("o toque do leitor de tela termina e a tecla D segurada continua mandando (−1)", intencao.leme, -1);
+                soltar("d");
+
+                const comMouse = capturarTemporizadores(function () {
+                    BOTAO_ESQUERDA.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
+                });
+                passar(50);
+                conferir("click com detail 1 (mouse, dedo) não faz nada", comMouse.length === 0 && intencao.leme === 0);
+
+                BOTOES.concat([palco]).forEach(function (alvo) {
+                    const evento = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+                    alvo.dispatchEvent(evento);
+                    conferir("contextmenu em " + (alvo.id || "palco") + " recebe preventDefault", evento.defaultPrevented === true);
+                });
+                acalmar();
+            });
+
+            testar("Devagar (S, botão, Enter): a barca anda 2,5 m/s em vez de 5", function () {
+                acalmar();
+                function andarUmSegundo() {
+                    barcaNoMundo.x = 60;
+                    barcaNoMundo.z = 60;
+                    barcaNoMundo.proa = 0;
+                    barcaNoMundo.giro = 0;
+                    barcaNoMundo.segundosEncalhada = 0;
+                    passarSegundos(1);
+                    return 60 - barcaNoMundo.z;
+                }
+                conferir("sem Devagar: 5 m em 1 s", proximo(andarUmSegundo(), VELOCIDADE_DA_BARCA, 1e-6));
+                apertar("s");
+                conferir("tecla S segurada: 2,5 m em 1 s", proximo(andarUmSegundo(), VELOCIDADE_DEVAGAR, 1e-6));
+                soltar("s");
+                eventoDeBotao(BOTAO_DEVAGAR, "pointerdown", 1);
+                conferir("botão Devagar segurado: 2,5 m em 1 s", proximo(andarUmSegundo(), VELOCIDADE_DEVAGAR, 1e-6));
+                eventoDeBotao(BOTAO_DEVAGAR, "pointerup", 1);
+                conferir("solto o botão: volta a 5 m em 1 s", proximo(andarUmSegundo(), VELOCIDADE_DA_BARCA, 1e-6));
+                acalmar();
+                conferirSemViolacoes("Devagar");
+            });
+
+            testar("naufrágio: o barco afunda por 2,5 s com a malha na cena, depois SAI da cena; o de trás religa no da frente", function () {
+                acalmar();
+                recomecarMundo(9, 8, 0, true);
+                const [primeiro, segundo, terceiro, quarto] = barcosDePesca;
+                passar(50);
+                conferirIgual("o mundo recomeçou com 4 barcos e 4 malhas novas", cena.children.length, FILHOS_FIXOS_DA_CENA + BARCOS_POR_COMBOIO);
+
+                primeiro.x = RECIFE_DO_MEIO.x;
+                primeiro.z = RECIFE_DO_MEIO.z;
+                const naufragiosAntes = naufragios;
+                passar(50);
+                conferirIgual("o barco no recife naufragou: +1 naufrágio", naufragios, naufragiosAntes + 1);
+                conferir("está em barcosAfundando e fora da fila", barcosAfundando.indexOf(primeiro) !== -1 && barcosDePesca.indexOf(primeiro) === -1);
+                conferir("a malha dele CONTINUA na cena enquanto afunda", primeiro.malha.parent === cena);
+                conferirIgual("a cena tem 6 + 3 na fila + 1 afundando", cena.children.length, FILHOS_FIXOS_DA_CENA + 4);
+                conferir("o segundo segue a barca agora, o terceiro o segundo, o quarto o terceiro",
+                    alvoDoBarco(segundo) === barcaNoMundo && alvoDoBarco(terceiro) === segundo && alvoDoBarco(quarto) === terceiro);
+
+                passarSegundos(1.2);
+                conferir("a ~1,25 s o afundamento é ~50%: a malha desceu (y ≈ onda − 1) e inclinou (z ≈ 0,3)",
+                    proximo(primeiro.afundamento, 0.5, 0.05) && proximo(primeiro.malha.rotation.z, 0.3, 0.05),
+                    "afundamento " + primeiro.afundamento + ", inclinação " + primeiro.malha.rotation.z);
+                passarSegundos(1.5);
+                conferir("passados os 2,5 s o barco saiu do mundo", barcosAfundando.indexOf(primeiro) === -1 && barcosDePesca.indexOf(primeiro) === -1);
+                conferir("e a malha SAIU da cena", primeiro.malha.parent === null && cena.children.indexOf(primeiro.malha) === -1);
+                conferirIgual("a cena voltou a 6 + 3", cena.children.length, FILHOS_FIXOS_DA_CENA + 3);
+                conferirIgual("nenhum removido esquecido na lista", barcosRemovidos.length, 0);
+
+                passarSegundos(8);
+                conferir("o segundo chegou a 7 m da barca (religou no da frente): " + distancia(segundo, barcaNoMundo).toFixed(2),
+                    proximo(distancia(segundo, barcaNoMundo), DISTANCIA_DO_COMBOIO, 0.2));
+                conferir("o terceiro a 7 m do segundo: " + distancia(terceiro, segundo).toFixed(2), proximo(distancia(terceiro, segundo), DISTANCIA_DO_COMBOIO, 0.2));
+                conferirIgual("o placar mostra 1 naufrágio e 3 na fila", placar.textContent, "Salvos 0 · Naufrágios " + naufragios + " · Na fila 3");
+                barcaNoMundo.segundosEncalhada = 0;
+                conferirSemViolacoes("naufrágio");
+            });
+
+            testar("salvar no porto: a malha do barco salvo sai da cena na hora, sem afundar", function () {
+                acalmar();
+                recomecarMundo(6, -8, 0, true);   // barca quieta perto do porto, o comboio atrás dela (fora do porto)
+                passar(50);
+                const primeiro = barcosDePesca[0];
+                primeiro.x = 6;
+                primeiro.z = -26;   // centro do porto (raio 9)
+                const salvosAntes = salvos;
+                passar(50);
+                conferirIgual("+1 salvo", salvos, salvosAntes + 1);
+                conferir("saiu da fila, não afundou e a malha saiu da cena",
+                    barcosDePesca.indexOf(primeiro) === -1 && barcosAfundando.indexOf(primeiro) === -1 && primeiro.malha.parent === null);
+                conferir("o placar conta", placar.textContent.indexOf("Salvos " + salvos) === 0);
+                barcaNoMundo.segundosEncalhada = 0;
+                acalmar();
+                conferirSemViolacoes("porto");
+            });
+
+            testar("a ilha vem dos dados: mover `ilha` em regras.js move a ilha desenhada e o colisor juntos", function () {
+                verifIlhaVemDosDados();
+                conferir("e a ilha de verdade, a do jogo, continua onde a regra a pôs (−5, −12)", ilha.x === -5 && ilha.z === -12 && cena.children.some(function (filho) { return filho.position.x === -5 && filho.position.z === -12 && filho.children.length === 4; }));
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio(function () { atualizarMundo(0, 0, false); });   // o quadro do jogo tenta de novo, com a barca onde está
+                passar(50);   // o quadro apaga as malhas dos barcos que o teste tirou da fila
+                recomecarMundo(8, 14, 0, false);
+                passar(50);
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                recomecarMundo(8, 14, 0, true);
+                passar(50);
+                verifCameraNoPontoDaFormula();
+                recomecarMundo(8, 14, 0, false);
+                passar(50);
+            });
+
+            testar("o enquadramento ao longo do tempo (retas e voltas em U, 7200 quadros de 50 ms): barca, 14 m à frente e os 3 primeiros barcos ficam no quadro (|NDC| ≤ 0,97) em ≥ 99% dos quadros, em 1280×800 e 390×750", function () {
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    recomecarMundo(8, 14, 0, false);
+                    passar(50);
+                    seguirComACamera(1);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 7200, 50);
+                    verifRestaurarRecifes(pedras);
+                    const limite = Math.floor(0.01 * medidas.quadros);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": cada ponto fora do quadro em no máximo 1% dos quadros (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.quadros === 7200 && ["barca", "frente", "primeiro", "segundo", "terceiro", "algum"].every(function (ponto) { return medidas[ponto] <= limite; }),
+                        "limite " + limite + " quadros");
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 30 voltas em U, ≥ 10 retas longas e o 3º barco a ≥ 40 m da barca)",
+                        medidas.voltas >= 30 && medidas.retas >= 10 && medidas.maiorDistanciaDoTerceiro >= 40,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m");
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                recomecarMundo(8, 14, 0, false);
+                acalmar();
+            });
+
+            testar("robô semeado: piloto + entradas aleatórias (dedos, Enter, blur) em 3 sementes × 4000 quadros", function () {
+                const sementes = [7, 20261026, 987654321];
+                const quadrosPorSemente = 4000;
+                let eventosEnviados = 0;
+                const saidasDoInicio = barcosQueSairam;
+
+                function umEventoAleatorio() {
+                    const tipo = Math.floor(Math.random() * 8);
+                    eventosEnviados++;
+                    if (tipo === 0) {
+                        apertar(sortear(TECLAS_DO_ROBO), { repeat: Math.random() < 0.15, ctrlKey: Math.random() < 0.05 });
+                    } else if (tipo === 1) {
+                        soltar(sortear(TECLAS_DO_ROBO));
+                    } else if (tipo === 2) {
+                        eventoDeBotao(sortear(BOTOES), sortear(["pointerdown", "pointerdown", "pointerup", "pointerleave", "pointercancel"]), sortear([1, 2, 3]));
+                    } else if (tipo === 3) {
+                        eventoNoPalco(sortear(["pointermove", "pointermove", "pointerdown", "pointerup", "pointerleave", "pointercancel"]),
+                            Math.random() * 4 - 1.5, Math.random() * 4 - 1.5, sortear(["mouse", "touch"]));
+                    } else if (tipo === 4) {
+                        window.dispatchEvent(new Event(sortear(["blur", "keydown", "keyup"])));
+                    } else if (tipo === 5) {
+                        teclaNoBotao(sortear(BOTOES), sortear(["keydown", "keyup"]), sortear(["Enter", " ", "Tab"]), { repeat: Math.random() < 0.2 });
+                    } else if (tipo === 6) {
+                        sortear(BOTOES).dispatchEvent(new Event("blur"));
+                    } else {
+                        eventosEnviados--;
+                    }
+                }
+
+                sementes.forEach(function (semente) {
+                    acalmar();
+                    violacoes = {};
+                    semearSorteio(semente);
+                    recomecarMundo(8, 14, 0, false);
+                    let destino = porto;
+                    let teclaDoPiloto = null;
+
+                    for (let quadro = 0; quadro < quadrosPorSemente; quadro++) {
+                        // piloto: vai a um destino sorteado (recife, porto ou ponto qualquer) com as setas
+                        if (quadro % 300 === 0) {
+                            destino = sortear(recifes.concat([porto, { x: Math.random() * 120 - 60, z: Math.random() * 120 - 60 }]));
+                        }
+                        const erroDeRumo = normalizar(Math.atan2(-(destino.x - barcaNoMundo.x), -(destino.z - barcaNoMundo.z)) - barcaNoMundo.proa);
+                        const desejada = Math.abs(erroDeRumo) < 0.05 ? null : erroDeRumo > 0 ? "ArrowLeft" : "ArrowRight";
+                        if (teclaDoPiloto !== null && teclaDoPiloto !== desejada) {
+                            soltar(teclaDoPiloto);
+                        }
+                        teclaDoPiloto = desejada;
+                        if (teclaDoPiloto !== null) {
+                            apertar(teclaDoPiloto);
+                        }
+
+                        const quantos = Math.floor(Math.random() * 3);
+                        for (let i = 0; i < quantos; i++) {
+                            umEventoAleatorio();
+                        }
+                        passar(sortear(DURACOES_DO_ROBO));
+                    }
+                    conferirSemViolacoes("robô, semente " + semente + " (" + quadrosPorSemente + " quadros)");
+
+                });
+
+                conferir("o robô realmente mexeu: mais de 10.000 eventos enviados", eventosEnviados > 10000, eventosEnviados + " eventos");
+                // Antes (spawn sem validade e sem prazo de 5 s) saíam mais de 20; agora os nascimentos são válidos (sem salvo de graça, sem naufrágio
+                // instantâneo) e a névoa não faz cascata. A corrida semeada mede 14 saídas; o piso 8 pega "o mundo parou de julgar" sem cravar o 14.
+                conferir("e fez barcos saírem do mundo (salvos, naufragados, perdidos): mais de 8 saídas, cada uma tirando a malha da cena",
+                    barcosQueSairam - saidasDoInicio > 8, (barcosQueSairam - saidasDoInicio) + " saídas");
+                acalmar();
+                conferir("no fim a cena tem exatamente 6 filhos fixos + os barcos das listas", cena.children.length === FILHOS_FIXOS_DA_CENA + barcosDePesca.length + barcosAfundando.length);
+                conferirSemViolacoes("depois do robô");
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

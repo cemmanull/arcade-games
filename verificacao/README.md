@@ -5,9 +5,10 @@ trocados por versões falsas, e conferem as regras do jogo. Sem biblioteca, sem 
 
 ## Arquivos do executor
 
-`rodar.mjs` é a porta de entrada (opções, modo normal). `fumaca.mjs` e `links.mjs` são os outros
-dois modos; `navegador.mjs` acha o Chrome, cria o perfil temporário e controla os processos;
-`cdp.mjs` é o cliente do DevTools Protocol usado pela fumaça.
+`rodar.mjs` é a porta de entrada (opções, modo normal). `fumaca.mjs`, `links.mjs` e `captura.mjs`
+são os outros modos; `navegador.mjs` acha o Chrome, cria o perfil temporário e controla os
+processos; `cdp.mjs` é o cliente do DevTools Protocol, e `depuracao.mjs` junta os dois para a
+fumaça e a captura (abrir o Chrome, abrir uma página, coletar os erros dela).
 
 ## Abrir um teste (duplo clique)
 
@@ -35,6 +36,10 @@ executável encerra com uma mensagem clara (código 2).
 
 Um trecho do caminho filtra (`node verificacao/rodar.mjs tetris`); o caminho de um `.html`
 roda só aquele arquivo.
+
+O modo normal **não** entra em `verificacao/medicao/` (páginas de medição para abrir no celular)
+nem em `verificacao/autoteste/` (o autoteste do executor): essas pastas só rodam por caminho
+explícito (`node verificacao/rodar.mjs verificacao/medicao/<pagina>.html`).
 
 ## Fumaça: todas as páginas do curso
 
@@ -64,6 +69,27 @@ continua reprovando. Cada entrada tem a página, um padrão que casa com a linha
 Para acrescentar uma entrada, descreva a linha toda, com o nome do arquivo ou recurso: o executor
 impõe `^…$` a todo padrão, então uma mensagem que apenas *contém* o texto não é aceita.
 
+## Captura: uma imagem da página
+
+```
+node verificacao/rodar.mjs --captura <arquivo.html> [--largura N] [--altura N] [--escala N] [--saida caminho.png]
+```
+
+Abre a página no Chrome headless (o mesmo caminho da fumaça: perfil temporário, DevTools Protocol),
+ajusta a janela **antes** de navegar, espera o evento `load` (teto de 15 s) mais 1 s de folga e grava
+um PNG (`Page.captureScreenshot`). Padrões: 1280×800, escala 1 (`--escala 2` dá uma imagem com o
+dobro de pixels, como num celular de tela densa). Sem `--saida`, o PNG vai para a pasta temporária
+do sistema com um nome que traz a página e o tamanho (`captura-tetris-final-index-390x750@2x.png`);
+o caminho absoluto sai impresso. Funciona com WebGL (o Chrome roda com SwiftShader por software;
+o módulo 3D ainda precisa de internet para o three.js do CDN).
+
+Os erros de console vistos durante a carga também são impressos, só para informar: não mudam o
+código de saída. Limites: largura e altura de 1 a 8000, escala de 0,1 a 4. Para olhar o resultado,
+abra o PNG (um agente pode lê-lo como imagem).
+
+Saída: 0 PNG gravado; 1 a página não carregou (ou não terminou em 15 s) ou a captura falhou, e nenhum
+arquivo é gravado; 2 navegador não encontrado, arquivo inexistente ou opção inválida.
+
 ## Links: Markdown sem link quebrado
 
 ```
@@ -79,6 +105,31 @@ está em blocos de código ou entre crases. Maiúsculas e minúsculas precisam b
 conferidas, nem links por referência (`[x]: destino`). Imprime cada link quebrado com arquivo e
 linha e sai com 1 se houver algum. Última execução: 101 arquivos, 521 links, 0 quebrados.
 
+## Autoteste: o executor se testa
+
+```
+node verificacao/rodar.mjs --autoteste
+```
+
+Planta 13 defeitos conhecidos e confere que o executor **atual** reprova (ou aprova, nos controles)
+cada um, com o código de saída e as linhas-chave esperados. Leva cerca de 30 s e sai com 1 se algum
+mutante tiver outro resultado. A tabela está em `verificacao/autoteste/autoteste.mjs`:
+
+| Grupo | Mutantes |
+|-------|----------|
+| Página de teste (os `.html` de `verificacao/autoteste/`) | controle que passa; expectativa errada; só a primeira afirmação falha; erro em `setTimeout` depois de `finalizar()`; erro antes de `finalizar()`; laço infinito (teto de 3 s); `CHROME` inexistente |
+| Fumaça (repositório falso com a página `tutorial/01-html`) | `console.error` extra; exceção não tratada extra; mensagem que só *contém* um erro esperado; controle só com os 2 esperados |
+| Links (repositório falso com `git init`) | link quebrado, caixa errada e código ignorado; controle sem quebrados |
+
+Os repositórios falsos são cópias dos módulos `.mjs` do executor atual numa pasta temporária
+(`autoteste-*`), apagada no fim; o repositório real não é alterado. Todo filho roda com
+`TEMP`/`TMP`/`TMPDIR` apontando para essa pasta, então um perfil `verificacao-*` que sobrar (Chrome
+não encerrado) reprova o mutante em vez de passar despercebido.
+
+Variável `LIMITE_DA_PAGINA_EM_SEGUNDOS`: teto de uma página de teste no modo normal (padrão 120).
+O autoteste usa 3 só no laço infinito, para não esperar 2 minutos. Para acrescentar um mutante,
+junte uma entrada em `listarMutantes` (e, se for de página, um `.html` em `verificacao/autoteste/`).
+
 ## Escrever um teste novo
 
 Copie `tetris/03-queda.html`. Três truques fazem tudo funcionar por `file://`:
@@ -92,6 +143,8 @@ Copie `tetris/03-queda.html`. Três truques fazem tudo funcionar por `file://`:
    `semearSorteio(n)` torna o sorteio repetível.
 3. **Leia o estado do jogo pelo nome.** Os `let`/`const` do topo de um script clássico são
    visíveis para os scripts seguintes da mesma página (`poco`, `pecaAtual`, `cabe(...)`).
+
+O Proa Acesa reparte as verificações dos passos 5 a 8 em `proa-acesa/apoio-proa.js` (nascimento do comboio, trava e modo dos clarões, enquadramento da câmera, Espaço depois do clique, chuva, mar e névoa): funções com prefixo `verif…` que usam o `conferir` do `apoio.js`; carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo.
 
 Se o jogo desenha num `<canvas>`, o teste de `tetris/03-queda.html` troca `getContext` por um
 contexto que ignora o desenho (o teste confere regras, não pixels): o robô de 30.000 quadros caiu

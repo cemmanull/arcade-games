@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Proa Acesa, passo 7: as regras da tempestade (sem three.js)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        pre  { font-size: 14px; white-space: pre-wrap; }
+    </style>
+
+    <!--
+      De propósito NÃO há import map nem ponte do three.js: regras.js do passo 7 tem de rodar sozinho (GDD §8). Se citar THREE, o
+      carregamento estoura aqui com ReferenceError e a página reprova. O jogo (chuva, botão, HUD) é testado em 07-tempestade.html.
+    -->
+    <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
+    <script src="../../proa-acesa/07-tempestade/regras.js"></script>
+</head>
+
+<body>
+    <h1>Teste — Proa Acesa, passo 7: as regras da tempestade (sem three.js)</h1>
+    <pre id="resultado"></pre>
+
+    <script>
+        window.addEventListener("load", function () {
+
+            const MARGEM = 1e-9;
+            const GRAU = Math.PI / 180;
+            const PASSO = 0.0625;   // 1/16 s: potência de 2, somar quadros é exato (16 quadros = 1 s)
+
+            // A tabela do GDD §4.8, escrita aqui de propósito (não lida de regras.js).
+            //            nome        duração barcos recifes colunas névoa  estreito largo deriva relâmpagos/min meta
+            const NOITES = [
+                ["Calmaria", 120, 2, 8, 0, 0.15, 42, 22, 0, 0, 2],
+                ["Garoa", 150, 3, 12, 2, 0.30, 39, 20, 0.3, 2, 2],
+                ["Ventania", 150, 4, 16, 3, 0.45, 36, 19, 0.6, 4, 3],
+                ["Cerração", 180, 4, 20, 4, 0.60, 32, 17, 0.9, 6, 3],
+                ["Tormenta", 180, 5, 24, 5, 0.75, 29, 15, 1.2, 8, 4]
+            ].map(function (linha) {
+                return { nome: linha[0], duracao: linha[1], barcos: linha[2], recifes: linha[3], colunas: linha[4], nevoa: linha[5], estreito: linha[6], largo: linha[7],
+                    deriva: linha[8], relampagosPorMinuto: linha[9], meta: linha[10] };
+            });
+            const PORTO = { x: 6, z: -26, raio: 9 };
+            const ILHA = { x: -5, z: -12, raio: 5.5 };
+
+            // ============================================================
+            // Ajudantes
+            // ============================================================
+            function proximo(obtido, esperado, tolerancia) {
+                return Math.abs(obtido - esperado) < (tolerancia === undefined ? 1e-9 : tolerancia);
+            }
+
+            function normalizar(angulo) {
+                return Math.atan2(Math.sin(angulo), Math.cos(angulo));
+            }
+
+            function todosFinitos(lista) {
+                return lista.every(function (numero) { return Number.isFinite(numero); });
+            }
+
+            function sortear(lista) {
+                return lista[Math.floor(Math.random() * lista.length)];
+            }
+
+            function distancia(a, b) {
+                return Math.hypot(a.x - b.x, a.z - b.z);
+            }
+
+            function esvaziarRemovidos() {
+                const saidos = barcosRemovidos.slice();
+                barcosRemovidos.length = 0;
+                return saidos;
+            }
+
+            /* Começa a noite e deixa a barca encalhada "para sempre": o experimento é do relógio e das regras, não da pilotagem. */
+            function novaNoite(indice) {
+                comecarNoite(indice);
+                barcosRemovidos.length = 0;
+                barcaNoMundo.segundosEncalhada = 1e9;
+            }
+
+            function passarMundo(quadros, passo) {
+                for (let i = 0; i < quadros; i++) {
+                    atualizarMundo(passo === undefined ? PASSO : passo, 0, false);
+                    barcosRemovidos.length = 0;
+                }
+            }
+
+            function semAlvoTapando() {
+                return false;
+            }
+
+            function defeitoDeNascimento(barco, obstaculos) {
+                if (Math.abs(barco.x) > METADE_DO_MUNDO - 1 + MARGEM || Math.abs(barco.z) > METADE_DO_MUNDO - 1 + MARGEM) {
+                    return "fora do mundo de ±79 m";
+                }
+                if (distancia(barco, PORTO) < PORTO.raio + 1 - MARGEM) {
+                    return "dentro ou colado ao porto (salvo de graça)";
+                }
+                return obstaculos.some(function (obstaculo) { return distancia(barco, obstaculo) < obstaculo.raio + RAIO_DO_BARCO + 1 - MARGEM; }) ? "a menos de 1 m de folga de uma pedra" : "";
+            }
+
+
+            // ============================================================
+            // Casos
+            // ============================================================
+            testar("regras.js do passo 7 roda sem three.js e a partida nasce na noite 1", function () {
+                conferirIgual("typeof THREE é \"undefined\": esta página não tem a ponte", typeof THREE, "undefined");
+                conferirIgual("são 5 fichas de noite", fichas.length, 5);
+                conferirIgual("a partida começa na noite 1, com 2 barcos e 8 recifes", [noite.indice, barcosDePesca.length, recifes.length].join(","), "0,2,8");
+                conferirIgual("a barca nasce na PARTIDA (14, 42), de proa para −z", [barcaNoMundo.x, barcaNoMundo.z, barcaNoMundo.proa].join(","), "14,42,0");
+                conferirIgual("a lanterna nasce fria, no foco largo", [lanternaDaBarca.calor, lanternaDaBarca.foco].join(","), "0,largo");
+            });
+
+            testar("a ficha de cada noite é aplicada ao montar o mundo: duração, barcos, recifes, colunas, névoa, deriva, meta, alcance", function () {
+                NOITES.forEach(function (esperada, indice) {
+                    comecarNoite(indice);
+                    const rotulo = "noite " + (indice + 1) + " (" + esperada.nome + "): ";
+                    conferirIgual(rotulo + "nome e duração", noite.ficha.nome + " " + noite.ficha.duracao, esperada.nome + " " + esperada.duracao);
+                    conferirIgual(rotulo + "barcos na fila", barcosDePesca.length, esperada.barcos);
+                    conferirIgual(rotulo + "recifes no total", recifes.length, esperada.recifes);
+                    conferirIgual(rotulo + "colunas altas", recifes.filter(function (recife) { return recife.alta === true; }).length, esperada.colunas);
+                    conferirIgual(rotulo + "recifes baixos", recifes.filter(function (recife) { return recife.alta === false; }).length, esperada.recifes - esperada.colunas);
+                    conferirIgual(rotulo + "névoa de partida", noite.nevoa, esperada.nevoa);
+                    conferirIgual(rotulo + "deriva do vento (m/s)", noite.ficha.deriva, esperada.deriva);
+                    conferirIgual(rotulo + "meta de barcos", noite.ficha.meta, esperada.meta);
+                    conferir(rotulo + "o relógio e o placar da noite zeram (segundos 0, aurora 0, salvos 0, sem resultado)",
+                        noite.segundos === 0 && noite.aurora === 0 && noite.salvos === 0 && noite.resultado === "");
+                    conferir(rotulo + "nenhum recife começa visto ou lembrado", recifes.every(function (recife) { return recife.brasa === 0 && recife.iluminado === false; }));
+                    conferir(rotulo + "a lanterna recomeça fria e acesa", lanternaDaBarca.calor === 0 && lanternaDaBarca.segundosApagada === 0);
+
+                    // alcance = base × (1 − 0,5 × névoa): a tabela do GDD dá o resultado em metros inteiros, então a conferência é a menos de 1 m
+                    lanternaDaBarca.foco = "estreito";
+                    atualizarLanterna(0);
+                    const alcanceEstreito = lanternaDaBarca.alcance, anguloEstreito = lanternaDaBarca.meioAngulo;
+                    lanternaDaBarca.foco = "largo";
+                    atualizarLanterna(0);
+                    conferir(rotulo + "alcance estreito/largo = " + esperada.estreito + " / " + esperada.largo + " m (obtido " + alcanceEstreito.toFixed(2) + " / " + lanternaDaBarca.alcance.toFixed(2) + ")",
+                        Math.abs(alcanceEstreito - esperada.estreito) < 1 && Math.abs(lanternaDaBarca.alcance - esperada.largo) < 1 &&   // a tabela do GDD é em metros inteiros (a noite 1 diz 42 para 42,55)
+                        proximo(alcanceEstreito, 46 * (1 - 0.5 * esperada.nevoa)) && proximo(lanternaDaBarca.alcance, 24 * (1 - 0.5 * esperada.nevoa)));
+                    conferir(rotulo + "meio-ângulo 7° no estreito e 16° no largo", proximo(anguloEstreito, 7 * GRAU) && proximo(lanternaDaBarca.meioAngulo, 16 * GRAU));
+                });
+                comecarNoite(0);
+            });
+
+            testar("os recifes e colunas de cada noite: tudo no mundo, fora do porto, 12 m da partida, sem sobrepor a ilha e com a mesma lista crescendo noite a noite", function () {
+                const partida = { x: 14, z: 42 };
+                let anterior = [];
+                NOITES.forEach(function (esperada, indice) {
+                    comecarNoite(indice);
+                    conferir("noite " + (indice + 1) + ": todo recife está no mundo, fora do porto, a 12 m ou mais da partida e sem tocar a ilha",
+                        recifes.every(function (recife) {
+                            return Math.abs(recife.x) < METADE_DO_MUNDO && Math.abs(recife.z) < METADE_DO_MUNDO && distancia(recife, PORTO) > PORTO.raio &&
+                                distancia(recife, partida) >= 12 && distancia(recife, ILHA) > ILHA.raio + recife.raio;
+                        }));
+                    conferir("noite " + (indice + 1) + ": a partida nasce livre (a barca não começa encalhada)", recifeTocadoPor(barcaNoMundo) === null);
+                    conferir("noite " + (indice + 1) + ": os baixos da noite anterior continuam no mesmo lugar (as posições vêm de uma lista fixa)",
+                        anterior.every(function (recife) { return recifes.some(function (atual) { return atual.x === recife.x && atual.z === recife.z; }); }));
+                    anterior = recifes.filter(function (recife) { return recife.alta === false; });
+                });
+                comecarNoite(0);
+            });
+
+            testar("o relâmpago: roteiro por noite (hora marcada, nunca nos últimos 15 s) e duração do clarão seco (0,25 s)", function () {
+                NOITES.forEach(function (esperada, indice) {
+                    comecarNoite(indice);
+                    const horas = [];
+                    if (esperada.relampagosPorMinuto > 0) {
+                        for (let k = 0; (2 * k + 1) * 30 / esperada.relampagosPorMinuto <= esperada.duracao - 15; k++) {
+                            horas.push((2 * k + 1) * 30 / esperada.relampagosPorMinuto);   // 1º no meio do 1º intervalo, depois a cada 60/taxa
+                        }
+                    }
+                    conferir("noite " + (indice + 1) + ": " + horas.length + " relâmpagos nas horas " + horas.join(", "),
+                        noite.relampagos.length === horas.length && noite.relampagos.every(function (hora, i) { return proximo(hora, horas[i]); }),
+                        "obtido " + noite.relampagos.join(", "));
+                    conferir("noite " + (indice + 1) + ": nenhum depois de duração − 15 s e no máximo 8 por minuto",
+                        noite.relampagos.every(function (hora) { return hora <= esperada.duracao - 15; }) &&
+                        noite.relampagos.every(function (hora, i) { return i === 0 || hora - noite.relampagos[i - 1] >= 7.5 - MARGEM; }));
+                });
+
+                // o relógio dispara o clarão na hora, ele dura 0,25 s e se apaga sozinho (noite 3: o 1º é aos 7,5 s)
+                reduzirClaroes = false;
+                comecarNoite(2);
+                const claros = [];
+                for (let quadro = 1; quadro <= 160; quadro++) {   // 10 s
+                    atualizarNoite(PASSO);
+                    if (brilhoDoRelampago() > 0) {
+                        claros.push(quadro * PASSO);
+                    }
+                }
+                conferir("noite 3, clarão seco: o 1º começa aos 7,5 s e dura 4 quadros de 1/16 s = 0,25 s (obtido " + claros.slice(0, 5).join(", ") + ")",
+                    claros.length === 4 && claros[0] === 7.5 && claros[3] === 7.6875, "claros " + claros.join(", "));
+                conferirIgual("e o brilho do clarão seco é cheio (1) e depois volta a 0", [brilhoDoRelampago(), noite.segundosDoRelampago].join(","), "0,-1");
+                comecarNoite(0);
+            });
+
+            testar("reduzir clarões: o relâmpago vira rampa de 1,2 s, no máximo 25% de brilho, sem salto entre quadros", function () {
+                comecarNoite(2);
+                reduzirClaroes = true;
+                const brilhos = [];
+                for (let quadro = 1; quadro <= 160; quadro++) {
+                    atualizarNoite(PASSO);
+                    if (noite.segundosDoRelampago >= 0 || brilhoDoRelampago() > 0) {
+                        brilhos.push(brilhoDoRelampago());
+                    }
+                }
+                const maior = Math.max.apply(null, brilhos);
+                const maiorSalto = Math.max.apply(null, brilhos.map(function (brilho, i) { return i === 0 ? brilho : Math.abs(brilho - brilhos[i - 1]); }));
+                conferir("o clarão dura 20 quadros de 1/16 s (1,2 s): " + brilhos.length, brilhos.length === 20);
+                conferir("pico de " + maior.toFixed(3) + ": entre 24% e 25% (nunca acima de 25%)", maior <= 0.25 + MARGEM && maior > 0.24);
+                conferir("começa e termina quase em 0 (" + brilhos[0].toFixed(4) + " e " + brilhos[brilhos.length - 1].toFixed(4) + ")", brilhos[0] < 0.01 && brilhos[brilhos.length - 1] < 0.01);
+                conferir("o maior salto entre quadros é " + maiorSalto.toFixed(4) + " (< 0,05; o seco saltaria 1,0)", maiorSalto < 0.05);
+                conferir("o brilho nunca é negativo nem passa de 1", brilhos.every(function (brilho) { return brilho >= 0 && brilho <= 1; }));
+
+                reduzirClaroes = false;
+                comecarNoite(2);
+                noite.segundos = 7.4375;
+                atualizarNoite(PASSO);
+                conferirIgual("(controle) com a opção desligada o mesmo clarão salta direto para 1", brilhoDoRelampago(), 1);
+
+                // a opção ligada NO MEIO de um clarão não deixa o brilho preso nem fora da faixa
+                reduzirClaroes = true;
+                for (let quadro = 0; quadro < 40; quadro++) {
+                    atualizarNoite(PASSO);
+                }
+                conferir("ligar a opção no meio do clarão: ele termina e o brilho volta a 0", noite.segundosDoRelampago === -1 && brilhoDoRelampago() === 0);
+                reduzirClaroes = false;
+                comecarNoite(0);
+            });
+
+            testar("o relâmpago revela TODOS os recifes (brasa cheia) sem iluminá-los; a lanterna apagada não vê nada", function () {
+                novaNoite(2);
+                const origemLonge = { x: 70, z: 70 };
+                atualizarBrasas(0.05, origemLonge, 0, semAlvoTapando);
+                conferir("sem clarão e longe de tudo: ninguém visto, brasa 0", recifes.every(function (recife) { return recife.brasa === 0 && recife.iluminado === false; }));
+                noite.segundosDoRelampago = 0;
+                atualizarBrasas(0.05, origemLonge, 0, semAlvoTapando);
+                conferir("durante o clarão todo recife tem brasa 3 s e NENHUM está iluminado",
+                    recifes.every(function (recife) { return recife.brasa === 3 && recife.iluminado === false; }));
+                noite.segundosDoRelampago = -1;
+                atualizarBrasas(1, origemLonge, 0, semAlvoTapando);
+                conferir("acabado o clarão a brasa esfria (3 → 2)", recifes.every(function (recife) { return proximo(recife.brasa, 2); }));
+
+                // lanterna apagada: o recife na frente dela não é visto
+                const recife = recifes[0];
+                const origem = { x: recife.x, z: recife.z + 10 };
+                lanternaDaBarca.foco = "largo";
+                atualizarLanterna(0);
+                lanternaDaBarca.segundosApagada = 0;
+                atualizarBrasas(0.05, origem, 0, semAlvoTapando);
+                conferir("acesa: o recife à frente (10 m) é visto", recife.iluminado === true);
+                lanternaDaBarca.segundosApagada = 2;
+                atualizarBrasas(0.05, origem, 0, semAlvoTapando);
+                conferir("apagada: o mesmo recife NÃO é visto (só a lembrança)", recife.iluminado === false && recife.brasa < 3);
+                lanternaDaBarca.segundosApagada = 0;
+                comecarNoite(0);
+            });
+
+            testar("o amanhecer: nos últimos 15 s a aurora vai de 0 a 1, a névoa some e o alcance cresce até o alcance-base", function () {
+                novaNoite(4);   // Tormenta: duração 180, névoa 0,75
+                const duracao = 180;
+                function medir(segundos) {
+                    noite.segundos = segundos;
+                    atualizarNoite(0);
+                    lanternaDaBarca.foco = "estreito";
+                    atualizarLanterna(0);
+                    return { aurora: noite.aurora, nevoa: noite.nevoa, alcance: lanternaDaBarca.alcance };
+                }
+                const antes = medir(duracao - 15 - 1);
+                conferir("1 s antes da aurora: aurora 0, névoa cheia (0,75) e alcance de noite (46 × 0,625 = 28,75 m)",
+                    antes.aurora === 0 && antes.nevoa === 0.75 && proximo(antes.alcance, 28.75));
+                const comeco = medir(duracao - 15);
+                conferir("aos 165 s a aurora ainda é 0", comeco.aurora === 0);
+                const meio = medir(duracao - 7.5);
+                conferir("a meio caminho (172,5 s): aurora 0,5, névoa 0,375, alcance 46 × (1 − 0,5 × 0,375) = 37,375", proximo(meio.aurora, 0.5) && proximo(meio.nevoa, 0.375) && proximo(meio.alcance, 37.375));
+                let crescente = true, anterior = comeco;
+                for (let segundos = duracao - 15; segundos < duracao; segundos += 0.5) {
+                    const agora = medir(segundos);
+                    crescente = crescente && agora.aurora >= anterior.aurora && agora.nevoa <= anterior.nevoa && agora.alcance >= anterior.alcance;
+                    anterior = agora;
+                }
+                conferir("ao longo dos 15 s: aurora só sobe, névoa só cai, alcance só cresce", crescente);
+                const fim = medir(duracao - 0.0001);
+                conferir("no fim: aurora ≈ 1, névoa ≈ 0, alcance ≈ 46 m", fim.aurora > 0.9999 && fim.nevoa < 0.0001 && fim.alcance > 45.99);
+                lanternaDaBarca.foco = "largo";
+                comecarNoite(0);
+            });
+
+            testar("o resultado da noite: vitória avança, sem meta repete, 5ª vitória e 3 naufrágios recomeçam na noite 1; o mundo congela 4 s", function () {
+                // vitória da noite 1 ao fim do tempo
+                novaNoite(0);
+                const geracao = noite.geracao;
+                noite.salvos = 2;
+                noite.segundos = 119.9375;
+                passarMundo(1);
+                conferirIgual("noite 1 com 2 salvos (a meta) ao amanhecer: vitória", noite.resultado, "vitoria");
+                conferirIgual("e a próxima é a noite 2 (índice 1), com 4 s de resultado", [noite.proxima, noite.segundosParaProxima].join(","), "1,4");
+                const foto = [barcaNoMundo.x, barcaNoMundo.z].concat(barcosDePesca.map(function (barco) { return barco.x + "," + barco.z; })).join(";");
+                barcaNoMundo.segundosEncalhada = 0;
+                passarMundo(63);
+                conferir("durante os 4 s o mundo congela (nada se mexe) e a noite ainda é a 1",
+                    noite.indice === 0 && noite.resultado === "vitoria" && foto === [barcaNoMundo.x, barcaNoMundo.z].concat(barcosDePesca.map(function (barco) { return barco.x + "," + barco.z; })).join(";"));
+                passarMundo(1);
+                conferir("aos 4,0 s a noite 2 (Garoa) começa: 3 barcos, 12 recifes, relógio zerado, nova geração do desenho",
+                    noite.indice === 1 && noite.resultado === "" && noite.segundos === 0 && barcosDePesca.length === 3 && recifes.length === 12 && noite.geracao === geracao + 1);
+
+                // sem meta: repete a mesma noite
+                novaNoite(1);
+                noite.salvos = 1;
+                noite.segundos = 149.9375;
+                passarMundo(1);
+                conferirIgual("noite 2 com 1 salvo (meta 2) ao amanhecer: sem-meta e a próxima é a MESMA noite", [noite.resultado, noite.proxima].join(","), "sem-meta,1");
+                const idsAntes = barcosDePesca.map(function (barco) { return barco.id; });
+                passarMundo(64);
+                conferir("passados 4 s a noite 2 recomeça: relógio 0, salvos da noite 0, barcos novos",
+                    noite.indice === 1 && noite.resultado === "" && noite.segundos === 0 && noite.salvos === 0 && barcosDePesca.length === 3 &&
+                    barcosDePesca.every(function (barco) { return idsAntes.indexOf(barco.id) === -1; }));
+
+                // a 5ª noite vencida zera o jogo e recomeça na 1
+                novaNoite(4);
+                salvos = 9;
+                naufragios = 2;
+                noite.salvos = 4;
+                noite.segundos = 179.9375;
+                passarMundo(1);
+                conferirIgual("noite 5 com 4 salvos (meta 4): vitória e a próxima volta à noite 1", [noite.resultado, noite.proxima].join(","), "vitoria,0");
+                passarMundo(64);
+                conferirIgual("recomeço do jogo: noite 1 e os contadores do jogo zerados", [noite.indice, salvos, naufragios].join(","), "0,0,0");
+
+                // os naufrágios NÃO zeram entre noites
+                novaNoite(0);
+                naufragios = 2;
+                noite.salvos = 2;
+                noite.segundos = 119.9375;
+                passarMundo(1);
+                passarMundo(64);
+                conferirIgual("vencer a noite 1 com 2 naufrágios: a noite 2 começa e os 2 naufrágios continuam (só zeram na noite 1)", [noite.indice, naufragios].join(","), "1,2");
+
+                // 2 naufrágios ainda não perdem; o 3º perde e o jogo recomeça na noite 1
+                novaNoite(2);
+                naufragios = 2;
+                passarMundo(2);
+                conferirIgual("2 naufrágios: a noite 3 continua", [noite.resultado, noite.indice].join(","), ",2");
+                naufragios = 3;
+                passarMundo(1);
+                conferirIgual("3 naufrágios: derrota imediata, a próxima é a noite 1", [noite.resultado, noite.proxima].join(","), "naufragios,0");
+                passarMundo(64);
+                conferirIgual("depois de 4 s: noite 1 e contadores zerados", [noite.indice, salvos, naufragios, barcosDePesca.length].join(","), "0,0,0,2");
+
+                // a meta é de barcos SALVOS no porto antes do amanhecer: a noite acaba na hora em que a fila esvazia
+                novaNoite(0);
+                barcosDePesca.forEach(function (barco) { barco.x = PORTO.x; barco.z = PORTO.z; });
+                const salvosAntes = salvos;
+                passarMundo(1);
+                conferirIgual("os 2 barcos entram no porto: +2 salvos e a noite acaba com vitória, aos " + noite.segundos.toFixed(4) + " s (antes do amanhecer)",
+                    [salvos - salvosAntes, noite.salvos, noite.resultado, noite.segundos < 1].join(","), "2,2,vitoria,true");
+
+                // fila esvaziada SEM a meta (um salvo e um perdido) = sem-meta
+                novaNoite(0);
+                barcosDePesca[0].x = PORTO.x;
+                barcosDePesca[0].z = PORTO.z;
+                barcosDePesca[1].x = recifes[0].x;   // naufraga: ainda afunda por 2,5 s antes de a fila acabar
+                barcosDePesca[1].z = recifes[0].z;
+                passarMundo(1);
+                conferirIgual("um salvo e um afundando: a noite ainda não acabou", noite.resultado, "");
+                passarMundo(41);
+                conferirIgual("terminado o afundamento a fila acabou com 1 de 2 salvos: sem-meta", noite.resultado, "sem-meta");
+                comecarNoite(0);
+            });
+
+            testar("calor da lanterna (GDD §4.5): +0,12/s no estreito, −0,06/s no largo, limites 0 e 1, parado/encalhada resfria 0,02/s", function () {
+                function umSegundo(foco, calorInicial, encalhada) {
+                    comecarNoite(0);
+                    barcaNoMundo.segundosEncalhada = encalhada ? 1e9 : 0;
+                    lanternaDaBarca.foco = foco;
+                    lanternaDaBarca.calor = calorInicial;
+                    for (let i = 0; i < 16; i++) {
+                        atualizarLanterna(PASSO);
+                    }
+                    return lanternaDaBarca.calor;
+                }
+                conferir("estreito em movimento: 0 → 0,12 em 1 s", proximo(umSegundo("estreito", 0, false), 0.12));
+                conferir("largo em movimento: 0,5 → 0,44 em 1 s", proximo(umSegundo("largo", 0.5, false), 0.44));
+                conferir("largo: o calor nunca fica abaixo de 0 (0,01 → 0)", umSegundo("largo", 0.01, false) === 0);
+                conferir("estreito encalhada esquenta o DOBRO e esfria 0,02: 0 → 0,22 em 1 s (leitura: \"parado nos dois\" = encalhada)", proximo(umSegundo("estreito", 0, true), 0.22));
+                conferir("largo encalhada: −0,06 − 0,02 = −0,08/s (0,5 → 0,42)", proximo(umSegundo("largo", 0.5, true), 0.42));
+                conferir("encalhada em calor 0 não fica negativa", umSegundo("largo", 0, true) === 0);
+
+                // a tecla/botão de foco alterna e troca ângulo e alcance
+                comecarNoite(0);
+                lanternaDaBarca.foco = "largo";
+                alternarFoco();
+                atualizarLanterna(0);
+                conferir("alternarFoco: largo → estreito (7°, 46 × (1 − 0,075) = 42,55 m)", lanternaDaBarca.foco === "estreito" && proximo(lanternaDaBarca.meioAngulo, 7 * GRAU) && proximo(lanternaDaBarca.alcance, 42.55));
+                alternarFoco();
+                conferirIgual("e de volta: estreito → largo", lanternaDaBarca.foco, "largo");
+            });
+
+            testar("sobrecarga: calor 1 apaga a lanterna por 4 s e volta com 0,4; apagada ela não vê recife nenhum", function () {
+                comecarNoite(0);
+                barcaNoMundo.segundosEncalhada = 0;
+                lanternaDaBarca.foco = "estreito";
+                lanternaDaBarca.calor = 0.96;
+                let quadros = 0;
+                while (lanternaDaBarca.segundosApagada === 0 && quadros < 100) {
+                    atualizarLanterna(PASSO);
+                    quadros++;
+                }
+                conferir("o estreito sobe até 1 em " + quadros + " quadros e apaga por exatamente 4 s", lanternaDaBarca.calor === 1 && lanternaDaBarca.segundosApagada === 4);
+
+                const recife = { x: 0, z: -10, raio: 1 };
+                recifes.push(Object.assign({ alta: false, brasa: 0, iluminado: false }, recife));
+                const noFeixe = recifes[recifes.length - 1];
+                atualizarBrasas(0.05, { x: 0, z: 0 }, 0, semAlvoTapando);
+                conferir("apagada: o recife a 10 m, no meio do feixe, NÃO é iluminado", noFeixe.iluminado === false);
+
+                for (let i = 0; i < 63; i++) {
+                    atualizarLanterna(PASSO);
+                }
+                conferir("aos 3,94 s ainda apagada e com calor 1", lanternaDaBarca.segundosApagada > 0 && lanternaDaBarca.segundosApagada < 0.07 && lanternaDaBarca.calor === 1);
+                atualizarLanterna(PASSO);
+                conferir("aos 4,0 s volta acesa com calor 0,4", lanternaDaBarca.segundosApagada === 0 && lanternaDaBarca.calor === 0.4);
+                atualizarBrasas(0.05, { x: 0, z: 0 }, 0, semAlvoTapando);
+                conferir("e o recife do feixe volta a ser visto", noFeixe.iluminado === true && noFeixe.brasa === 3);
+                atualizarLanterna(1);
+                conferir("depois dela o estreito volta a esquentar a partir de 0,4 (0,4 + 0,12 = 0,52)", proximo(lanternaDaBarca.calor, 0.52));
+                recifes.pop();
+                comecarNoite(0);
+            });
+
+            testar("deriva: o vento empurra a barca e os barcos para +x na velocidade da ficha, e a barca encalhada não deriva", function () {
+                NOITES.forEach(function (esperada, indice) {
+                    comecarNoite(indice);
+                    barcaNoMundo.segundosEncalhada = 0;
+                    barcaNoMundo.x = 14;
+                    barcaNoMundo.z = 42;
+                    barcaNoMundo.proa = 0;
+                    conduzirBarca(1, 0, false);
+                    conferir("noite " + (indice + 1) + ": a barca em 1 s anda 5 m para −z e deriva " + esperada.deriva + " m para +x",
+                        proximo(barcaNoMundo.z, 37) && proximo(barcaNoMundo.x, 14 + esperada.deriva), "(" + barcaNoMundo.x + ", " + barcaNoMundo.z + ")");
+                    const parado = { x: 14, z: 49, proa: 0, velocidade: 0 };
+                    barcaNoMundo.x = 14;
+                    barcaNoMundo.z = 42;
+                    conduzirBarco(parado, barcaNoMundo, 1);
+                    conferir("noite " + (indice + 1) + ": um barco parado a 7 m do alvo só deriva " + esperada.deriva + " m",
+                        proximo(parado.x, 14 + esperada.deriva) && parado.z === 49, "(" + parado.x + ", " + parado.z + ")");
+                });
+                comecarNoite(1);
+                barcaNoMundo.segundosEncalhada = 5;
+                barcaNoMundo.x = 14;
+                barcaNoMundo.z = 42;
+                conduzirBarca(1, 0, false);
+                conferirIgual("encalhada: nem anda nem deriva", [barcaNoMundo.x, barcaNoMundo.z].join(","), "14,42");
+                comecarNoite(0);
+            });
+
+            testar("o comboio nasce em lugar VÁLIDO em todas as noites (grade de poses × 8 rumos): no mundo, fora do porto, 1 m de folga das pedras e da ilha", function () {
+                let poses = 0, invalidas = 0, primeira = "";
+                NOITES.forEach(function (esperada, indice) {
+                    comecarNoite(indice);
+                    const obstaculos = recifes.concat([ilha]);
+                    for (let x = -79; x <= 79; x += 2) {
+                        for (let z = -79; z <= 79; z += 2) {
+                            if (obstaculos.some(function (obstaculo) { return distancia({ x: x, z: z }, obstaculo) < obstaculo.raio + RAIO_DO_BARCO; })) {
+                                continue;
+                            }
+                            for (let rumo = 0; rumo < 8; rumo++) {
+                                barcosDePesca.length = 0;
+                                barcaNoMundo.x = x;
+                                barcaNoMundo.z = z;
+                                barcaNoMundo.proa = rumo * Math.PI / 4;
+                                criarComboio();
+                                poses++;
+                                const defeito = barcosDePesca.map(function (barco) { return defeitoDeNascimento(barco, obstaculos); }).find(function (texto) { return texto !== ""; });
+                                if (barcosDePesca.length !== esperada.barcos || defeito !== undefined) {
+                                    invalidas++;
+                                    primeira = primeira || "noite " + (indice + 1) + ", barca (" + x + ", " + z + ") rumo " + rumo + ": " + (defeito || "quantidade errada");
+                                }
+                            }
+                        }
+                    }
+                });
+                conferir("nenhum dos " + poses + " comboios nasceu inválido (" + invalidas + ")", poses > 50000 && invalidas === 0, primeira);
+                comecarNoite(0);
+            });
+
+            testar("o perdido na névoa vale no passo 7: só depois de MAIS de 5 s seguidos além de 35 m, e sem cascata", function () {
+                novaNoite(2);
+                barcosDePesca.length = 0;
+                barcaNoMundo.x = -50;
+                barcaNoMundo.z = 50;
+                const comboio = [0, 1, 2, 3].map(function (indice) {
+                    return { id: 900 + indice, x: -50 + noite.ficha.deriva * 0, z: 50 + 36 + 7 * indice, proa: 0, velocidade: 0, segundosAfundando: 0, afundamento: 0 };
+                });
+                comboio.forEach(function (barco) { barcosDePesca.push(barco); });
+                const presos = comboio.map(function (barco) { return { barco: barco, x: barco.x, z: barco.z }; });
+                const horas = [];
+                atualizarMundo(0, 0, false);
+                conferir("dt = 0: ninguém se perde", barcosDePesca.length === 4 && barcosRemovidos.length === 0);
+                for (let quadro = 1; quadro <= 330; quadro++) {
+                    atualizarMundo(PASSO, 0, false);
+                    esvaziarRemovidos().forEach(function (barco) { if (barco.id >= 900 && barco.id < 904) { horas.push(quadro * PASSO); } });
+                    presos.forEach(function (preso) {
+                        if (barcosDePesca.indexOf(preso.barco) !== -1) { preso.barco.x = preso.x; preso.barco.z = preso.z; preso.barco.velocidade = 0; }
+                    });
+                    if (noite.resultado !== "") { break; }
+                }
+                conferir("os naufrágios por névoa vêm um a um, o 1º depois de 5 s e cada outro 5 s depois do anterior (" + horas.join(", ") + ")",
+                    horas.length >= 3 && horas[0] > 5 && horas.slice(1).every(function (hora, i) { return hora - horas[i] > 5; }));
+                comecarNoite(0);
+            });
+
+            testar("a trava de clarões (WCAG 2.3.1): 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 começos em QUALQUER janela fechada de 1 s (intervalo mínimo 0,4 s), nunca com o anterior no ar", function () {
+                verifTravaDeClaroes();
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
+            });
+
+            testar("o modo vale para o clarão inteiro (`noite.relampagoReduzido` grava a opção no começo de cada clarão): opção trocada a cada quadro durante os clarões, nunca um salto de 0 a 1 num clarão reduzido", function () {
+                verifModoTravadoPorClarao();
+                reduzirClaroes = false;
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
+            });
+
+            testar("o comboio nasce no 1º candidato aprovado (48 giros × recuos, o anel a 10 e 20 m, a PARTIDA por último) e, sem lugar vivo, não nasce nada; a PARTIDA é livre nas cinco noites", function () {
+                verifNascimentoDoComboio();
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
+            });
+
+            testar("robô semeado: leme, devagar e foco aleatórios, dt aleatório (inclui 0); invariantes em todos os quadros (3 sementes × 6000)", function () {
+                const sementes = [5, 20261026, 987654321];
+                const duracoes = [0, 0.001, 0.008, 0.016, 0.033, 0.05, 0.05, 0.05];
+                let resultadosVistos = {}, apagadas = 0, clarões = 0, geracoes = 0;
+
+                sementes.forEach(function (semente) {
+                    semearSorteio(semente);
+                    comecarNoite(0);
+                    const violacoes = {};
+                    function registrar(categoria, mensagem) {
+                        if (!(categoria in violacoes)) { violacoes[categoria] = mensagem; }
+                    }
+                    let destino = PORTO, leme = 0, devagar = false;
+                    const idsVistos = new Set();
+                    for (let quadro = 0; quadro < 6000; quadro++) {
+                        if (quadro % 200 === 0) {
+                            destino = sortear(recifes.concat([PORTO, { x: Math.random() * 100 - 50, z: Math.random() * 100 - 50 }]));
+                        }
+                        const erro = normalizar(Math.atan2(-(destino.x - barcaNoMundo.x), -(destino.z - barcaNoMundo.z)) - barcaNoMundo.proa);
+                        leme = Math.abs(erro) < 0.05 ? 0 : Math.sign(erro);
+                        if (Math.random() < 0.1) { leme = sortear([-1, 0, 1]); }
+                        if (Math.random() < 0.02) { devagar = !devagar; }
+                        if (Math.random() < 0.03) { alternarFoco(); }
+                        if (Math.random() < 0.01) { reduzirClaroes = !reduzirClaroes; }
+                        const geracaoAntes = noite.geracao;
+                        atualizarMundo(sortear(duracoes), leme, devagar);
+                        atualizarBrasas(0.016, barcaNoMundo, barcaNoMundo.proa, semAlvoTapando);
+                        geracoes += noite.geracao - geracaoAntes;
+                        barcosRemovidos.length = 0;
+
+                        const lanterna = lanternaDaBarca;
+                        if (!todosFinitos([barcaNoMundo.x, barcaNoMundo.z, barcaNoMundo.proa, lanterna.calor, lanterna.segundosApagada, lanterna.alcance, lanterna.meioAngulo, noite.segundos, noite.aurora, noite.nevoa])) {
+                            registrar("NaN", "número inválido na noite " + noite.indice);
+                        }
+                        if (lanterna.calor < 0 || lanterna.calor > 1) { registrar("calor entre 0 e 1", "calor " + lanterna.calor); }
+                        if (lanterna.segundosApagada < 0 || lanterna.segundosApagada > 4) { registrar("apagada entre 0 e 4 s", "apagada " + lanterna.segundosApagada); }
+                        if (lanterna.segundosApagada > 0) { apagadas++; }
+                        if (noite.segundosDoRelampago >= 0) { clarões++; }
+                        if (Math.abs(barcaNoMundo.x) > METADE_DO_MUNDO || Math.abs(barcaNoMundo.z) > METADE_DO_MUNDO) { registrar("a barca fica no mundo de ±80", "(" + barcaNoMundo.x + ", " + barcaNoMundo.z + ")"); }
+                        if (barcosDePesca.length + barcosAfundando.length > noite.ficha.barcos) { registrar("a fila não passa dos barcos da noite", barcosDePesca.length + " + " + barcosAfundando.length); }
+                        if (noite.salvos > noite.ficha.barcos) { registrar("não se salva mais barcos do que a noite tem", "salvos " + noite.salvos); }
+                        if (noite.aurora < 0 || noite.aurora > 1) { registrar("aurora entre 0 e 1", "aurora " + noite.aurora); }
+                        if (noite.indice < 0 || noite.indice > 4) { registrar("índice da noite entre 0 e 4", "índice " + noite.indice); }
+                        if (noite.resultado !== "") { resultadosVistos[noite.resultado] = (resultadosVistos[noite.resultado] || 0) + 1; }
+                        barcosDePesca.forEach(function (barco) {
+                            if (!idsVistos.has(barco.id)) {
+                                idsVistos.add(barco.id);
+                                const defeito = defeitoDeNascimento(barco, recifes.concat([ilha]));
+                                if (defeito !== "") { registrar("todo comboio nasce válido", "barco " + barco.id + ": " + defeito); }
+                            }
+                            if ((barco.segundosPerdido || 0) > 5) { registrar("ninguém passa de 5 s além de 35 m e fica na fila", "barco " + barco.id); }
+                        });
+                    }
+                    const categorias = Object.keys(violacoes);
+                    conferir("semente " + semente + ": nenhuma regra quebrada em nenhum quadro", categorias.length === 0,
+                        categorias.map(function (categoria) { return categoria + " (" + violacoes[categoria] + ")"; }).join("; "));
+                });
+                reduzirClaroes = false;
+                conferir("o robô exercitou o jogo: " + geracoes + " noites montadas, quadros com lanterna apagada " + apagadas + ", com clarão " + clarões + ", resultados " + JSON.stringify(resultadosVistos),
+                    geracoes >= 3 && apagadas > 0);
+                comecarNoite(0);
+            });
+
+            finalizar();
+        });
+    </script>
+</body>
+
+</html>

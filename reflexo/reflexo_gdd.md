@@ -1,11 +1,11 @@
 # REFLEXO — Documento de design (GDD)
 
-> **Título de trabalho.** A checagem de nome (seção 11) achou um jogo chamado exatamente "Reflexo" no
-> itch.io e vários títulos parecidos. O nome definitivo depende de você. Até lá, pasta e documento
-> seguem como `reflexo`.
+> **Aprovado pelo usuário em 2026-10-27** (TODO N6), com o nome **Reflexo**. A checagem de nome (seção 11)
+> achou um jogo chamado exatamente "Reflexo" no itch.io (narrativo, sem relação) e títulos parecidos; o
+> usuário manteve o nome.
 
-Módulo 9 do curso: o primeiro jogo em **2.5D**, um raycaster feito à mão, sem biblioteca. É a ponte
-entre o canvas 2D de todos os jogos anteriores e o three.js do Faroleiro (módulo 10).
+Módulo 8 do curso (depois do Xenomorph): o primeiro jogo em **2.5D**, um raycaster feito à mão, sem biblioteca. É a ponte
+entre o canvas 2D de todos os jogos anteriores, o isométrico *Dique* (módulo 9) e o three.js de *Proa Acesa* (módulo 10).
 
 ## 1. Conceito
 
@@ -109,6 +109,11 @@ casa e **não** bloqueia o jogador (ele passa pela borda do espelho; o plano fin
 - **Reaparecem** a cada 12 s numa fenda `S`, até o máximo da fase.
 - **Contato:** tira uma vida e dá 1,5 s de invulnerabilidade, com a sombra recuando.
 - O feixe **não machuca** o jogador. A luz só atinge sombras.
+- **O corpo faz sombra:** o feixe que queima é cortado na frente do zelador (quem está dentro da luz), o que vem depois dele na cadeia de espelhos
+  está no escuro, e a menos de 1 casa dele nada queima. Ficar no feixe nunca é abrigo (seção 11); o feixe continua
+  acendendo receptores inteiro.
+- A primeira sombra de uma sala nasce numa fenda que o campo alcança; com o máximo atingido, o relógio de nascimento
+  não corre (a reposição vem 12 s depois da baixa).
 
 ### 4.8 Sala, vidas, pontuação
 Pontos por receptor aceso (100), sombra desfeita (50) e tempo restante (só bônus). Recorde por fase em `localStorage`, lido com `try/catch` e saneado campo a campo.
@@ -275,6 +280,14 @@ atacar pode trancar uma porta. Nenhum título encontrado combina os três. **Nen
 próxima demais de um jogo específico**; nada mudou no design.
 **Guarda de projeto:** não acrescentar "ficar na luz protege" (o centro do Lightmatter). A luz só
 ataca. Se isso mudar, rever esta seção.
+**A regra, escrita com precisão** (decisão do tech-lead; é o que o passo 8 implementa): *a luz não é abrigo: o seu corpo
+faz sombra no feixe. Atrás de você e perto de você ele não queima; à sua frente, o feixe é uma arma que você aponta com os
+espelhos.* Em números: o zelador está "na luz" quando a menos de 0,75 casa (meia casa de luz mais o raio da sombra, a mesma
+faixa em que uma sombra queima) de um trecho do feixe. Estando na luz, (1) o feixe que queima termina na frente do corpo e
+tudo o que vem depois dele na cadeia de espelhos está no escuro, e (2) a menos de 1 casa do zelador nada queima. O trecho aceso
+**antes** do corpo (do lado do emissor) e a mais de 1 casa dele continua queimando: uma sombra que desce um trecho aceso
+comprido na direção do zelador é desfeita se passar meio segundo nele, e isso é o feixe usado como **arma apontada**, não a
+luz como zona segura. O feixe continua inteiro para acender receptores e abrir portas; só a arma respeita o corpo.
 Limite: busca por palavras em 2 lojas (o itch.io limitou requisições); não é exaustiva.
 
 ## 12. Riscos em aberto

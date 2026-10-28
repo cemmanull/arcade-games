@@ -1,6 +1,7 @@
-# FAROLEIRO — Game Design Document
+# PROA ACESA — Game Design Document
 
-> Rascunho para aprovação (TODO N6). Título de trabalho. Pasta e passos: `faroleiro/` (F1–F9 do `TODO.md`).
+> **Aprovado pelo usuário em 2026-10-27** (TODO N6), com o conceito revisado da seção 11. Título: **Proa Acesa**
+> (TODO N9; antes "Faroleiro"). Pasta e passos: `proa-acesa/` (F1–F9 do `TODO.md`).
 > **Atenção:** a checagem de originalidade (seção 11) achou um jogo com o mesmo laço central do conceito
 > aprovado em `HANDOFF.md` §3.4. Este GDD já traz o conceito **revisado**; o antigo está na seção 11.
 
@@ -227,6 +228,7 @@ aventura/sobrevivência (ids 2023050, 1469370, 4422050, 1577510, 5310470 e uma d
 "O Faroleiro" (kupts, shmup de mago), "O Último Faroleiro" (cogulezo-games, **em português**: feixe contra
 criaturas do mar) e "Far Ol" (bomdiajj, comandos aos barcos). Nenhum se chama só "Faroleiro", mas
 "O Último Faroleiro" tem tema e língua próximos: **decisão do usuário** se mantém o título (seção 12).
+**Decidido em 2026-10-27:** o título é **Proa Acesa** (nomes checados em `HANDOFF.md` §3.4); "Faroleiro" era o título provisório.
 
 **Mecânica.** O subgênero "farol guia navios" é muito povoado no itch.io (dezenas de jogos de game jam só nas buscas feitas).
 Os mais próximos:
@@ -257,7 +259,7 @@ Os mais próximos:
 ## 12. Perguntas em aberto
 1. Aprovar o conceito revisado (seção 11), ou escolher o plano B (a checar), ou manter o antigo sabendo da
    semelhança com Beamward?
-2. Manter o título "Faroleiro" apesar de "O Último Faroleiro" (itch.io, em português)?
+2. Título: **resolvido em 2026-10-27, Proa Acesa** (antes "Faroleiro", que colidia com "O Último Faroleiro" no itch.io).
 3. Dois arquivos (`regras.js` + `script.js`) a partir do passo 05 contrariam "um arquivo por passo"? Proposta: sim, é a lição.
 4. Medir num celular real antes do `final` (o spike não mediu).
 

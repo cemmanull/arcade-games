@@ -5,31 +5,55 @@
 //   node verificacao/rodar.mjs --links    confere os links relativos de todos os .md
 //   node verificacao/rodar.mjs <trecho>   só as páginas cujo caminho contém <trecho>
 //   node verificacao/rodar.mjs <arquivo.html>   uma página de teste qualquer, mesmo fora da pasta
+//   node verificacao/rodar.mjs --captura <arquivo.html> [--largura N] [--altura N] [--escala N] [--saida x.png]
+//                                         grava um PNG da página (padrão 1280x800, escala 1, na pasta temporária)
 //
+//   node verificacao/rodar.mjs --autoteste   planta 13 defeitos e confere que este executor os pega
+//
+// O modo normal não roda verificacao/medicao/ nem verificacao/autoteste/ (só por caminho explícito).
 // Variável CHROME: caminho do navegador, se não for um dos lugares comuns.
-// Saída: 0 tudo certo, 1 há falhas, 2 navegador não encontrado ou nenhuma página.
+// Variável LIMITE_DA_PAGINA_EM_SEGUNDOS: teto de uma página de teste (padrão 120).
+// Saída: 0 tudo certo, 1 há falhas, 2 navegador não encontrado, nenhuma página ou uso errado.
 //
-// Os modos fumaça e links ficam em fumaca.mjs e links.mjs; navegador.mjs e cdp.mjs cuidam do Chrome.
+// Os outros modos ficam em fumaca.mjs, links.mjs e captura.mjs; navegador.mjs, depuracao.mjs e
+// cdp.mjs cuidam do Chrome.
 
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { capturarPagina } from "./captura.mjs";
 import { rodarFumaca } from "./fumaca.mjs";
 import { conferirLinks } from "./links.mjs";
 import { argumentosHeadless, comPerfilTemporario, encontrarNavegador, executarComLimite } from "./navegador.mjs";
 
 const pastaDoRepositorio = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pastaDasVerificacoes = join(pastaDoRepositorio, "verificacao");
+const pastasForaDoModoNormal = ["medicao", "autoteste"].map((nome) => join(pastaDasVerificacoes, nome));
 
-const argumentos = process.argv.slice(2);
+const OPCOES_COM_VALOR = ["--largura", "--altura", "--escala", "--saida"];
+const { valores: opcoes, restantes: argumentos } = separarOpcoesComValor(process.argv.slice(2));
 const filtro = argumentos.find((argumento) => !argumento.startsWith("--"));
 
 const MARCADOR = /RESULTADO: (\d+) ok, (\d+) falhas/g;
-const LIMITE_DA_PAGINA_DE_TESTE_EM_MILISSEGUNDOS = 120000;
+const LIMITE_DA_PAGINA_DE_TESTE_EM_MILISSEGUNDOS = lerLimiteDaPaginaEmMilissegundos();
+
+/* 120 s, ou o valor positivo (em segundos) de LIMITE_DA_PAGINA_EM_SEGUNDOS; o autoteste usa 3 s no laço infinito. */
+function lerLimiteDaPaginaEmMilissegundos() {
+    const segundos = Number(process.env.LIMITE_DA_PAGINA_EM_SEGUNDOS);
+    return Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : 120000;
+}
 
 async function principal() {
+    if (argumentos.includes("--autoteste")) {
+        // Import dinâmico: as cópias do executor que o autoteste monta não levam a pasta autoteste/.
+        const { rodarAutoteste } = await import("./autoteste/autoteste.mjs");
+        return rodarAutoteste();
+    }
     if (argumentos.includes("--links")) {
         return conferirLinks(pastaDoRepositorio);
+    }
+    if (argumentos.includes("--captura")) {
+        return rodarCaptura();
     }
     if (argumentos.includes("--fumaca")) {
         const indices = listarArquivos(pastaDoRepositorio, (nome) => nome === "index.html", [pastaDasVerificacoes]);
@@ -40,13 +64,71 @@ async function principal() {
 
 
 // ============================================================
+// Modo captura: PNG de uma página
+// ============================================================
+async function rodarCaptura() {
+    const pedido = lerPedidoDeCaptura();
+    if (typeof pedido === "string") {
+        console.error(pedido);
+        return 2;
+    }
+    return capturarPagina(pedido);
+}
+
+/* Devolve o pedido de captura, ou o texto do erro de uso. */
+function lerPedidoDeCaptura() {
+    const USO = "Uso: node verificacao/rodar.mjs --captura <arquivo.html> [--largura N] [--altura N] [--escala N] [--saida caminho.png]";
+    if (!filtro) return USO;
+    if (!existsSync(filtro)) return `Arquivo não encontrado: ${filtro}
+${USO}`;
+
+    const largura = lerNumeroDaOpcao("largura", 1280, 1, 8000, true);
+    const altura = lerNumeroDaOpcao("altura", 800, 1, 8000, true);
+    const escala = lerNumeroDaOpcao("escala", 1, 0.1, 4, false);
+    const invalida = [["largura", largura], ["altura", altura], ["escala", escala]].find(([, valor]) => Number.isNaN(valor));
+    if (invalida) return `--${invalida[0]} inválida: "${opcoes[invalida[0]]}"
+${USO}`;
+
+    const caminho = resolve(filtro);
+    return { caminho, nomeDaPagina: nomeCurto(caminho), largura, altura, escala, saida: opcoes.saida };
+}
+
+/* O valor numérico da opção, o padrão se ela não foi dada, ou NaN se está fora dos limites. */
+function lerNumeroDaOpcao(nome, padrao, minimo, maximo, inteiro) {
+    if (opcoes[nome] === undefined) return padrao;
+    const valor = Number(opcoes[nome]);
+    const valido = opcoes[nome] !== "" && Number.isFinite(valor) && valor >= minimo && valor <= maximo && (!inteiro || Number.isInteger(valor));
+    return valido ? valor : Number.NaN;
+}
+
+/* Tira do caminho as opções que levam valor (--largura 800) para o valor não virar o filtro. */
+function separarOpcoesComValor(todosOsArgumentos) {
+    const valores = {};
+    const restantes = [];
+
+    for (let indice = 0; indice < todosOsArgumentos.length; indice++) {
+        const argumento = todosOsArgumentos[indice];
+        if (!OPCOES_COM_VALOR.includes(argumento)) {
+            restantes.push(argumento);
+            continue;
+        }
+        const proximo = todosOsArgumentos[indice + 1];
+        const temValor = proximo !== undefined && !proximo.startsWith("--");
+        valores[argumento.slice(2)] = temValor ? proximo : "";
+        if (temValor) indice++;
+    }
+    return { valores, restantes };
+}
+
+
+// ============================================================
 // Modo normal: páginas de teste, resultado lido do DOM final
 // ============================================================
 async function rodarVerificacoes() {
     const navegador = encontrarNavegador();
     const paginas = filtro && filtro.endsWith(".html") && existsSync(filtro)
         ? [resolve(filtro)]
-        : aplicarFiltro(listarArquivos(pastaDasVerificacoes, (nome) => nome.endsWith(".html")));
+        : aplicarFiltro(listarArquivos(pastaDasVerificacoes, (nome) => nome.endsWith(".html"), pastasForaDoModoNormal));
 
     if (paginas.length === 0) {
         console.error("Nenhuma página de teste encontrada.");
