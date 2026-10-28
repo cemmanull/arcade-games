@@ -1,0 +1,248 @@
+<!--
+  MEDIÇÃO DO PASSO 8 do Reflexo, para abrir NO CELULAR (veja LEIAME.md). Não é página de teste: o executor não a roda no modo normal.
+
+  Esqueleto copiado do index.html do passo (os `id` que o script procura), depois o script do passo e o medir.js. A página só
+  dirige o jogo pelos nomes que o passo já expõe (entrada, sala, sombras, luz); não muda nada nele.
+
+  O que se mede é o `ultimoTempoDeQuadro` do jogo (atualizar + desenhar, CPU, inclui o envio da imagem ao canvas) e o intervalo
+  entre quadros (fps). O jogo só tem o desenhador B (ImageData por pixel); não há "modo" a comparar.
+  A resolução interna é a do jogo: 195×150 com o celular em pé, 320×200 deitado. Meça EM PÉ, que é como se joga.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reflexo — medição do passo 8</title>
+    <link rel="stylesheet" href="../../reflexo/08-sombras/style.css">
+    <script src="../../reflexo/08-sombras/script.js" defer></script>
+    <script src="medir.js" defer></script>
+</head>
+
+<body>
+    <h1>Reflexo</h1>
+
+    <div id="palco">
+        <canvas id="visao" width="320" height="200" role="img" aria-label="A sala em primeira pessoa">
+            Seu navegador não suporta canvas.
+        </canvas>
+        <canvas id="jogo" width="384" height="288" role="img" hidden aria-label="Planta da sala vista de cima">
+            Seu navegador não suporta canvas.
+        </canvas>
+    </div>
+
+    <p id="leitura"></p>
+    <p id="aviso" class="so-leitor" role="status"></p>
+
+    <div id="controles">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar para a esquerda">⟲</button>
+        <button type="button" data-acao="frente" aria-label="Andar para a frente">▲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar para a direita">⟳</button>
+        <button type="button" data-acao="esquerda" aria-label="Passo para a esquerda">◀&#xFE0E;</button>
+        <button type="button" data-acao="tras" aria-label="Andar para trás">▼</button>
+        <button type="button" data-acao="direita" aria-label="Passo para a direita">▶&#xFE0E;</button>
+        <button type="button" data-comando="espelho">Espelho</button>
+        <button type="button" data-comando="planta" aria-pressed="false">Planta</button>
+        <button type="button" data-comando="reiniciar">Reiniciar</button>
+    </div>
+
+    <p id="ajuda">Página de medição: o painel escuro cobre o jogo.</p>
+
+    <script>
+        /* `load` vem depois dos scripts `defer`: aqui o jogo e o medir.js já existem. */
+        const CHAVE_DO_ROBO = "robo-de-medicao";
+        const MIRAR_ESTREITO = 0.12;            // radianos: abaixo disso o robô para de girar
+        const ANDAR_SO_SE_MIRANDO = 0.5;        // radianos: mais torto que isso o robô gira parado
+        const CHEGOU_AO_PONTO = 0.3;            // casas
+
+        /* Espelhos que acendem o receptor e abrem a porta (coluna, linha), como o jogador faria com E: o corredor da linha 4 fica aberto. */
+        const ESPELHOS_PARA_ABRIR_A_PORTA = [{ coluna: 3, linha: 5 }, { coluna: 3, linha: 2 }];
+
+        /* Cenário 1: o robô dá voltas por pontos no centro das casas, todos em linha reta livre (salas e corredor da porta). */
+        const ROTA = [[1.5, 4.5], [13.5, 4.5], [13.5, 9.5], [7.5, 9.5], [7.5, 4.5], [1.5, 4.5], [1.5, 1.5]];
+
+        /* Cenário 2: parado na vista com a MAIOR distância média dos raios (varridas todas as casas livres e 72 ângulos, com a porta
+           aberta): o canto de cima da sala da direita, olhando para baixo. Com 2 sombras sempre vivas. */
+        const VISTA_MAIS_LONGA = { x: 10.5, y: 1.5, angulo: Math.PI / 2 };
+
+        let sombrasDaFase = 0;   // guardado no `load` (este script roda antes do jogo): o cenário 1 zera SOMBRAS.max e o cenário 2 devolve
+
+        window.addEventListener("load", function () {
+            sombrasDaFase = SOMBRAS.max;
+            montarPainelDeMedicao({
+                titulo: "Reflexo passo 8",
+                cenarios: [criarCenarioDaRota(), criarCenarioDaVistaLonga()],
+                verificarRequisitos: descreverImpedimento,
+                lerAparelho: lerAparelhoDoJogo
+            });
+        });
+
+        function descreverImpedimento() {
+            if (typeof pixels === "undefined" || pixels === null || luz === null) {
+                return "O jogo não começou (mapa ou artes inválidos). Abra o console do navegador para ver o motivo.";
+            }
+            return "";
+        }
+
+        // ---- COMUM ----
+        function prepararSalaComAPortaAberta() {
+            reiniciarSala();
+            vidas = VIDAS_INICIAIS;
+            ESPELHOS_PARA_ABRIR_A_PORTA.forEach(function (espelho) {
+                sala = salaComEspelhoGirado(sala, espelho.coluna, espelho.linha);
+            });
+            refazerLuz();
+            atualizarPortas();
+            atualizarCampo();
+        }
+
+        /* Cada entrada só é mexida se mudou: `mudarEntrada` refaz as classes dos botões, e isso não é custo do jogo. */
+        function segurarSomente(acoes) {
+            ["frente", "girarEsquerda", "girarDireita"].forEach(function (acao) {
+                const chave = CHAVE_DO_ROBO + ":" + acao;
+                const querSegurar = acoes.includes(acao);
+                if (querSegurar && entradasAtivas.get(chave) !== acao) {
+                    mudarEntrada(chave, acao);
+                } else if (!querSegurar && entradasAtivas.has(chave)) {
+                    mudarEntrada(chave);
+                }
+            });
+        }
+
+        /* O jogo acaba com 3 toques: a medição não pode parar de atualizar (um jogo acabado custa menos). Os toques são contados. */
+        function devolverAsVidas(contagem) {
+            if (vidas < VIDAS_INICIAIS) {
+                contagem.toques += VIDAS_INICIAIS - vidas;
+                vidas = VIDAS_INICIAIS;
+                fimDeJogo = false;
+            }
+        }
+
+        function criarContagem() {
+            return { toques: 0, quadros: 0, somaDeSombrasVivas: 0, somaDeSpritesNaTela: 0 };
+        }
+
+        function contarQuadro(contagem) {
+            contagem.quadros++;
+            contagem.somaDeSombrasVivas += sombras.length;
+            contagem.somaDeSpritesNaTela += spritesDaTela.length;
+        }
+
+        function lerAmostraDoJogo() {
+            return { quadro: ultimoTempoDeQuadro };   // o jogo só mede atualizar + desenhar juntos
+        }
+
+        function descreverContagem(contagem) {
+            const medio = function (soma) { return (soma / Math.max(1, contagem.quadros)).toFixed(1); };
+            return "resolução " + larguraDaVisao + "x" + alturaDaVisao
+                + " · receptores acesos " + luz.acesos.size + "/" + contarReceptores() + " · portas abertas " + portasAbertas.size + "/" + PORTAS.length
+                + " · sombras vivas (média) " + medio(contagem.somaDeSombrasVivas) + " · sprites na tela (média) " + medio(contagem.somaDeSpritesNaTela)
+                + " · toques " + contagem.toques + (contagem.voltas === undefined ? "" : " · voltas da rota " + contagem.voltas);
+        }
+
+        // ---- CENÁRIO 1: andando pelos corredores, feixe aceso, sem sombras ----
+        function criarCenarioDaRota() {
+            let contagem = criarContagem();
+            let pontoAtual = 0;
+
+            return {
+                nome: "Andando pela rota, feixe aceso, sem sombras",
+                preparar: function () {
+                    contagem = criarContagem();
+                    contagem.voltas = 0;
+                    pontoAtual = 0;
+                    SOMBRAS.max = 0;
+                    prepararSalaComAPortaAberta();
+                },
+                aoQuadro: function () {
+                    devolverAsVidas(contagem);
+                    contarQuadro(contagem);
+                    const ponto = ROTA[pontoAtual];
+                    if (Math.hypot(ponto[0] - jogador.x, ponto[1] - jogador.y) < CHEGOU_AO_PONTO) {
+                        pontoAtual = (pontoAtual + 1) % ROTA.length;
+                        contagem.voltas += pontoAtual === 0 ? 1 : 0;
+                    }
+                    segurarSomente(decidirOsPassosDoRobo(ROTA[pontoAtual]));
+                },
+                lerAmostra: lerAmostraDoJogo,
+                aoTerminar: function () {
+                    segurarSomente([]);
+                    return descreverContagem(contagem);
+                }
+            };
+        }
+
+        /* O robô gira (com as mesmas ações dos botões) até mirar o ponto e só então anda. */
+        function decidirOsPassosDoRobo(ponto) {
+            const anguloDoPonto = Math.atan2(ponto[1] - jogador.y, ponto[0] - jogador.x);
+            const desvio = Math.atan2(Math.sin(anguloDoPonto - jogador.angulo), Math.cos(anguloDoPonto - jogador.angulo));
+            const acoes = [];
+            if (desvio > MIRAR_ESTREITO) {
+                acoes.push("girarDireita");
+            } else if (desvio < -MIRAR_ESTREITO) {
+                acoes.push("girarEsquerda");
+            }
+            if (Math.abs(desvio) < ANDAR_SO_SE_MIRANDO) {
+                acoes.push("frente");
+            }
+            return acoes;
+        }
+
+        // ---- CENÁRIO 2: o pior quadro, parado olhando o corredor mais longo, com sombras ----
+        function criarCenarioDaVistaLonga() {
+            let contagem = criarContagem();
+
+            return {
+                nome: "Vista mais longa, feixe aceso, 2 sombras",
+                preparar: function () {
+                    contagem = criarContagem();
+                    SOMBRAS.max = sombrasDaFase;
+                    prepararSalaComAPortaAberta();
+                    segurarSomente([]);
+                    jogador.x = VISTA_MAIS_LONGA.x;
+                    jogador.y = VISTA_MAIS_LONGA.y;
+                    jogador.angulo = VISTA_MAIS_LONGA.angulo;
+                    atualizarDirecao();
+                    atualizarCampo();
+                    nascerSombra();
+                    nascerSombra();
+                },
+                /* O feixe desfaz a sombra que o cruza: o robô faz outra nascer na hora, para sempre haver duas na cena. */
+                aoQuadro: function () {
+                    devolverAsVidas(contagem);
+                    contarQuadro(contagem);
+                    if (sombras.length < SOMBRAS.max) {
+                        nascerSombra();
+                    }
+                },
+                lerAmostra: lerAmostraDoJogo,
+                aoTerminar: function () {
+                    SOMBRAS.max = sombrasDaFase;
+                    return descreverContagem(contagem);
+                }
+            };
+        }
+
+        // ---- O APARELHO ----
+        function lerAparelhoDoJogo() {
+            return {
+                pixelRatioDoJogo: 1,   // canvas 2D sem escala: o navegador amplia a imagem pronta
+                tamanhoDoCanvas: larguraDaVisao + "x" + alturaDaVisao + " (interno)",
+                placaDeVideo: lerNomeDaPlacaDeVideo()
+            };
+        }
+
+        function lerNomeDaPlacaDeVideo() {
+            try {
+                const contexto = document.createElement("canvas").getContext("webgl");
+                const extensao = contexto && contexto.getExtension("WEBGL_debug_renderer_info");
+                return extensao ? contexto.getParameter(extensao.UNMASKED_RENDERER_WEBGL) : "?";
+            } catch (erro) {
+                return "?";
+            }
+        }
+    </script>
+</body>
+
+</html>

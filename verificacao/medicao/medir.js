@@ -1,14 +1,15 @@
 /*
   MEDIR.JS — a parte comum das páginas de medição para abrir no CELULAR.
 
-  Uma página de medição (proa-acesa-08.html, e no futuro reflexo-08.html) entrega a este arquivo uma lista de cenários e uma função
+  Uma página de medição (proa-acesa-08.html, reflexo-08.html e, no futuro, a do Dique) entrega a este arquivo uma lista de cenários e uma função
   que lê o aparelho; aqui ficam o relógio de verdade (requestAnimationFrame, sem apoio.js), as estatísticas, o painel e o botão
   "Copiar resultado". Script clássico: carregue DEPOIS dos scripts do jogo e chame `montarPainelDeMedicao(...)` no evento `load`.
 
   Um cenário é { nome, preparar(), aoQuadro(instante), lerAmostra() }:
     preparar()        põe o jogo na situação a medir (roda uma vez, antes do aquecimento);
     aoQuadro(t)       opcional: o "dedo" do robô, roda a cada quadro, depois do quadro do jogo;
-    lerAmostra()      devolve { atualizacao, desenho, quadro, chamadas, triangulos } (ms do último quadro do jogo; as duas últimas são opcionais).
+    lerAmostra()      devolve { atualizacao, desenho, quadro, chamadas, triangulos } (ms do último quadro do jogo; só `quadro` é obrigatório.
+                      Jogo que não separa lógica de desenho entrega só `quadro`: o texto então mostra uma linha só, "tempo do jogo").
 */
 
 const LIMITE_DE_PAUSA_EM_MILISSEGUNDOS = 500;   // um intervalo maior é aba escondida ou tela apagada: não entra nas estatísticas
@@ -57,8 +58,10 @@ function medirCenario(cenario, opcoes) {
                 } else {
                     const amostra = cenario.lerAmostra();
                     amostras.intervalo.push(intervalo);
-                    amostras.atualizacao.push(amostra.atualizacao);
-                    amostras.desenho.push(amostra.desenho);
+                    if (typeof amostra.atualizacao === "number") {
+                        amostras.atualizacao.push(amostra.atualizacao);
+                        amostras.desenho.push(amostra.desenho);
+                    }
                     amostras.quadro.push(amostra.quadro);
                     chamadas = amostra.chamadas || 0;
                     triangulos = amostra.triangulos || 0;
@@ -95,9 +98,12 @@ function resumirCenario(nome, amostras, chamadas, triangulos, pausas) {
 }
 
 // ---- O APARELHO ----
-/* `extras` é o que só o jogo sabe: { pixelRatioDoJogo, tamanhoDoCanvas, placaDeVideo, ... }. Campos ausentes saem como "?". */
+/* `extras` é o que só o jogo sabe: { pixelRatioDoJogo, tamanhoDoCanvas, placaDeVideo, versaoDoThree }. Campos ausentes saem como "?". */
 function coletarInformacoesDoAparelho(extras) {
     return Object.assign({
+        pixelRatioDoJogo: "?",
+        tamanhoDoCanvas: "?",
+        placaDeVideo: "?",
         agente: navigator.userAgent,
         janela: window.innerWidth + "x" + window.innerHeight,
         tela: window.screen.width + "x" + window.screen.height,
@@ -120,15 +126,21 @@ function montarTextoDoResultado(titulo, aparelho, resultados, parametros) {
         "MEDICAO " + titulo,
         "Aparelho: " + aparelho.agente,
         "Tela: janela " + aparelho.janela + " · tela " + aparelho.tela + " · pixelRatio do aparelho " + aparelho.pixelRatioDoAparelho + " · do jogo " + aparelho.pixelRatioDoJogo,
-        "Canvas: " + aparelho.tamanhoDoCanvas + " · GPU: " + aparelho.placaDeVideo + " · núcleos " + aparelho.nucleos + " · RAM(GB) " + aparelho.memoriaEmGB + " · three r" + (aparelho.versaoDoThree || "?"),
+        "Canvas: " + aparelho.tamanhoDoCanvas + " · GPU: " + aparelho.placaDeVideo + " · núcleos " + aparelho.nucleos + " · RAM(GB) " + aparelho.memoriaEmGB + (aparelho.versaoDoThree ? " · three r" + aparelho.versaoDoThree : ""),
         "Quadros medidos por cenário: " + parametros.quadros + " (aquecimento " + parametros.aquecimento + ") · cada trio = mediana / p95 / máx em ms"
     ];
     resultados.forEach(function (resultado) {
         linhas.push("");
         linhas.push("[" + resultado.nome + "]");
         linhas.push("  fps " + resultado.fps.toFixed(0) + " (intervalo " + formatarTrio(resultado.intervalo) + ") · quadros acima de " + LIMITE_DE_QUADRO_LENTO_EM_MILISSEGUNDOS + " ms: " + resultado.quadrosLentos.toFixed(0) + "%");
-        linhas.push("  JS do jogo " + formatarTrio(resultado.atualizacao) + " · desenho (CPU) " + formatarTrio(resultado.desenho) + " · total CPU " + formatarTrio(resultado.quadro));
-        linhas.push("  draw calls " + resultado.chamadas + " · triângulos " + resultado.triangulos + (resultado.pausas > 0 ? " · pausas ignoradas " + resultado.pausas : "") + (resultado.observacao ? " · " + resultado.observacao : ""));
+        const pausas = resultado.pausas > 0 ? "pausas ignoradas " + resultado.pausas : "";
+        if (resultado.atualizacao.quantidade > 0) {
+            linhas.push("  JS do jogo " + formatarTrio(resultado.atualizacao) + " · desenho (CPU) " + formatarTrio(resultado.desenho) + " · total CPU " + formatarTrio(resultado.quadro));
+            linhas.push("  draw calls " + resultado.chamadas + " · triângulos " + resultado.triangulos + (pausas ? " · " + pausas : "") + (resultado.observacao ? " · " + resultado.observacao : ""));
+        } else {
+            linhas.push("  tempo do jogo (atualizar + desenhar, CPU) " + formatarTrio(resultado.quadro));
+            linhas.push("  " + [pausas, resultado.observacao].filter(Boolean).join(" · "));
+        }
     });
     return linhas.join("\n");
 }
@@ -166,7 +178,7 @@ const ESTILO_DO_PAINEL = [
     "#painel-de-medicao{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:12px;padding:16px;overflow:auto;box-sizing:border-box;",
     "background:rgba(7,17,28,.96);color:#fff;font:18px/1.4 system-ui,sans-serif}",
     "#painel-de-medicao h2{margin:0;font-size:24px}",
-    "#painel-de-medicao p{margin:0}",
+    "#painel-de-medicao p{margin:0;font-size:inherit;text-align:left;color:inherit}",   // o estilo do jogo para `p` (pequeno, centrado, cinza) não vale aqui
     "#painel-de-medicao [hidden]{display:none}",
     "#painel-de-medicao button{width:auto;height:auto;min-height:56px;padding:0 20px;pointer-events:auto;border:2px solid #fff;border-radius:12px;background:#fff;color:#07111c;font:bold 20px system-ui,sans-serif}",
     "#painel-de-medicao button[disabled]{opacity:.4}",
