@@ -15,6 +15,7 @@
       estoura aqui com ReferenceError e a página reprova.
     -->
     <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
     <script src="../../proa-acesa/05-barcos/regras.js"></script>
 </head>
 
@@ -573,6 +574,13 @@
                 conferirIgual("com um barco ainda afundando não chega comboio novo", barcosDePesca.length, 0);
                 passarMundo(60, 0.05, 0, false);
                 conferirIgual("quando ele some, o comboio chega", barcosDePesca.length, BARCOS_POR_COMBOIO);
+            });
+
+            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio();
+                limparMundo();
+                colocarBarca(8, 14, 0);
+                criarComboio();
             });
 
             testar("robô semeado: leme e Devagar aleatórios, dt aleatório (inclui 0), 3 sementes × 12000 quadros", function () {

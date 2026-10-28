@@ -13,6 +13,7 @@
     </style>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
 
     <!-- O jogo lê o `prefers-reduced-motion` do sistema na partida. Aqui o sistema NÃO pede menos movimento (o padrão do teste não pode depender da
          máquina que o roda); 07-tempestade-menos-movimento.html cobre o caso em que pede. -->
@@ -43,7 +44,7 @@
     <pre id="resultado"></pre>
 
     <header>
-        <button id="botao-clarao" type="button" aria-label="Reduzir clarões" aria-pressed="false">Clarões</button>
+        <button id="botao-clarao" type="button" aria-pressed="false">Reduzir clarões</button>
     </header>
     <div id="hud">
         <p id="relogio"></p>
@@ -59,7 +60,7 @@
         <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
         <div id="acoes">
             <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
-            <button id="botao-foco" type="button" aria-label="Foco estreito ou largo" aria-pressed="false">Foco</button>
+            <button id="botao-foco" type="button">Foco: largo</button>
         </div>
     </div>
     <p id="aviso" role="alert" hidden></p>
@@ -69,7 +70,6 @@
 
             const MARGEM = 1e-9;
             const FILHOS_FIXOS_DA_CENA = 7;   // luz do céu, mar, ilha, barca, porto, chuva, recifes da noite
-            const GOTAS_ESPERADAS = 2000;
             const THREE_REAL = window.THREE;
             const renderizadorReal = renderizador.render.bind(renderizador);
 
@@ -160,15 +160,6 @@
                 return { maiorSalto: maiorSalto, pico: Math.max.apply(null, brilhos) - base, base: base, quadrosClaros: brilhos.filter(function (b) { return b - base > 0.001; }).length };
             }
 
-            function posicoesDasGotas() {
-                const matrizes = chuva.instanciada.instanceMatrix.array;
-                const posicoes = [];
-                for (let i = 0; i < GOTAS_ESPERADAS; i++) {
-                    posicoes.push({ x: matrizes[i * 16 + 12], y: matrizes[i * 16 + 13], z: matrizes[i * 16 + 14] });
-                }
-                return posicoes;
-            }
-
 
             // ============================================================
             // Casos
@@ -182,76 +173,87 @@
                 conferirIgual("cada recife da noite vira um grupo no desenho", grupoDeRecifes.children.length, recifes.length);
             });
 
-            testar("a chuva: UM InstancedMesh de 2.000 gotas, que cai, volta ao topo e segue a barca", function () {
+            testar("a chuva vem da ficha da noite: 400 / 800 / 1.200 / 1.600 / 2.000 gotas nas noites 1 a 5 (contagem, caixa, queda, caixa que segue a barca, malhas avulsas)", function () {
+                for (let indice = 0; indice < 5; indice++) {
+                    verifChuvaDaNoite(passar, irParaNoite, indice);
+                }
                 irParaNoite(0);
-                conferir("é um THREE.InstancedMesh com count 2000 e 6000 números de estado", chuva.instanciada instanceof THREE_REAL.InstancedMesh &&
-                    chuva.instanciada.count === GOTAS_ESPERADAS && chuva.gotas.length === GOTAS_ESPERADAS * 3);
-                conferirIgual("o modo inicial é a chuva instanciada", chuva.modo, "instanciada");
-                passar(50);
-                let gotas = posicoesDasGotas();
-                const caixaX = barcaNoMundo.x, caixaZ = barcaNoMundo.z;
-                conferir("as 2.000 gotas estão na caixa de chuva em volta da barca (±25 m, altura 0 a 16 m)", gotas.every(function (gota) {
-                    return Math.abs(gota.x - caixaX) <= 25 + 1e-4 && Math.abs(gota.z - caixaZ) <= 25 + 1e-4 && gota.y >= 0 && gota.y <= 16 + 1e-4;
-                }));
-                conferir("e espalhadas de verdade: mais de 1.500 alturas diferentes", new Set(gotas.map(function (gota) { return gota.y.toFixed(3); })).size > 1500);
-                const antes = gotas.slice();
-                passar(50);
-                gotas = posicoesDasGotas();
-                const quedaEsperada = 18 * 0.05;   // 18 m/s × 0,05 s
-                conferir("em 50 ms cada gota cai 0,9 m (ou volta ao topo)", gotas.every(function (gota, i) {
-                    const queda = (antes[i].y - gota.y + 16) % 16;
-                    return Math.abs(queda - quedaEsperada) < 1e-3;
-                }));
-                barcaNoMundo.x += 30;
-                barcaNoMundo.z -= 10;
-                passar(50);
-                conferir("a barca anda 30 m e a caixa de chuva vai junto: todas as gotas dentro da nova caixa",
-                    posicoesDasGotas().every(function (gota) { return Math.abs(gota.x - barcaNoMundo.x) <= 25 + 1e-4 && Math.abs(gota.z - barcaNoMundo.z) <= 25 + 1e-4; }));
             });
 
-            testar("draw calls: a chuva instanciada custa 1; as mesmas 2.000 gotas avulsas (tecla C) custam ~2.000 a mais", function () {
+            testar("trocar de noite com a chuva avulsa ou nenhuma: o count e as malhas visíveis seguem a ficha da noite nova (e R recomeça com a mesma)", function () {
                 irParaNoite(0);
-                passarSegundos(4);   // as brasas dos recifes se acomodam: a cena fica igual de um quadro ao outro
-                function medir(modo) {
-                    while (chuva.modo !== modo) {
-                        apertar("c");
+                apertar("c");
+                conferirIgual("a tecla C põe a chuva avulsa", chuva.modo, "avulsa");
+                [400, 800, 1200, 1600, 2000].forEach(function (esperado, indice) {
+                    irParaNoite(indice);
+                    conferir("noite " + (indice + 1) + " com a chuva avulsa: " + esperado + " malhas visíveis e o count da instanciada já é " + esperado,
+                        chuva.avulsas.children.filter(function (gota) { return gota.visible; }).length === esperado && chuva.instanciada.count === esperado && chuva.instanciada.visible === false);
+                });
+                apertar("r");
+                passar(50);
+                conferir("R na noite 5 recomeça com as mesmas 2.000", chuva.avulsas.children.filter(function (gota) { return gota.visible; }).length === 2000 && chuva.instanciada.count === 2000);
+                irParaNoite(1);
+                apertar("c");
+                conferirIgual("C leva a chuva a nenhuma", chuva.modo, "nenhuma");
+                irParaNoite(3);
+                conferir("noite 4 em nenhuma: nada visível mas o count já é 1.600", chuva.instanciada.visible === false && chuva.avulsas.visible === false && chuva.instanciada.count === 1600);
+                apertar("c");
+                conferir("de volta à instanciada na noite 4: count 1.600 e visível", chuva.modo === "instanciada" && chuva.instanciada.visible === true && chuva.instanciada.count === 1600 && chuva.avulsas.visible === false);
+                irParaNoite(0);
+            });
+
+            testar("instanceMatrix.needsUpdate só no modo instanciado (o buffer das instâncias não sobe para a chuva avulsa nem parada)", function () {
+                irParaNoite(2);
+                verifSubidaDoBufferDaChuva(passar);
+                irParaNoite(0);
+            });
+
+            testar("draw calls por noite: a chuva instanciada custa 1; as mesmas gotas avulsas (tecla C) custam a contagem da ficha, e os triângulos são 12 por gota", function () {
+                [400, 800, 1200, 1600, 2000].forEach(function (gotas, indice) {
+                    irParaNoite(indice);
+                    passarSegundos(4);   // as brasas dos recifes se acomodam: a cena fica igual de um quadro ao outro
+                    function medir(modo) {
+                        while (chuva.modo !== modo) {
+                            apertar("c");
+                        }
+                        passar(50);
+                        desenharDeVerdade(true);
+                        passar(50);
+                        desenharDeVerdade(false);
+                        return { chamadas: renderizador.info.render.calls, triangulos: renderizador.info.render.triangles };
                     }
-                    passar(50);
-                    desenharDeVerdade(true);
-                    passar(50);
-                    desenharDeVerdade(false);
-                    return { chamadas: renderizador.info.render.calls, triangulos: renderizador.info.render.triangles };
-                }
-                const instanciada = medir("instanciada");
-                const avulsa = medir("avulsa");
-                const nenhuma = medir("nenhuma");
-                const denovo = medir("instanciada");
-                conferirIgual("a tecla C percorre instanciada → avulsa → nenhuma → instanciada", chuva.modo, "instanciada");
-                conferir("sem chuva há uma base de draw calls (" + nenhuma.chamadas + ")", nenhuma.chamadas > 5);
-                conferir("instanciada = base + 1 (" + instanciada.chamadas + " contra " + nenhuma.chamadas + ")", instanciada.chamadas - nenhuma.chamadas === 1);
-                conferir("avulsa = base + 2.000 (" + avulsa.chamadas + " contra " + nenhuma.chamadas + ")", avulsa.chamadas - nenhuma.chamadas === GOTAS_ESPERADAS);
-                conferir("a instância poupa quase 2.000 chamadas: " + (avulsa.chamadas - instanciada.chamadas), avulsa.chamadas - instanciada.chamadas >= GOTAS_ESPERADAS - 2);
-                conferir("desenha as MESMAS gotas: os triângulos de uma e da outra são iguais (" + instanciada.triangulos + ") e a chuva acrescenta 24.000 (2.000 × 12)",
-                    instanciada.triangulos === avulsa.triangulos && instanciada.triangulos - nenhuma.triangulos === GOTAS_ESPERADAS * 12);
-                conferir("voltando ao modo instanciado a conta volta à mesma", denovo.chamadas === instanciada.chamadas && denovo.triangulos === instanciada.triangulos);
-                conferirIgual("as gotas avulsas são 2.000 malhas que não vão para a cena (moram no grupo da chuva)", chuva.avulsas.children.length, GOTAS_ESPERADAS);
-                conferirIgual("e a cena continua com 7 fixos + barcos", cena.children.length, filhosDaCenaEsperados());
+                    const instanciada = medir("instanciada");
+                    const avulsa = medir("avulsa");
+                    const nenhuma = medir("nenhuma");
+                    const denovo = medir("instanciada");
+                    const rotulo = "noite " + (indice + 1) + " (" + gotas + " gotas): ";
+                    conferir(rotulo + "sem chuva há uma base de draw calls (" + nenhuma.chamadas + ")", nenhuma.chamadas > 5);
+                    conferir(rotulo + "instanciada = base + 1 (" + instanciada.chamadas + " contra " + nenhuma.chamadas + ")", instanciada.chamadas - nenhuma.chamadas === 1);
+                    conferir(rotulo + "avulsa = base + " + gotas + " (" + avulsa.chamadas + " contra " + nenhuma.chamadas + ")", avulsa.chamadas - nenhuma.chamadas === gotas);
+                    conferir(rotulo + "a instância poupa count − 1 = " + (gotas - 1) + " chamadas: " + (avulsa.chamadas - instanciada.chamadas), avulsa.chamadas - instanciada.chamadas === gotas - 1);
+                    conferir(rotulo + "desenha as MESMAS gotas: os triângulos de uma e da outra são iguais (" + instanciada.triangulos + ") e a chuva acrescenta " + 12 * gotas + " (" + gotas + " × 12)",
+                        instanciada.triangulos === avulsa.triangulos && instanciada.triangulos - nenhuma.triangulos === gotas * 12);
+                    conferir(rotulo + "voltando ao modo instanciado a conta volta à mesma", denovo.chamadas === instanciada.chamadas && denovo.triangulos === instanciada.triangulos);
+                    conferirIgual(rotulo + "a cena continua com 7 fixos + barcos", cena.children.length, filhosDaCenaEsperados());
+                });
+                conferirIgual("as gotas avulsas são 2.000 malhas que não vão para a cena (moram no grupo da chuva)", chuva.avulsas.children.length, 2000);
+                irParaNoite(0);
             });
 
             testar("\"reduzir clarões\": botão com aria-pressed e texto, por clique (que o teclado, o toque e o leitor de tela geram)", function () {
                 irParaNoite(0);
                 ligarReducao(false);
-                conferir("é um <button type=\"button\"> com nome acessível, focável, e começa desligado (o sistema não pede menos movimento)",
-                    botaoClarao.tagName === "BUTTON" && botaoClarao.type === "button" && botaoClarao.getAttribute("aria-label") === "Reduzir clarões" && botaoClarao.disabled === false &&
-                    botaoClarao.tabIndex >= 0 && botaoClarao.getAttribute("aria-pressed") === "false" && reduzirClaroes === false && botaoClarao.textContent === "Clarões");
+                conferir("é um <button type=\"button\"> focável, com o texto \"Reduzir clarões\" por nome (sem aria-label) e começa desligado (o sistema não pede menos movimento)",
+                    botaoClarao.tagName === "BUTTON" && botaoClarao.type === "button" && botaoClarao.hasAttribute("aria-label") === false && botaoClarao.disabled === false &&
+                    botaoClarao.tabIndex >= 0 && botaoClarao.getAttribute("aria-pressed") === "false" && reduzirClaroes === false && botaoClarao.textContent === "Reduzir clarões");
                 botaoClarao.focus();
                 conferir("recebe o foco do teclado", document.activeElement === botaoClarao);
 
                 tocar(botaoClarao, 0);   // Enter, Espaço e leitor de tela chegam como click com detail 0
-                conferir("click detail 0 (teclado / leitor de tela): liga — aria-pressed true, regra ligada, texto \"Clarões ✓\"",
-                    botaoClarao.getAttribute("aria-pressed") === "true" && reduzirClaroes === true && botaoClarao.textContent === "Clarões ✓");
+                conferir("click detail 0 (teclado / leitor de tela): liga — aria-pressed true, regra ligada, texto \"Reduzir clarões ✓\"",
+                    botaoClarao.getAttribute("aria-pressed") === "true" && reduzirClaroes === true && botaoClarao.textContent === "Reduzir clarões ✓" && botaoClarao.hasAttribute("aria-label") === false);
                 tocar(botaoClarao, 1);
-                conferir("click detail 1 (mouse): desliga", botaoClarao.getAttribute("aria-pressed") === "false" && reduzirClaroes === false && botaoClarao.textContent === "Clarões");
+                conferir("click detail 1 (mouse): desliga — aria-pressed false e o texto volta a \"Reduzir clarões\"", botaoClarao.getAttribute("aria-pressed") === "false" && reduzirClaroes === false && botaoClarao.textContent === "Reduzir clarões");
 
                 // um toque de dedo = pointerdown + pointerup + click: muda UMA vez
                 botaoClarao.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "touch", pointerId: 3, bubbles: true }));
@@ -262,16 +264,20 @@
                 tocar(botaoClarao, 1);
 
                 // a barra de espaço no botão é do botão: não troca o foco da lanterna por baixo
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
                 const focoAntes = lanternaDaBarca.foco;
+                conferir("o botão Foco diz o foco no TEXTO (\"Foco: largo\"), sem aria-pressed nem aria-label", botaoFoco.textContent === "Foco: largo" && botaoFoco.hasAttribute("aria-pressed") === false && botaoFoco.hasAttribute("aria-label") === false);
                 botaoClarao.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
                 conferirIgual("Espaço com o foco NO botão não troca o foco da lanterna", lanternaDaBarca.foco, focoAntes);
                 const espacoNaJanela = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
                 window.dispatchEvent(espacoNaJanela);
-                conferir("Espaço solto na tela troca o foco da lanterna (e o botão Foco mostra aria-pressed)",
+                conferir("Espaço solto na tela troca o foco da lanterna e o botão Foco passa a dizer \"Foco: estreito\" (sem aria-pressed)",
                     lanternaDaBarca.foco !== focoAntes && espacoNaJanela.defaultPrevented === true &&
-                    botaoFoco.getAttribute("aria-pressed") === String(lanternaDaBarca.foco === "estreito"));
+                    botaoFoco.textContent === "Foco: estreito" && botaoFoco.hasAttribute("aria-pressed") === false);
                 tocar(botaoFoco);
-                conferirIgual("o botão Foco também troca (e volta ao largo)", lanternaDaBarca.foco, focoAntes);
+                conferir("o botão Foco também troca (e volta a dizer \"Foco: largo\")", lanternaDaBarca.foco === focoAntes && botaoFoco.textContent === "Foco: largo");
             });
 
             testar("o relâmpago em quadros de 16 ms: com reduzir clarões o maior salto de luminância do fundo fica pequeno; sem, é enorme", function () {
@@ -411,6 +417,48 @@
                     proximo(barcaNoMundo.z, 32, 1e-6) && proximo(barcaNoMundo.x, 15.2, 1e-6) && proximo(barca.position.x, barcaNoMundo.x, 1e-9));
             });
 
+            testar("Espaço depois de um clique do mouse ou do dedo (detail ≥ 1) é da lanterna; Tab + Espaço / Enter (detail 0) continua sendo do botão", function () {
+                irParaNoite(0);
+                ligarReducao(false);
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                verifEspacoDepoisDoClique();
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                ligarReducao(false);
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                irParaNoite(4);
+                verifCameraNoPontoDaFormula();
+                irParaNoite(0);
+            });
+
+            testar("o enquadramento ao longo do tempo (noite 5, retas e voltas em U): barca, 14 m à frente e os 3 primeiros barcos dentro do quadro (|NDC| ≤ 0,97) em TODOS os quadros, em 1280×800 e 390×750", function () {
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    irParaNoite(4);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    barcaNoMundo.segundosEncalhada = 0;
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 3400, 50);
+                    verifRestaurarRecifes(pedras);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": nenhum quadro com algum dos 5 pontos fora (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.algum === 0 && medidas.quadros === 3400);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 15 voltas em U, ≥ 8 retas longas, o 3º barco a ≥ 40 m da barca) e a noite 5 seguiu viva",
+                        medidas.voltas >= 15 && medidas.retas >= 8 && medidas.maiorDistanciaDoTerceiro >= 40 && noite.indice === 4 && noite.resultado === "" && barcosDePesca.length >= 3,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m, noite " + noite.indice + ", resultado " + noite.resultado + ", barcos " + barcosDePesca.length);
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                irParaNoite(0);
+            });
+
             testar("robô semeado: entradas aleatórias (leme, foco, H, C, R, botões, dedos); a cena e o HUD nunca vazam nem viram NaN (2 sementes × 2500 quadros)", function () {
                 const teclas = ["a", "d", "s", "q", "e", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "h", "H", "c", "r", "Shift", "constructor"];
                 const duracoes = [0, 1, 16, 16, 33, 50, 50, 120, 1000];
@@ -438,7 +486,7 @@
                             registrar("NaN", "barca, câmera, fundo, névoa ou calor");
                         }
                         if (lanternaDaBarca.calor < 0 || lanternaDaBarca.calor > 1) { registrar("calor entre 0 e 1", "calor " + lanternaDaBarca.calor); }
-                        if (chuva.instanciada.count !== GOTAS_ESPERADAS) { registrar("2.000 gotas", "count " + chuva.instanciada.count); }
+                        if (chuva.instanciada.count !== noite.ficha.chuva) { registrar("o count da chuva é o da ficha da noite", "count " + chuva.instanciada.count + " × " + noite.ficha.chuva); }
                         if (barcosRemovidos.length !== 0) { registrar("removidos esvaziados no quadro", barcosRemovidos.length + " sobraram"); }
                         if (grupoDeRecifes.children.length !== recifes.length) { registrar("o desenho dos recifes é o da noite", grupoDeRecifes.children.length + " × " + recifes.length); }
                         if (/NaN|undefined/.test(relogio.textContent + placar.textContent + calor.textContent + mensagem.textContent)) { registrar("HUD sem NaN", relogio.textContent + placar.textContent + calor.textContent); }

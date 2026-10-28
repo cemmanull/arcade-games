@@ -42,7 +42,7 @@
     <pre id="resultado"></pre>
 
     <header>
-        <button id="botao-clarao" type="button" aria-label="Reduzir clarões" aria-pressed="false">Clarões</button>
+        <button id="botao-clarao" type="button" aria-pressed="false">Reduzir clarões</button>
     </header>
     <div id="hud">
         <p id="relogio"></p>
@@ -58,7 +58,7 @@
         <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
         <div id="acoes">
             <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
-            <button id="botao-foco" type="button" aria-label="Foco estreito ou largo" aria-pressed="false">Foco</button>
+            <button id="botao-foco" type="button">Foco: largo</button>
         </div>
     </div>
     <p id="aviso" role="alert" hidden></p>
@@ -174,13 +174,13 @@
             // ============================================================
             testar("com prefers-reduced-motion o botão e a regra nascem ligados, e o primeiro relâmpago já é suave sem ninguém tocar em nada", function () {
                 conferir("o jogo carregou", typeof THREE !== "undefined" && renderizador !== null && aviso.hidden === true);
-                conferir("a regra nasce ligada, com aria-pressed=\"true\" e o texto \"Clarões ✓\"",
-                    reduzirClaroes === true && botaoClarao.getAttribute("aria-pressed") === "true" && botaoClarao.textContent === "Clarões ✓");
+                conferir("a regra nasce ligada, com aria-pressed=\"true\", sem aria-label e o texto \"Reduzir clarões ✓\"",
+                    reduzirClaroes === true && botaoClarao.getAttribute("aria-pressed") === "true" && botaoClarao.hasAttribute("aria-label") === false && botaoClarao.textContent === "Reduzir clarões ✓");
                 const suave = medirClarao();
                 conferir("o clarão sem tocar no botão: maior salto " + suave.maiorSalto.toFixed(4) + " (< 0,05) e pico ≤ 25% do clarão cheio",
                     suave.maiorSalto < 0.05 && suave.pico <= 0.25 * (luminancia(new THREE_REAL.Color(0xcfe3ff)) - suave.base) + 1e-6 && suave.quadrosClaros > 30);
                 tocar(botaoClarao);
-                conferir("o jogador ainda pode DESLIGAR a opção: aria-pressed=\"false\" e texto \"Clarões\"", reduzirClaroes === false && botaoClarao.getAttribute("aria-pressed") === "false" && botaoClarao.textContent === "Clarões");
+                conferir("o jogador ainda pode DESLIGAR a opção: aria-pressed=\"false\" e texto \"Reduzir clarões\"", reduzirClaroes === false && botaoClarao.getAttribute("aria-pressed") === "false" && botaoClarao.hasAttribute("aria-label") === false && botaoClarao.textContent === "Reduzir clarões");
                 const seco = medirClarao();
                 conferir("desligada, o mesmo clarão volta a ser seco (salto " + seco.maiorSalto.toFixed(3) + " > 0,3)", seco.maiorSalto > 0.3);
             });

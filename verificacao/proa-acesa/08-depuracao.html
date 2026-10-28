@@ -13,6 +13,7 @@
     </style>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
 
     <!-- O sistema NÃO pede menos movimento: o padrão do teste não pode depender da máquina que o roda. -->
     <script>
@@ -47,7 +48,7 @@
     <pre id="resultado"></pre>
 
     <header>
-        <button id="botao-clarao" type="button" aria-label="Reduzir clarões" aria-pressed="false">Clarões</button>
+        <button id="botao-clarao" type="button" aria-pressed="false">Reduzir clarões</button>
     </header>
     <div id="hud">
         <p id="relogio"></p>
@@ -63,7 +64,7 @@
         <button id="botao-direita" type="button" aria-label="Virar à direita">▶</button>
         <div id="acoes">
             <button id="botao-devagar" type="button" aria-label="Devagar (segure)">Devagar</button>
-            <button id="botao-foco" type="button" aria-label="Foco estreito ou largo" aria-pressed="false">Foco</button>
+            <button id="botao-foco" type="button">Foco: largo</button>
         </div>
     </div>
     <p id="aviso" role="alert" hidden></p>
@@ -297,8 +298,9 @@
                 irParaNoite(0);
                 desligarDepuracao();
                 passarSegundos(2);
-                const perseguicao = barca.localToWorld(new THREE_REAL.Vector3(0, 18, 22));
-                conferir("sem H a câmera está no ponto de perseguição (0, 18, 22 da barca): a " + camera.position.distanceTo(perseguicao).toFixed(3) + " m", camera.position.distanceTo(perseguicao) < 0.3);
+                const perseguicao = verifPontoEsperadoDaCamera();
+                conferir("sem H a câmera está no ponto de perseguição da fórmula (âncora no meio entre 14 m à frente e o 3º barco, escala ×" + perseguicao.escala.toFixed(2) + "): a " +
+                    camera.position.distanceTo(perseguicao.ponto).toFixed(3) + " m", camera.position.distanceTo(perseguicao.ponto) < 0.3);
 
                 // ponteiro sem H mira; com H não
                 miraDoPonteiro = null;
@@ -342,9 +344,14 @@
                 // H de novo: a câmera de perseguição volta
                 apertar("h");
                 passarSegundos(3);
-                const pontoDePerseguicao = barca.localToWorld(new THREE_REAL.Vector3(0, 18, 22));
-                conferir("H desligado: depois de 3 s a câmera voltou ao ponto de perseguição (a " + camera.position.distanceTo(pontoDePerseguicao).toFixed(3) + " m) e os controles estão desligados",
-                    controles.enabled === false && camera.position.distanceTo(pontoDePerseguicao) < 0.3);
+                const pontoDePerseguicao = verifPontoEsperadoDaCamera();
+                camera.updateMatrixWorld(true);
+                const meioNaTela = new THREE_REAL.Vector3(pontoDePerseguicao.meio.x, 0, pontoDePerseguicao.meio.z).project(camera);
+                conferir("H desligado: depois de 3 s a câmera voltou ao ponto de perseguição, ancorado no meio entre 14 m à frente e o 3º barco (escala ×" + pontoDePerseguicao.escala.toFixed(2) + "; a " +
+                    camera.position.distanceTo(pontoDePerseguicao.ponto).toFixed(3) + " m) e os controles estão desligados",
+                    controles.enabled === false && camera.position.distanceTo(pontoDePerseguicao.ponto) < 0.3,
+                    "câmera " + camera.position.toArray().map(function (n) { return n.toFixed(2); }) + ", esperado " + pontoDePerseguicao.ponto.toArray().map(function (n) { return n.toFixed(2); }));
+                conferir("e olha para esse meio: ele aparece no centro da tela (NDC " + meioNaTela.x.toFixed(3) + ", " + meioNaTela.y.toFixed(3) + ")", Math.abs(meioNaTela.x) < 0.05 && Math.abs(meioNaTela.y) < 0.05);
                 miraDoPonteiro = null;
             });
 
@@ -444,6 +451,103 @@
                 conferirIgual("meta batida ao amanhecer: vitória", [noite.resultado, noite.proxima].join(","), "vitoria,3");
                 passarSegundos(4.1);
                 conferirIgual("a noite 4 começa (relógio 3:00)", relogio.textContent, "Noite 4 · 3:00");
+            });
+
+            testar("haCaminhoAtePorto (busca em largura): há caminho da PARTIDA ao porto nas cinco noites; fechando o porto com pedras, deixa de haver", function () {
+                const semCaminho = [];
+                fichas.forEach(function (ficha, indice) {
+                    comecarNoite(indice);
+                    if (haCaminhoAtePorto() !== true) { semCaminho.push("noite " + (indice + 1)); }
+                });
+                conferir("as " + fichas.length + " noites têm caminho da PARTIDA ao porto, a 6 m de qualquer pedra", fichas.length === 5 && semCaminho.length === 0, "sem caminho: " + semCaminho.join(", "));
+
+                comecarNoite(4);
+                const pedrasDaNoite = recifes.length;
+                function fecharComPedras(novas) {
+                    novas.forEach(function (pedra) { recifes.push(Object.assign({ alta: false, brasa: 0, iluminado: false }, pedra)); });
+                    const caminho = haCaminhoAtePorto();
+                    recifes.length = pedrasDaNoite;   // sem nenhum quadro no meio: o jogo não vê as pedras sem malha
+                    return caminho;
+                }
+                const anel = [];
+                for (let i = 0; i < 12; i++) {
+                    anel.push({ x: porto.x + 14 * Math.sin(i * Math.PI / 6), z: porto.z + 14 * Math.cos(i * Math.PI / 6), raio: 4 });
+                }
+                conferirIgual("uma pedra enorme em cima do porto fecha o caminho", fecharComPedras([{ x: porto.x, z: porto.z, raio: 15 }]), false);
+                conferirIgual("um anel de 12 pedras a 14 m do centro do porto fecha o caminho", fecharComPedras(anel), false);
+                const anelDaPartida = [];
+                for (let i = 0; i < 12; i++) {
+                    anelDaPartida.push({ x: PARTIDA.x + 9 * Math.sin(i * Math.PI / 6), z: PARTIDA.z + 9 * Math.cos(i * Math.PI / 6), raio: 3 });
+                }
+                conferirIgual("um anel de pedras em volta da PARTIDA também fecha (a barca não sai)", fecharComPedras(anelDaPartida), false);
+                conferirIgual("controle: tiradas as pedras de teste, o caminho volta (noite 5)", [recifes.length === pedrasDaNoite, haCaminhoAtePorto()].join(","), "true,true");
+                conferir("e uma pedra pequena longe do porto e do caminho não o fecha", fecharComPedras([{ x: 70, z: 70, raio: 2 }]) === true);
+                irParaNoite(0);
+            });
+
+            testar("a trava de clarões (WCAG 2.3.1) nas regras do passo 8: 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido", function () {
+                verifTravaDeClaroes();
+                irParaNoite(0);
+                ligarReducao(false);
+            });
+
+            testar("Espaço depois de um clique do mouse ou do dedo (detail ≥ 1) é da lanterna; Tab + Espaço / Enter (detail 0) continua sendo do botão", function () {
+                desligarDepuracao();
+                irParaNoite(0);
+                ligarReducao(false);
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                verifEspacoDepoisDoClique();
+                if (lanternaDaBarca.foco !== "largo") {
+                    tocar(botaoFoco);
+                }
+                ligarReducao(false);
+            });
+
+            testar("a chuva vem da ficha da noite (400 a 2.000 gotas) e o buffer das instâncias só sobe no modo instanciado", function () {
+                for (let indice = 0; indice < 5; indice++) {
+                    verifChuvaDaNoite(passar, irParaNoite, indice);
+                }
+                irParaNoite(2);
+                verifSubidaDoBufferDaChuva(passar);
+                irParaNoite(0);
+            });
+
+            testar("o comboio nasce em lugar válido: 12 giros × recuos de 0, 7, 14 e 21 m e, cercado, na PARTIDA (filaLivre(PARTIDA) é true nas cinco noites)", function () {
+                verifNascimentoDoComboio();
+                irParaNoite(0);
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                desligarDepuracao();
+                irParaNoite(4);
+                verifCameraNoPontoDaFormula();
+                irParaNoite(0);
+            });
+
+            testar("o enquadramento ao longo do tempo (noite 5, retas e voltas em U): barca, 14 m à frente e os 3 primeiros barcos dentro do quadro (|NDC| ≤ 0,97) em TODOS os quadros, em 1280×800 e 390×750", function () {
+                desligarDepuracao();
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    irParaNoite(4);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    barcaNoMundo.segundosEncalhada = 0;
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 3400, 50);
+                    verifRestaurarRecifes(pedras);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": nenhum quadro com algum dos 5 pontos fora (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.algum === 0 && medidas.quadros === 3400);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 15 voltas em U, ≥ 8 retas longas, o 3º barco a ≥ 40 m da barca) e a noite 5 seguiu viva",
+                        medidas.voltas >= 15 && medidas.retas >= 8 && medidas.maiorDistanciaDoTerceiro >= 40 && noite.indice === 4 && noite.resultado === "" && barcosDePesca.length >= 3,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m, noite " + noite.indice + ", resultado " + noite.resultado + ", barcos " + barcosDePesca.length);
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                irParaNoite(0);
             });
 
             testar("robô semeado: H, R, C, foco, leme e dedos aleatórios; o estado de depuração fica coerente e a cena não vaza (2 sementes × 1500 quadros)", function () {

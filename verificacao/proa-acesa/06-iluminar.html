@@ -13,6 +13,7 @@
     </style>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
 
     <script type="importmap">
     { "imports": {
@@ -777,6 +778,57 @@
                     recifeTocadoPor({ x: ilha.x + 6.69, z: ilha.z }) === ilha && recifeTocadoPor({ x: ilha.x + 6.71, z: ilha.z }) === null);
                 posicionarBarcaQuieta(8, 14, 0);
                 soltarABarca();
+            });
+
+            testar("a ilha vem dos dados: mover `ilha` em regras.js move a ilha desenhada e o colisor juntos (sem sujar os oclusores da luz)", function () {
+                verifIlhaVemDosDados();
+                conferir("e a ilha de verdade continua onde a regra a pôs (−5, −12)", ilha.x === -5 && ilha.z === -12 && cena.children.some(function (filho) { return filho.position.x === -5 && filho.position.z === -12 && filho.children.length === 4; }));
+            });
+
+            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre", function () {
+                verifNascimentoDoComboio();
+                posicionarBarcaQuieta(8, 14, 0);
+                verifNascerEm({ x: 8, z: 14, proa: 0 });
+                passar(50);
+                soltarABarca();
+            });
+
+            testar("a câmera fica no ponto da fórmula (meio entre 14 m à frente e o 3º barco, escala até ×3 conforme a tela)", function () {
+                posicionarBarcaQuieta(8, 14, 0);
+                passar(50);
+                verifCameraNoPontoDaFormula();
+                soltarABarca();
+            });
+
+            testar("o enquadramento ao longo do tempo (retas e voltas em U, 7200 quadros de 50 ms): barca, 14 m à frente e os 3 primeiros barcos ficam no quadro (|NDC| ≤ 0,97) em ≥ 99% dos quadros, em 1280×800 e 390×750", function () {
+                const estiloAntes = palco.style.cssText;
+                [[1280, 800], [390, 750]].forEach(function (tamanho) {
+                    palco.style.width = tamanho[0] + "px";
+                    palco.style.height = tamanho[1] + "px";
+                    ajustarTamanho();
+                    acalmar();
+                    soltarABarca();
+                    barcaNoMundo.x = 8;
+                    barcaNoMundo.z = 14;
+                    barcaNoMundo.proa = 0;
+                    verifNascerEm({ x: 8, z: 14, proa: 0 });
+                    passar(50);
+                    seguirComACamera(1);
+                    const pedras = recifes.splice(0);   // sem pedras a pilotagem é só do enquadramento: a fila não naufraga
+                    semearSorteio(20261028);
+                    const medidas = verifPilotarMedindoOEnquadramento(passar, 7200, 50);
+                    verifRestaurarRecifes(pedras);
+                    const limite = Math.floor(0.01 * medidas.quadros);
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": cada ponto fora do quadro em no máximo 1% dos quadros (" + verifTextoDasMedidas(medidas) + ")",
+                        medidas.quadros === 7200 && ["barca", "frente", "primeiro", "segundo", "terceiro", "algum"].every(function (ponto) { return medidas[ponto] <= limite; }),
+                        "limite " + limite + " quadros");
+                    conferir(tamanho[0] + "×" + tamanho[1] + ": o percurso exercitou a câmera de verdade (≥ 30 voltas em U, ≥ 10 retas longas e o 3º barco a ≥ 40 m da barca)",
+                        medidas.voltas >= 30 && medidas.retas >= 10 && medidas.maiorDistanciaDoTerceiro >= 40,
+                        "voltas " + medidas.voltas + ", retas " + medidas.retas + ", 3º barco a " + medidas.maiorDistanciaDoTerceiro.toFixed(0) + " m");
+                });
+                palco.style.cssText = estiloAntes;
+                ajustarTamanho();
+                acalmar();
             });
 
             testar("robô semeado: piloto e entradas aleatórias; brasa, cone e raios conferidos por fora em 3 sementes × 4000 quadros", function () {

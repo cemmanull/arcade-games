@@ -14,6 +14,7 @@
       carregamento estoura aqui com ReferenceError e a página reprova. O jogo (chuva, botão, HUD) é testado em 07-tempestade.html.
     -->
     <script src="../apoio.js"></script>
+    <script src="apoio-proa.js"></script>
     <script src="../../proa-acesa/07-tempestade/regras.js"></script>
 </head>
 
@@ -508,6 +509,18 @@
                 conferir("os naufrágios por névoa vêm um a um, o 1º depois de 5 s e cada outro 5 s depois do anterior (" + horas.join(", ") + ")",
                     horas.length >= 3 && horas[0] > 5 && horas.slice(1).every(function (hora, i) { return hora - horas[i] > 5; }));
                 comecarNoite(0);
+            });
+
+            testar("a trava de clarões (WCAG 2.3.1): 8, 60, 200 e 100.000 clarões/min numa noite longa, normal e reduzido; nunca mais de 3 por segundo, nunca com o anterior no ar", function () {
+                verifTravaDeClaroes();
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
+            });
+
+            testar("o comboio nasce em lugar válido, girando e recuando (12 giros de 30° × recuos de 0, 7, 14 e 21 m) e, cercado, na PARTIDA; a PARTIDA é livre nas cinco noites", function () {
+                verifNascimentoDoComboio();
+                comecarNoite(0);
+                barcosRemovidos.length = 0;
             });
 
             testar("robô semeado: leme, devagar e foco aleatórios, dt aleatório (inclui 0); invariantes em todos os quadros (3 sementes × 6000)", function () {
