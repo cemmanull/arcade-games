@@ -980,6 +980,103 @@
             }
         });
 
+        // ---- segunda rodada de revisão (commit c6a0acd): a profundidade do sprite é guardada por PIXEL ----
+
+        // Pixels opacos do sprite do `objeto` que NÃO estão na imagem final (o feixe pintou por cima) e quantas colunas têm o pixel
+        // da altura dos olhos transparente mas pixels opacos dentro da faixa do feixe (as que o z-buffer por coluna errava).
+        function feixeSobOSprite(objeto) {
+            const sprite = spritesDaTela.filter(function (candidato) { return candidato.objeto === objeto; })[0];
+            if (sprite === undefined) {
+                return { semSprite: true };
+            }
+            const arte = spritesSombreados[sprite.tipo][nivelDaDistancia(sprite.profundidade)];
+            const lado = sprite.base - sprite.topo;
+            const primeiraLinha = Math.max(0, Math.ceil(sprite.topo - 0.5));
+            const fimDasLinhas = Math.min(alturaDaVisao, Math.ceil(sprite.base - 0.5));
+            const olhos = Math.round(alturaDaVisao / 2);
+            let opacos = 0;
+            let cobertos = 0;
+            let colunasSoForaDosOlhos = 0;
+            sprite.colunas.forEach(function (coluna) {
+                const colunaDaArte = Math.min(15, Math.floor((coluna + 0.5 - sprite.esquerda) / lado * 16));
+                let opacoNosOlhos = false;
+                let opacoNaFaixa = false;
+                for (let linha = primeiraLinha; linha < fimDasLinhas; linha++) {
+                    const linhaDaArte = Math.min(15, Math.floor((linha + 0.5 - sprite.topo) / lado * 16));
+                    const pixelDaArte = arte[linhaDaArte * 16 + colunaDaArte];
+                    if (pixelDaArte === 0) {
+                        continue;
+                    }
+                    opacos++;
+                    if (pixels[linha * larguraDaVisao + coluna] !== pixelDaArte) {
+                        cobertos++;
+                    }
+                    opacoNosOlhos = opacoNosOlhos || linha === olhos;
+                    opacoNaFaixa = opacoNaFaixa || Math.abs(linha - olhos) <= 8;
+                }
+                if (!opacoNosOlhos && opacoNaFaixa) {
+                    colunasSoForaDosOlhos++;
+                }
+            });
+            return { opacos: opacos, cobertos: cobertos, colunasSoForaDosOlhos: colunasSoForaDosOlhos, profundidade: sprite.profundidade };
+        }
+
+        // Roda `funcao` com OBJETOS trocado pelos objetos pedidos e devolve a lista como estava.
+        function comObjetos(objetos, funcao) {
+            const originais = OBJETOS.slice();
+            try {
+                OBJETOS.length = 0;
+                objetos.forEach(function (objeto) { OBJETOS.push(objeto); });
+                funcao();
+            } finally {
+                OBJETOS.length = 0;
+                originais.forEach(function (objeto) { OBJETOS.push(objeto); });
+                comecarDoZero();
+            }
+        }
+
+        testar("profundidade do sprite por PIXEL: o feixe nunca pinta por cima de um pixel opaco de um objeto mais perto, em várias distâncias", function () {
+            [6.6, 6.8, 7.0, 7.4].forEach(function (alturaDoZelador) {
+                const cristal = { tipo: "cristal", x: 2.5, y: 6.0 };
+                comObjetos([cristal], function () {
+                    comecarDoZero();
+                    posar(2.5, alturaDoZelador, -Math.PI / 2);   // olhando ao norte: o feixe (y = 5,5) fica além do cristal (y = 6,0)
+                    quadros(2);
+                    const nome = "o cristal a " + (alturaDoZelador - 6.0).toFixed(1) + " casa: ";
+                    const resultado = feixeSobOSprite(cristal);
+                    conferir(nome + "está na tela (" + JSON.stringify(resultado) + ")", resultado.semSprite !== true && resultado.opacos > 100);
+                    conferirIgual(nome + "pixels opacos cobertos pelo feixe", resultado.cobertos, 0);
+                    conferir(nome + "há colunas que só têm pixel opaco FORA da linha dos olhos (" + resultado.colunasSoForaDosOlhos + ")", resultado.colunasSoForaDosOlhos > 0);
+                });
+            });
+        });
+
+        testar("profundidade do sprite por PIXEL: o feixe ainda cobre o objeto que está ATRÁS dele, e o buffer de profundidade é zerado a cada quadro", function () {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const colunaDoMeio = larguraDaVisao / 2;
+            const ehFeixe = function (pixel) { return CORES_DO_FEIXE.indexOf(pixel) !== -1; };
+
+            const deTras = { tipo: "cristal", x: 2.5, y: 4.5 };   // além do feixe (y = 5,5)
+            comObjetos([deTras], function () {
+                comecarDoZero();
+                posar(2.5, 7.0, -Math.PI / 2);
+                quadros(2);
+                const atras = feixeSobOSprite(deTras);
+                conferir("o cristal de trás está na tela e o feixe cobre pixels dele (" + JSON.stringify(atras) + ")", atras.opacos > 50 && atras.cobertos > 0);
+            });
+
+            const daFrente = { tipo: "cristal", x: 2.5, y: 6.0 };
+            comObjetos([daFrente], function () {
+                comecarDoZero();
+                posar(2.5, 7.0, -Math.PI / 2);
+                quadros(2);
+                conferir("com o cristal da frente o pixel do meio, na linha dos olhos, não é feixe", !ehFeixe(pixels[olhos * larguraDaVisao + colunaDoMeio]));
+                OBJETOS.length = 0;
+                avancarQuadro(16);
+                conferir("tirado o cristal, o quadro seguinte mostra o feixe no mesmo pixel (nada ficou no buffer do quadro anterior)", ehFeixe(pixels[olhos * larguraDaVisao + colunaDoMeio]));
+            });
+        });
+
         testar("a leitura do H (6 linhas curtas) e o painel (2 linhas curtas) não têm NaN", function () {
             comecarDoZero();
             posar(2.5, 5.5, 0.3);

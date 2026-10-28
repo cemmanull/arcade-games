@@ -1088,6 +1088,403 @@
             conferirIgual("e o espelho volta a girar", sala !== salaInicial, true);
         });
 
+        // ---- segunda rodada de revisão (commit c6a0acd): cada grupo abaixo reprova o código de antes dela ----
+
+        // Pixels opacos do sprite do `objeto` que NÃO estão na imagem final (o feixe pintou por cima) e quantas colunas têm o pixel
+        // da altura dos olhos transparente mas pixels opacos dentro da faixa do feixe (as que o z-buffer por coluna errava).
+        function feixeSobOSprite(objeto) {
+            const sprite = spritesDaTela.filter(function (candidato) { return candidato.objeto === objeto; })[0];
+            if (sprite === undefined) {
+                return { semSprite: true };
+            }
+            const arte = spritesSombreados[sprite.tipo][nivelDaDistancia(sprite.profundidade)];
+            const lado = sprite.base - sprite.topo;
+            const primeiraLinha = Math.max(0, Math.ceil(sprite.topo - 0.5));
+            const fimDasLinhas = Math.min(alturaDaVisao, Math.ceil(sprite.base - 0.5));
+            const olhos = Math.round(alturaDaVisao / 2);
+            let opacos = 0;
+            let cobertos = 0;
+            let colunasSoForaDosOlhos = 0;
+            sprite.colunas.forEach(function (coluna) {
+                const colunaDaArte = Math.min(15, Math.floor((coluna + 0.5 - sprite.esquerda) / lado * 16));
+                let opacoNosOlhos = false;
+                let opacoNaFaixa = false;
+                for (let linha = primeiraLinha; linha < fimDasLinhas; linha++) {
+                    const linhaDaArte = Math.min(15, Math.floor((linha + 0.5 - sprite.topo) / lado * 16));
+                    const pixelDaArte = arte[linhaDaArte * 16 + colunaDaArte];
+                    if (pixelDaArte === 0) {
+                        continue;
+                    }
+                    opacos++;
+                    if (pixels[linha * larguraDaVisao + coluna] !== pixelDaArte) {
+                        cobertos++;
+                    }
+                    opacoNosOlhos = opacoNosOlhos || linha === olhos;
+                    opacoNaFaixa = opacoNaFaixa || Math.abs(linha - olhos) <= 8;
+                }
+                if (!opacoNosOlhos && opacoNaFaixa) {
+                    colunasSoForaDosOlhos++;
+                }
+            });
+            return { opacos: opacos, cobertos: cobertos, colunasSoForaDosOlhos: colunasSoForaDosOlhos, profundidade: sprite.profundidade };
+        }
+
+        // Leva a sombra, perseguindo, até o x pedido (a porta aberta ocupa 5,0 a 6,0). Cada quadro do caminho confere que ela está em casa livre.
+        function andarAteOX(sombra, minimo, maximo) {
+            return andarAte(function () {
+                conferirIgual("andando para a porta, nenhum quadro a deixa em casa sólida", naCasaSolida(sombra), false);
+                return sombra.x >= minimo && sombra.x < maximo;
+            });
+        }
+
+        testar("portas (vindaDe): a porta fecha com a sombra na primeira OU na segunda metade da casa dela e a devolve ao lado de onde veio, venha de onde vier", function () {
+            // o zelador fica do lado de onde a sombra NÃO vem; a coluna esperada é a vizinha de onde ela entrou na porta
+            [
+                { nome: "vinda do oeste, 1ª metade", zeladorX: 8.5, sombraX: 3.5, de: 5.1, ate: 5.4, colunaEsperada: 4 },
+                { nome: "vinda do oeste, 2ª metade", zeladorX: 8.5, sombraX: 3.5, de: 5.6, ate: 5.9, colunaEsperada: 4 },
+                { nome: "vinda do leste, 1ª metade", zeladorX: 2.5, sombraX: 8.5, de: 5.6, ate: 5.9, colunaEsperada: 6 },
+                { nome: "vinda do leste, 2ª metade", zeladorX: 2.5, sombraX: 8.5, de: 5.1, ate: 5.4, colunaEsperada: 6 }
+            ].forEach(function (caso) {
+                limpar();
+                resolverOQuebraCabeca();
+                posar(caso.zeladorX, 4.5, 0);
+                const sombra = novaSombra(caso.sombraX, 4.5, "persegue");
+                const chegou = andarAteOX(sombra, caso.de, caso.ate);
+                conferir(caso.nome + ": a sombra está na porta aberta (x = " + sombra.x.toFixed(2) + ")", chegou && Math.floor(sombra.x) === 5);
+                conferirIgual(caso.nome + ": o jogo sabe de que casa ela saiu", sombra.vindaDe, indice(caso.colunaEsperada, 4));
+
+                fecharAPorta();
+                avancarQuadro(16);
+                conferirIgual(caso.nome + ": a porta fechou", portasAbertas.size, 0);
+                conferir(caso.nome + ": no quadro em que a porta fechou ela já está fora da casa sólida (" + sombra.x.toFixed(2) + ")", !naCasaSolida(sombra));
+                conferirIgual(caso.nome + ": e na coluna de onde veio, nunca do outro lado", Math.floor(sombra.x), caso.colunaEsperada);
+
+                let nuncaEmCasaSolida = true;
+                let passouParaOOutroLado = false;
+                for (let contador = 0; contador < 300; contador++) {
+                    avancarQuadro(16);
+                    nuncaEmCasaSolida = nuncaEmCasaSolida && !naCasaSolida(sombra);
+                    passouParaOOutroLado = passouParaOOutroLado || (caso.colunaEsperada === 4 ? sombra.x >= 5 : sombra.x < 6);
+                }
+                conferirIgual(caso.nome + ": nos 5 s seguintes nenhum quadro a deixa em casa sólida", nuncaEmCasaSolida, true);
+                conferirIgual(caso.nome + ": e a porta fechada não a deixa passar para o outro lado", passouParaOOutroLado, false);
+            });
+        });
+
+        testar("uma faixa só: o zelador a 0,7 do eixo conta como 'na luz', o corpo faz sombra, e a sombra que chega pelo escuro TOCA; a 0,8 já não", function () {
+            limpar();
+            const naLuzA = function (afastamento) {
+                posar(2.5, 5.5 + afastamento, 0);   // o trecho horizontal do feixe está em y = 5,5
+                return zeladorEstaNaLuz();
+            };
+            conferirIgual("a 0,70 do eixo: na luz (a faixa que queima é de 0,75)", naLuzA(0.7), true);
+            conferirIgual("a 0,74 do eixo: ainda na luz", naLuzA(0.74), true);
+            conferirIgual("a 0,76 do eixo: fora da luz", naLuzA(0.76), false);
+
+            limpar();
+            posar(2.5, 6.2, 0);
+            const sombra = novaSombra(4.5, 5.5, "persegue");
+            const resultado = tentarAteContato(sombra, 8);
+            conferir("a 0,7 do eixo: tocou, sem se dissolver (" + JSON.stringify(resultado) + ")", resultado.tocou && !resultado.dissolveu);
+            conferirIgual("e nenhum ponto de sombra", pontos, 0);
+
+            limpar();
+            posar(2.5, 5.5 + 0.8, 0);
+            const foraDaFaixa = expostaParada(novaSombra(2.0, 5.5, "ronda"), 3);
+            conferir("a 0,8 do eixo o corpo não faz sombra: a sombra parada no feixe a 1,3 casa dele dissolve (" + foraDaFaixa.dissolveuEm + " s)", foraDaFaixa.dissolveuEm !== null);
+        });
+
+        // O jogo sem a cor do trecho apagado não desenha esse trecho: sem ela nenhum pixel confere (e a afirmação falha, não a página).
+        function corDoFeixeApagado() {
+            return typeof COR_DO_FEIXE_APAGADO === "undefined" ? -1 : COR_DO_FEIXE_APAGADO;
+        }
+
+        // O que a imagem do quadro mostra do feixe: pixels acesos, pixels do trecho apagado pelo corpo e onde (colunas) cada um está.
+        function contarFeixeNaImagem() {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const corApagada = corDoFeixeApagado();
+            const contagem = { claros: 0, apagados: 0, apagadosNaLinhaDosOlhos: 0, colunasClaras: [], colunasApagadas: [] };
+            for (let linha = 0; linha < alturaDaVisao; linha++) {
+                for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
+                    const pixel = pixels[linha * larguraDaVisao + coluna];
+                    if (CORES_DO_FEIXE.indexOf(pixel) !== -1) {
+                        contagem.claros++;
+                        contagem.colunasClaras.push(coluna);
+                    }
+                    if (pixel === corApagada) {
+                        contagem.apagados++;
+                        contagem.colunasApagadas.push(coluna);
+                        contagem.apagadosNaLinhaDosOlhos += linha === olhos ? 1 : 0;
+                    }
+                }
+            }
+            return contagem;
+        }
+
+        function posicoesDoFeixeApagado() {
+            const posicoes = [];
+            const corApagada = corDoFeixeApagado();
+            pixels.forEach(function (pixel, posicao) {
+                if (pixel === corApagada) {
+                    posicoes.push(posicao);
+                }
+            });
+            return posicoes.join(",");
+        }
+
+        testar("visão em primeira pessoa: o trecho que o corpo escurece é outro desenho (tracejado, apagado, só a metade de cima, sem pulso)", function () {
+            const olhos = Math.round(alturaDaVisao / 2);
+
+            limpar();
+            posar(2.2, 5.5, 0);   // dentro do feixe, olhando ao longo dele: tudo o que se vê dele está depois do corpo
+            quadros(2);
+            const dentro = contarFeixeNaImagem();
+            conferirIgual("nenhum pixel do feixe aceso: o corpo apagou o que se vê", dentro.claros, 0);
+            conferir("há pixels do feixe apagado (" + dentro.apagados + ")", dentro.apagados > 20);
+            conferirIgual("o apagado só ocupa a metade de cima (nenhum pixel na linha dos olhos)", dentro.apagadosNaLinhaDosOlhos, 0);
+            let vaos = 0;
+            let anterior = null;
+            for (let coluna = 0; coluna < larguraDaVisao; coluna++) {
+                const cheio = pixels[(olhos - 1) * larguraDaVisao + coluna] === corDoFeixeApagado();
+                vaos += anterior !== null && cheio !== anterior ? 1 : 0;
+                anterior = cheio;
+            }
+            conferir("é tracejado: a linha logo acima dos olhos alterna entre traço e vão (" + vaos + " trocas)", vaos >= 2);
+            const antes = posicoesDoFeixeApagado();
+            quadros(16);   // 0,25 s depois, na imagem de verdade
+            conferirIgual("não pulsa: 0,25 s depois o desenho apagado é exatamente o mesmo", posicoesDoFeixeApagado(), antes);
+
+            posar(2.5, 7.0, -Math.PI / 2);   // longe do feixe: o desenho de sempre
+            quadros(2);
+            const fora = contarFeixeNaImagem();
+            conferir("com o zelador fora da luz o feixe é aceso, inteiro (" + fora.claros + " pixels)", fora.claros > 50);
+            conferirIgual("e não há um pixel apagado", fora.apagados, 0);
+
+            posar(3.0, 6.5, -Math.PI / 2);   // a 1,0 do trecho horizontal, mas a 0,5 do vertical: o horizontal está aceso e o vertical, onde o corpo faz sombra, apagado
+            quadros(2);
+            const meio = contarFeixeNaImagem();
+            conferir("na mesma imagem há feixe aceso (" + meio.claros + ") e apagado (" + meio.apagados + ")", meio.claros > 1000 && meio.apagados > 20);
+        });
+
+        testar("visão em primeira pessoa: 'Seu corpo faz sombra no feixe' é anunciado uma vez só, na primeira vez que o zelador entra na luz", function () {
+            limpar();
+            avisouQueOCorpoFazSombra = false;   // as outras provas desta página já o pegaram na luz
+            const marca = marcarAvisos();
+            const quantasVezes = function () {
+                esvaziarAvisos();
+                return textosAnunciadosDesde(marca).filter(function (texto) { return texto === "Seu corpo faz sombra no feixe"; }).length;
+            };
+            posar(8.5, 8.5, 0);
+            conferirIgual("longe do feixe: nada a explicar", quantasVezes(), 0);
+            posar(2.2, 5.5, 0);
+            quadros(3);
+            conferirIgual("entrou na luz: anunciado", quantasVezes(), 1);
+            posar(8.5, 8.5, 0);
+            posar(2.2, 5.5, 0);
+            quadros(3);
+            conferirIgual("saiu e entrou de novo: não se repete", quantasVezes(), 1);
+        });
+
+        testar("tirar da casa sólida vem antes de decidir o estado: vale para persegue (continua perseguindo), nasce, dissolve e recua", function () {
+            limpar();
+            posar(2.5, 4.5, 0);
+            const perseguindo = novaSombra(5.5, 4.5, "persegue");   // a porta (5, 4) está fechada
+            perseguindo.vindaDe = indice(4, 4);
+            avancarQuadro(16);
+            conferir("a que persegue foi empurrada para a coluna 4 (" + perseguindo.x.toFixed(2) + ")", !naCasaSolida(perseguindo) && Math.floor(perseguindo.x) === 4);
+            conferirIgual("e continua perseguindo: do lado dela o campo chega ao zelador, não é '−1'", perseguindo.estado, "persegue");
+
+            ["nasce", "dissolve"].forEach(function (estado) {
+                limpar();
+                posar(2.5, 4.5, 0);
+                const sombra = novaSombra(5.5, 4.5, estado);
+                sombra.vindaDe = indice(4, 4);
+                avancarQuadro(16);
+                conferir("a que está em '" + estado + "' dentro da porta fechada sai dela já no primeiro quadro (" + sombra.x.toFixed(2) + ")", !naCasaSolida(sombra));
+                conferirIgual("'" + estado + "': para o lado de onde veio", Math.floor(sombra.x), 4);
+            });
+
+            limpar();
+            posar(2.5, 4.5, 0);
+            const recuando = novaSombra(5.5, 4.5, "recua");
+            recuando.vindaDe = indice(6, 4);
+            avancarQuadro(16);
+            conferir("a que recua, com a porta fechada, também sai (" + recuando.x.toFixed(2) + ") para o lado de onde veio", !naCasaSolida(recuando) && Math.floor(recuando.x) === 6);
+        });
+
+        testar("profundidade do sprite por PIXEL: o feixe nunca pinta por cima de um pixel opaco de uma sombra mais perto, em várias escalas e distâncias", function () {
+            [0.645, 0.7, 0.75, 1].forEach(function (escala) {
+                [6.8, 7.0, 7.4].forEach(function (alturaDoZelador) {
+                    limpar();
+                    posar(2.5, alturaDoZelador, -Math.PI / 2);   // olhando ao norte: o feixe (y = 5,5) fica além da sombra (y = 6,0)
+                    const sombra = novaSombra(2.5, 6.0, "ronda");
+                    sombra.escala = escala;
+                    quadrosComSombraParada(sombra, 2);
+                    const nome = "escala " + escala + " a " + (alturaDoZelador - 6.0).toFixed(1) + " casa: ";
+                    const resultado = feixeSobOSprite(sombra);
+                    conferir(nome + "a sombra está na tela (" + JSON.stringify(resultado) + ")", resultado.semSprite !== true && resultado.opacos > 100);
+                    conferirIgual(nome + "pixels opacos cobertos pelo feixe", resultado.cobertos, 0);
+                    if (escala <= 0.75) {
+                        conferir(nome + "há colunas que só têm pixel opaco FORA da linha dos olhos (" + resultado.colunasSoForaDosOlhos + ")", resultado.colunasSoForaDosOlhos > 0);
+                    }
+                });
+            });
+        });
+
+        testar("profundidade do sprite por PIXEL: a sombra que NASCE (cresce de 0,2 a 1) também nunca é coberta, quadro a quadro", function () {
+            limpar();
+            posar(2.5, 7.0, -Math.PI / 2);
+            const sombra = novaSombra(2.5, 6.0, "nasce");
+            let quadrosComSprite = 0;
+            let quadrosCobertos = 0;
+            while (sombra.estado === "nasce") {
+                quadrosComSombraParada(sombra, 1);
+                const resultado = feixeSobOSprite(sombra);
+                quadrosComSprite += resultado.opacos > 0 ? 1 : 0;
+                quadrosCobertos += resultado.cobertos > 0 ? 1 : 0;
+            }
+            conferir("a sombra apareceu em boa parte do nascimento (" + quadrosComSprite + " quadros)", quadrosComSprite > 30);
+            conferirIgual("em nenhum quadro do nascimento o feixe cobre um pixel dela", quadrosCobertos, 0);
+        });
+
+        testar("profundidade do sprite por PIXEL: o feixe ainda cobre a sombra que está ATRÁS dele, e o buffer de profundidade é zerado a cada quadro", function () {
+            const olhos = Math.round(alturaDaVisao / 2);
+            const colunaDoMeio = larguraDaVisao / 2;
+            const ehFeixe = function (pixel) { return CORES_DO_FEIXE.indexOf(pixel) !== -1; };
+
+            limpar();
+            posar(2.5, 7.0, -Math.PI / 2);
+            const deTras = novaSombra(2.5, 4.5, "ronda");   // além do feixe (y = 5,5)
+            quadrosComSombraParada(deTras, 2);
+            const atras = feixeSobOSprite(deTras);
+            conferir("a sombra de trás está na tela e o feixe cobre pixels dela (" + JSON.stringify(atras) + ")", atras.opacos > 50 && atras.cobertos > 0);
+
+            limpar();
+            posar(2.5, 7.0, -Math.PI / 2);
+            const daFrente = novaSombra(2.5, 6.0, "ronda");
+            quadrosComSombraParada(daFrente, 2);
+            conferir("com a sombra da frente o pixel do meio, na linha dos olhos, não é feixe", !ehFeixe(pixels[olhos * larguraDaVisao + colunaDoMeio]));
+            sombras.splice(sombras.indexOf(daFrente), 1);
+            avancarQuadro(16);
+            conferir("tirada a sombra, o quadro seguinte mostra o feixe no mesmo pixel (nada ficou no buffer do quadro anterior)", ehFeixe(pixels[olhos * larguraDaVisao + colunaDoMeio]));
+        });
+
+        testar("avisos urgentes: 'Vida perdida' e 'Fim de jogo' nunca se perdem no spam, não se repetem e passam à frente dos comuns", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            let marca = marcarAvisos();
+            teclar("e");
+            novaSombra(1.8, 1.5, "persegue");
+            avancarQuadro(16);
+            for (let contador = 0; contador < 6; contador++) {
+                teclar("e");
+            }
+            esvaziarAvisos();
+            const lidos = textosAnunciadosDesde(marca);
+            conferir("'Vida perdida' foi lida mesmo com 6 recados comuns depois (" + lidos.join(" | ") + ")", lidos.indexOf("Vida perdida") !== -1);
+            conferirIgual("e foi lida uma vez só", lidos.filter(function (texto) { return texto === "Vida perdida"; }).length, 1);
+
+            limpar();
+            marca = marcarAvisos();
+            avisar("Comum 1");
+            avisar("Comum 2");
+            avisar("Vida perdida", true);
+            avisar("Comum 3");
+            avisar("Fim de jogo", true);
+            esvaziarAvisos();
+            conferirIgual("os urgentes furam a fila, na ordem em que chegaram, à frente dos comuns", textosAnunciadosDesde(marca).join(" | "), "Comum 1 | Vida perdida | Fim de jogo | Comum 2 | Comum 3");
+
+            limpar();
+            marca = marcarAvisos();
+            avisar("Espelho girado");
+            avisar("Fim de jogo", true);
+            avisar("Porta aberta");
+            avisar("Fim de jogo", true);
+            avisar("Fim de jogo", true);
+            esvaziarAvisos();
+            conferirIgual("o mesmo urgente à espera não se repete", textosAnunciadosDesde(marca).join(" | "), "Espelho girado | Fim de jogo | Porta aberta");
+
+            limpar();
+            marca = marcarAvisos();
+            avisar("Primeiro");
+            for (let numero = 1; numero <= 10; numero++) {
+                avisar("Comum " + numero);
+                if (numero === 5) {
+                    avisar("Vida perdida", true);
+                }
+            }
+            avisar("Fim de jogo", true);
+            esvaziarAvisos();
+            const todos = textosAnunciadosDesde(marca);
+            conferir("depois de 10 recados comuns os dois urgentes continuam na fila (" + todos.join(" | ") + ")", todos.indexOf("Vida perdida") !== -1 && todos.indexOf("Fim de jogo") !== -1);
+            conferirIgual("e dos comuns só sobram os 4 últimos (o primeiro estava no painel)", todos.filter(function (texto) { return texto.indexOf("Comum") === 0; }).join(" | "), "Comum 7 | Comum 8 | Comum 9 | Comum 10");
+        });
+
+        testar("avisos: o R esquece a fila (nada velho depois de 'Sala reiniciada') e os temporizadores do jogo anterior não fazem mais nada", function () {
+            limpar();
+            posar(1.5, 1.5, 0.8);
+            for (let contador = 0; contador < 5; contador++) {
+                teclar("e");
+            }
+            avisar("Fim de jogo", true);
+            const marcaDoR = marcarAvisos();
+            teclar("r");
+            conferirIgual("o R é lido na hora, mesmo no meio de outro aviso", textoDoAviso(), "Sala reiniciada");
+            esvaziarAvisos();
+            conferirIgual("depois do R só se lê 'Sala reiniciada' (nem os comuns nem o urgente da partida anterior)", textosAnunciadosDesde(marcaDoR).join(" | "), "Sala reiniciada");
+
+            limpar();
+            avisar("Velho");
+            avisar("Outro velho");
+            passarTempoDosAvisos(300);
+            teclar("r");
+            conferirIgual("o R aparece na hora", textoDoAviso(), "Sala reiniciada");
+            passarTempoDosAvisos(700);   // vence o temporizador do "Velho" (1 s depois de ele aparecer)
+            conferirIgual("o temporizador do aviso anterior não apaga o 'Sala reiniciada' antes da hora", textoDoAviso(), "Sala reiniciada");
+            passarTempoDosAvisos(400);
+            conferirIgual("e o dele mesmo apaga, no seu tempo", textoDoAviso(), "");
+        });
+
+        testar("fim de jogo no meio do quadro: as sombras depois da que acabou o jogo não pontuam nem anunciam nada", function () {
+            limpar();
+            vidas = 1;
+            posar(1.5, 1.5, 0.8);
+            novaSombra(1.8, 1.5, "persegue");               // a primeira da lista toca e acaba o jogo
+            const noFeixe = novaSombra(3.5, 7.0, "ronda");   // a segunda está a 0,01 s de dissolver no feixe
+            noFeixe.exposicao = SEGUNDOS_DE_EXPOSICAO_ESPERADOS - 0.01;
+            const marca = marcarAvisos();
+            avancarQuadro(16);
+            esvaziarAvisos();
+            conferirIgual("fim de jogo", fimDeJogo, true);
+            conferirIgual("nenhum ponto de sombra", pontos, 0);
+            conferirIgual("a segunda não dissolveu", noFeixe.estado !== "dissolve", true);
+            conferirIgual("só 'Fim de jogo' foi anunciado", textosAnunciadosDesde(marca).join(" | "), "Fim de jogo");
+            quadros(5);
+            conferirIgual("e nos quadros seguintes (jogo congelado) também nada pontua", pontos, 0);
+        });
+
+        testar("exercício 5 do GUIA: em (3,5; 6,5) a sombra toca vindo do norte e do sul; em (3,5; 8,0) a do norte dissolve e a do sul toca", function () {
+            [
+                { altura: 6.5, origem: "norte", y: 3.5, tocaEsperado: true },
+                { altura: 6.5, origem: "sul", y: 9.5, tocaEsperado: true },
+                { altura: 8.0, origem: "norte", y: 3.5, tocaEsperado: false },
+                { altura: 8.0, origem: "sul", y: 9.5, tocaEsperado: true }
+            ].forEach(function (caso) {
+                limpar();
+                posar(3.5, caso.altura, 0);
+                const sombra = novaSombra(3.5, caso.y, "persegue");
+                const resultado = tentarAteContato(sombra, 8);
+                const nome = "em (3,5; " + caso.altura + "), vinda do " + caso.origem + ": ";
+                if (caso.tocaEsperado) {
+                    conferir(nome + "toca, sem se dissolver (" + JSON.stringify(resultado) + ")", resultado.tocou && !resultado.dissolveu);
+                    conferirIgual(nome + "uma vida a menos e nenhum ponto de sombra", vidas + "," + pontos, (VIDAS_ESPERADAS - 1) + ",0");
+                } else {
+                    conferir(nome + "dissolve antes de tocar (" + JSON.stringify(resultado) + ")", resultado.dissolveu && !resultado.tocou);
+                    conferirIgual(nome + "as 3 vidas e +50 pontos", vidas + "," + pontos, VIDAS_ESPERADAS + "," + PONTOS_DA_SOMBRA_ESPERADOS);
+                }
+            });
+        });
+
         // ---- a primeira sombra da sala ----
 
         testar("a primeira sombra da sala nasce na fenda que o campo alcança; as seguintes podem nascer atrás da porta", function () {
