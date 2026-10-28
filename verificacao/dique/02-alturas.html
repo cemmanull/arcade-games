@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 2: as alturas (algoritmo do pintor)</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 2: as alturas</h1>
+    <pre id="resultado"></pre>
+
+    <!-- O esqueleto do passo: o script dele procura estes ids. -->
+    <canvas id="jogo" width="384" height="252"></canvas>
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+    <pre id="leitura" aria-live="off"></pre>
+
+    <script src="../apoio.js"></script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/02-alturas/regras.js"></script>
+    <script src="../../dique/02-alturas/script.js"></script>
+
+    <script>
+        const TOLERANCIA = 1e-9;
+        const FOLGA_DA_SOBREPOSICAO = 1e-6;
+        const errosNaCarga = errosDeConsole.slice();
+        const ALTURAS_ORIGINAIS = JSON.stringify(alturas);
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada e de estado
+        // ------------------------------------------------------------
+        function apertarTecla(tecla) {
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: tecla, cancelable: true }));
+        }
+
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            const rotacaoOriginal = rotacao;
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(rotacaoOriginal);
+            }
+        }
+
+        function nomeDaCasa(casa) {
+            return casa.x + "," + casa.y;
+        }
+
+        // ------------------------------------------------------------
+        // A conta do pintor, escrita de novo aqui (sem usar o jogo)
+        // ------------------------------------------------------------
+        function girarPeloMeuCaminho(x, y, giros) {
+            let ponto = [x, y];
+            for (let i = 0; i < giros; i++) ponto = [TAMANHO - ponto[1], ponto[0]];
+            return ponto;
+        }
+
+        function proximidadeIndependente(casa, giros) {
+            const girado = girarPeloMeuCaminho(casa.x + 0.5, casa.y + 0.5, giros);
+            return girado[0] + girado[1];
+        }
+
+        function alturaDaSilhueta(casa) {
+            return casa.altura < NIVEL_DA_AGUA ? NIVEL_DA_AGUA : casa.altura;      // a água também é pintada
+        }
+
+        // Casco convexo (cadeia monótona de Andrew).
+        function cascoConvexo(pontos) {
+            const ordenados = pontos.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+            function produtoVetorial(origem, a, b) {
+                return (a.x - origem.x) * (b.y - origem.y) - (a.y - origem.y) * (b.x - origem.x);
+            }
+            const embaixo = [], emcima = [];
+            ordenados.forEach(function (ponto) {
+                while (embaixo.length > 1 && produtoVetorial(embaixo[embaixo.length - 2], embaixo[embaixo.length - 1], ponto) <= 0) embaixo.pop();
+                embaixo.push(ponto);
+            });
+            ordenados.slice().reverse().forEach(function (ponto) {
+                while (emcima.length > 1 && produtoVetorial(emcima[emcima.length - 2], emcima[emcima.length - 1], ponto) <= 0) emcima.pop();
+                emcima.push(ponto);
+            });
+            return embaixo.slice(0, -1).concat(emcima.slice(0, -1));
+        }
+
+        function silhuetaDaCasa(casa) {
+            return cascoConvexo(cantosDoBloco(casa.x, casa.y, 0).concat(cantosDoBloco(casa.x, casa.y, alturaDaSilhueta(casa))));
+        }
+
+        function intervaloNoEixo(poligono, eixo) {
+            let minimo = Infinity, maximo = -Infinity;
+            poligono.forEach(function (ponto) {
+                const distancia = ponto.x * eixo.x + ponto.y * eixo.y;
+                minimo = Math.min(minimo, distancia);
+                maximo = Math.max(maximo, distancia);
+            });
+            return [minimo, maximo];
+        }
+
+        // Eixo separador: dois polígonos convexos têm ÁREA em comum se, em todo eixo normal a uma aresta,
+        // os intervalos se cobrem por mais que a folga. Encostar (aresta ou ponta) não conta.
+        function poligonosSeSobrepoem(a, b) {
+            return [a, b].every(function (poligono) {
+                return poligono.every(function (ponto, i) {
+                    const proximo = poligono[(i + 1) % poligono.length];
+                    const comprimento = Math.hypot(proximo.x - ponto.x, proximo.y - ponto.y);
+                    const eixo = { x: -(proximo.y - ponto.y) / comprimento, y: (proximo.x - ponto.x) / comprimento };
+                    const intervaloA = intervaloNoEixo(a, eixo), intervaloB = intervaloNoEixo(b, eixo);
+                    return Math.min(intervaloA[1], intervaloB[1]) - Math.max(intervaloA[0], intervaloB[0]) > FOLGA_DA_SOBREPOSICAO;
+                });
+            });
+        }
+
+        // Percorre todos os pares (i antes de j na lista). Num par com sobreposição, o de depois tem de estar
+        // mais perto: x'+y' maior ou, no empate, de altura igual ou maior.
+        function conferirOrdemDoPintor(lista, giros) {
+            const silhuetas = lista.map(silhuetaDaCasa);
+            const proximidades = lista.map(function (casa) { return proximidadeIndependente(casa, giros); });
+            let pares = 0;
+            const violacoes = [];
+            for (let i = 0; i < lista.length; i++) {
+                for (let j = i + 1; j < lista.length; j++) {
+                    if (!poligonosSeSobrepoem(silhuetas[i], silhuetas[j])) continue;
+                    pares++;
+                    const maisPerto = proximidades[j] > proximidades[i]
+                        || (proximidades[j] === proximidades[i] && lista[j].altura >= lista[i].altura);
+                    if (!maisPerto) violacoes.push(nomeDaCasa(lista[i]) + " (antes) cobre " + nomeDaCasa(lista[j]) + " (depois), que está mais longe");
+                }
+            }
+            return { pares: pares, violacoes: violacoes };
+        }
+
+        function empatesEmOrdem(lista) {
+            return lista.every(function (casa, i) {
+                return i === 0 || casa.proximidade !== lista[i - 1].proximidade || casa.altura >= lista[i - 1].altura;
+            });
+        }
+
+        function sortearTerreno() {
+            alturas.forEach(function (linha) {
+                for (let x = 0; x < linha.length; x++) linha[x] = Math.floor(Math.random() * 5);
+            });
+        }
+
+        function restaurarTerreno() {
+            const original = JSON.parse(ALTURAS_ORIGINAIS);
+            alturas.forEach(function (linha, y) {
+                for (let x = 0; x < linha.length; x++) linha[x] = original[y][x];
+            });
+            irParaOGiro(0);
+        }
+
+        // Troca desenharCaixa por um espião que anota e repassa; devolve as chamadas de UM quadro.
+        function espiarUmQuadro() {
+            const chamadas = [];
+            const verdadeira = desenharCaixa;
+            desenharCaixa = function (x, y, de, ate, estilo) {
+                chamadas.push({ x: x, y: y, de: de, ate: ate, contorno: estilo.contorno });
+                return verdadeira(x, y, de, ate, estilo);
+            };
+            try {
+                conferirIgual("o laço entregou o quadro espiado", avancarQuadro(16), true);
+            } finally {
+                desenharCaixa = verdadeira;
+            }
+            return chamadas;
+        }
+
+        // Agrupa as chamadas em "visitas" por casa: [base] ou [base, água].
+        // A água se reconhece pela borda branca; o bloco, pelo contorno escuro.
+        function agruparPorCasa(chamadas) {
+            const visitas = [];
+            chamadas.forEach(function (chamada) {
+                const ehAgua = chamada.contorno.indexOf("255, 255, 255") !== -1;
+                const ultima = visitas[visitas.length - 1];
+                const continuaACasa = ultima && ultima.x === chamada.x && ultima.y === chamada.y && ultima.caixas.length === 1;
+                if (ehAgua && continuaACasa) {
+                    ultima.caixas.push(chamada);
+                    return;
+                }
+                visitas.push({ x: chamada.x, y: chamada.y, caixas: [chamada] });
+            });
+            return visitas;
+        }
+
+        function montarListaComOutroGiro(giro) {
+            const giroAtual = rotacao;
+            rotacao = giro;
+            const lista = montarListaDeDesenho();
+            rotacao = giroAtual;
+            return lista;
+        }
+
+        function contarCasasAlagadas() {
+            let total = 0;
+            alturas.forEach(function (linha) { linha.forEach(function (altura) { if (altura < NIVEL_DA_AGUA) total++; }); });
+            return total;
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("o mapa e as camadas em texto", function () {
+            conferirIgual("10 linhas de altura", ALTURAS_EM_TEXTO.length, 10);
+            conferirIgual("TAMANHO deduzido do texto", TAMANHO, ALTURAS_EM_TEXTO.length);
+            conferir("alturas: quadrado e só ~ 0-4", ALTURAS_EM_TEXTO.every(function (linha) { return /^[~0-4]{10}$/.test(linha); }));
+            conferir("objetos: quadrado e só C P .", OBJETOS_EM_TEXTO.length === TAMANHO && OBJETOS_EM_TEXTO.every(function (linha) { return /^[CP.]{10}$/.test(linha); }));
+            conferirIgual("4 casas e 1 cais", OBJETOS_EM_TEXTO.join("").split("").filter(function (s) { return s !== "."; }).sort().join(""), "CCCCP");
+            let objetosNoMar = 0;
+            OBJETOS_EM_TEXTO.forEach(function (linha, y) {
+                linha.split("").forEach(function (objeto, x) { if (objeto !== "." && ALTURAS_EM_TEXTO[y][x] === "~") objetosNoMar++; });
+            });
+            conferirIgual("nenhum objeto no mar", objetosNoMar, 0);
+            conferirIgual("alturas numéricas: ~ vira 0, dígito vira o número", alturas.map(function (linha) { return linha.join(""); }).join("|"),
+                ALTURAS_EM_TEXTO.map(function (linha) { return linha.replace(/~/g, "0"); }).join("|"));
+            conferir("toda altura é number", alturas.every(function (linha) { return linha.every(function (n) { return typeof n === "number"; }); }));
+            conferirIgual("o nível da água é 1 (passo 2)", NIVEL_DA_AGUA, 1);
+            conferirIgual("um degrau sobe 12 px", ALTURA_DO_DEGRAU, 12);
+            conferirIgual("estado inicial: sem giro", rotacao, 0);
+        });
+
+        testar("a matriz e a inversa (herdadas do passo 1)", function () {
+            conferir("det ≠ 0", DETERMINANTE !== 0);
+            conferir("det = L²/4", Math.abs(DETERMINANTE - LARGURA_DO_BLOCO * LARGURA_DO_BLOCO / 4) < TOLERANCIA);
+            const produto = [0, 1].map(function (linha) {
+                return [0, 1].map(function (coluna) { return MATRIZ[linha][0] * INVERSA[0][coluna] + MATRIZ[linha][1] * INVERSA[1][coluna]; });
+            });
+            conferir("MATRIZ · INVERSA = I",
+                Math.abs(produto[0][0] - 1) < TOLERANCIA && Math.abs(produto[1][1] - 1) < TOLERANCIA
+                && Math.abs(produto[0][1]) < TOLERANCIA && Math.abs(produto[1][0]) < TOLERANCIA, JSON.stringify(produto));
+        });
+
+        testar("ida e volta com altura, nos 4 giros (1.000 pontos cada)", function () {
+            semearSorteio(31337);
+            rodarNosQuatroGiros(function (giro) {
+                let pior = 0;
+                for (let i = 0; i < 1000; i++) {
+                    const x = Math.random() * TAMANHO, y = Math.random() * TAMANHO, z = Math.random() * 4;
+                    const naTela = mundoParaTela(x, y, z);
+                    const devolta = telaParaMundo(naTela.x, naTela.y, z);
+                    pior = Math.max(pior, Math.abs(devolta.x - x), Math.abs(devolta.y - y));
+                }
+                conferir("mundo → tela → mundo, giro " + giro * 90 + "°: erro " + pior.toExponential(2), pior < TOLERANCIA);
+
+                let piorTela = 0;
+                for (let i = 0; i < 1000; i++) {
+                    const sx = Math.random() * 400, sy = Math.random() * 300, z = Math.floor(Math.random() * 5);
+                    const noMundo = telaParaMundo(sx, sy, z);
+                    const devolta = mundoParaTela(noMundo.x, noMundo.y, z);
+                    piorTela = Math.max(piorTela, Math.abs(devolta.x - sx), Math.abs(devolta.y - sy));
+                }
+                conferir("tela → mundo → tela, giro " + giro * 90 + "°: erro " + piorTela.toExponential(2), piorTela < TOLERANCIA);
+            });
+        });
+
+        testar("a altura sobe o ponto na tela, sem mexer no x", function () {
+            irParaOGiro(0);
+            const chao = mundoParaTela(3, 4, 0), alto = mundoParaTela(3, 4, 2);
+            conferirIgual("z = 2 sobe 24 px", chao.y - alto.y, 2 * ALTURA_DO_DEGRAU);
+            conferirIgual("e não desloca o x", alto.x, chao.x);
+            conferirIgual("sem z é o mesmo que z = 0", JSON.stringify(mundoParaTela(3, 4)), JSON.stringify(chao));
+            conferirIgual("projetar(u, v) sem z = z 0", JSON.stringify(projetar(3, 4)), JSON.stringify(projetar(3, 4, 0)));
+            conferirIgual("o canto (0, 0) cai na ORIGEM", JSON.stringify(mundoParaTela(0, 0)), JSON.stringify({ x: ORIGEM.x, y: ORIGEM.y }));
+            conferirIgual("a ORIGEM deixa 4 degraus + 12 px acima", ORIGEM.y, 4 * ALTURA_DO_DEGRAU + 12);
+        });
+
+        testar("a ilha com blocos de 4 e a água cabe na tela de 384×252, nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                let esquerda = Infinity, direita = -Infinity, cima = Infinity, baixo = -Infinity;
+                for (let y = 0; y < TAMANHO; y++) {
+                    for (let x = 0; x < TAMANHO; x++) {
+                        [0, 4].forEach(function (altura) {
+                            cantosDoBloco(x, y, altura).forEach(function (canto) {
+                                esquerda = Math.min(esquerda, canto.x); direita = Math.max(direita, canto.x);
+                                cima = Math.min(cima, canto.y); baixo = Math.max(baixo, canto.y);
+                            });
+                        });
+                    }
+                }
+                conferir("giro " + giro * 90 + "°: x de " + esquerda + " a " + direita + " cabe em 390 px", esquerda >= 0 && direita <= 390);
+                conferir("giro " + giro * 90 + "°: x cabe no canvas de " + tela.width, esquerda >= 0 && direita <= tela.width);
+                conferir("giro " + giro * 90 + "°: y de " + cima + " a " + baixo + " cabe no canvas de " + tela.height, cima >= 0 && baixo <= tela.height);
+            });
+        });
+
+        testar("a lista de desenho: completa, sem repetição, ordenada", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const nome = "giro " + giro * 90 + "°: ";
+                conferirIgual(nome + "uma entrada por casa (100)", listaDeDesenho.length, TAMANHO * TAMANHO);
+                conferirIgual(nome + "sem casa repetida", new Set(listaDeDesenho.map(nomeDaCasa)).size, TAMANHO * TAMANHO);
+                conferir(nome + "cada entrada traz a altura do mapa",
+                    listaDeDesenho.every(function (casa) { return casa.altura === alturas[casa.y][casa.x]; }));
+                conferir(nome + "a proximidade bate com a conta independente (x'+y' do centro, já girado)",
+                    listaDeDesenho.every(function (casa) { return Math.abs(casa.proximidade - proximidadeIndependente(casa, giro)) < TOLERANCIA; }));
+                conferir(nome + "x'+y' nunca decresce (de trás para a frente)",
+                    listaDeDesenho.every(function (casa, i) { return i === 0 || casa.proximidade >= listaDeDesenho[i - 1].proximidade; }));
+                conferir(nome + "no empate de x'+y', o mais baixo vem primeiro", empatesEmOrdem(listaDeDesenho));
+                conferir(nome + "a casa mais longe é a primeira e a mais perto é a última (na tela: y menor primeiro)",
+                    mundoParaTela(listaDeDesenho[0].x + 0.5, listaDeDesenho[0].y + 0.5).y < mundoParaTela(listaDeDesenho[99].x + 0.5, listaDeDesenho[99].y + 0.5).y);
+            });
+        });
+
+        testar("o desempate por altura funciona com empates de verdade", function () {
+            // Casas com o mesmo x'+y' (mesma linha da tela) e alturas diferentes: o terreno marca 0, 2, 4 numa diagonal.
+            irParaOGiro(0);
+            const diagonal = [[1, 6], [2, 5], [3, 4], [4, 3], [5, 2], [6, 1]];
+            const original = diagonal.map(function (par) { return alturas[par[1]][par[0]]; });
+            const novas = [4, 0, 3, 1, 2, 0];
+            diagonal.forEach(function (par, i) { alturas[par[1]][par[0]] = novas[i]; });
+            const lista = montarListaDeDesenho();
+            const mesmaDiagonal = lista.filter(function (casa) { return casa.x + casa.y === 7; });
+            conferirIgual("as 8 casas de x + y = 7 aparecem juntas", mesmaDiagonal.length, 8);
+            conferir("e saem da mais baixa para a mais alta", empatesEmOrdem(lista) && mesmaDiagonal.every(function (casa, i) { return i === 0 || casa.altura >= mesmaDiagonal[i - 1].altura; }),
+                mesmaDiagonal.map(function (casa) { return casa.altura; }).join(","));
+            diagonal.forEach(function (par, i) { alturas[par[1]][par[0]] = original[i]; });
+            irParaOGiro(0);
+        });
+
+        testar("ordem do pintor na ilha de verdade, nos 4 giros (e o controle negativo)", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const resultado = conferirOrdemDoPintor(listaDeDesenho, giro);
+                conferir("giro " + giro * 90 + "°: " + resultado.pares + " pares de silhuetas se sobrepõem e nenhum está fora de ordem",
+                    resultado.violacoes.length === 0 && resultado.pares > 200, resultado.violacoes.slice(0, 3).join(" | ") + " (pares = " + resultado.pares + ")");
+
+                const invertida = conferirOrdemDoPintor(listaDeDesenho.slice().reverse(), giro);
+                conferir("controle negativo, giro " + giro * 90 + "°: a lista invertida é reprovada (" + invertida.violacoes.length + " violações)", invertida.violacoes.length > 0);
+
+                if (giro > 0) {
+                    const ordemDoGiroZero = montarListaComOutroGiro(0);
+                    conferir("controle negativo, giro " + giro * 90 + "°: a ordem do giro 0 é reprovada neste giro",
+                        conferirOrdemDoPintor(ordemDoGiroZero, giro).violacoes.length > 0);
+                }
+            });
+        });
+
+        testar("o checker de empates reprova um empate invertido (controle negativo)", function () {
+            irParaOGiro(0);
+            const invertidoNosEmpates = listaDeDesenho.slice().sort(function (a, b) { return a.proximidade - b.proximidade || b.altura - a.altura; });
+            conferir("o desempate certo passa", empatesEmOrdem(listaDeDesenho));
+            conferir("o desempate invertido é reprovado", !empatesEmOrdem(invertidoNosEmpates));
+        });
+
+        testar("ordem do pintor em 20 terrenos aleatórios × 4 giros (semente fixa)", function () {
+            semearSorteio(2026);
+            let totalDeParesVistos = 0;
+            const problemas = [];
+            let controleNegativoPegou = 0;
+            for (let terreno = 0; terreno < 20; terreno++) {
+                sortearTerreno();
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    const resultado = conferirOrdemDoPintor(listaDeDesenho, giro);
+                    totalDeParesVistos += resultado.pares;
+                    if (resultado.violacoes.length > 0) problemas.push("terreno " + terreno + ", giro " + giro * 90 + "°: " + resultado.violacoes[0]);
+                    if (!empatesEmOrdem(listaDeDesenho)) problemas.push("terreno " + terreno + ", giro " + giro * 90 + "°: empate fora de ordem");
+                    if (conferirOrdemDoPintor(listaDeDesenho.slice().reverse(), giro).violacoes.length > 0) controleNegativoPegou++;
+                }
+            }
+            conferir("80 combinações (20 terrenos × 4 giros) sem violação, " + totalDeParesVistos + " pares sobrepostos conferidos", problemas.length === 0 && totalDeParesVistos > 10000, problemas.slice(0, 3).join(" | "));
+            conferirIgual("controle negativo: a lista invertida é reprovada nas 80 combinações", controleNegativoPegou, 80);
+            restaurarTerreno();
+        });
+
+        testar("terrenos extremos: tudo no teto, tudo no chão, xadrez, rampa", function () {
+            const formas = {
+                "tudo 4": function () { return 4; },
+                "tudo 0": function () { return 0; },
+                "xadrez 0/4": function (x, y) { return (x + y) % 2 === 0 ? 0 : 4; },
+                "rampa em x": function (x) { return Math.min(4, Math.floor(x / 2)); },
+                "rampa em y": function (x, y) { return Math.min(4, Math.floor(y / 2)); },
+            };
+            Object.keys(formas).forEach(function (nome) {
+                alturas.forEach(function (linha, y) { for (let x = 0; x < linha.length; x++) linha[x] = formas[nome](x, y); });
+                let violacoes = 0;
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    violacoes += conferirOrdemDoPintor(listaDeDesenho, giro).violacoes.length + (empatesEmOrdem(listaDeDesenho) ? 0 : 1);
+                }
+                conferirIgual(nome + ": violações nos 4 giros", violacoes, 0);
+            });
+            restaurarTerreno();
+        });
+
+        testar("o quadro pinta exatamente na ordem da lista (espião em desenharCaixa), nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const chamadas = espiarUmQuadro();
+                const visitas = agruparPorCasa(chamadas);
+                const ordemPintada = visitas.map(function (visita) { return visita.x + "," + visita.y; });
+                const ordemDaLista = listaDeDesenho.map(nomeDaCasa);
+                conferirIgual("giro " + giro * 90 + "°: a ordem das casas pintadas é a da lista", ordemPintada.join("|"), ordemDaLista.join("|"));
+                conferirIgual("giro " + giro * 90 + "°: cada casa é visitada uma vez só", visitas.length, TAMANHO * TAMANHO);
+            });
+        });
+
+        testar("cada casa pinta o bloco de 0 até a altura, e a água só nas casas mais baixas que o nível", function () {
+            irParaOGiro(0);
+            const visitas = agruparPorCasa(espiarUmQuadro());
+            let blocosErrados = 0, aguaIndevida = 0, aguaFaltando = 0, aguaMalPosta = 0;
+            visitas.forEach(function (visita) {
+                const altura = alturas[visita.y][visita.x];
+                const base = visita.caixas[0];
+                if (base.de !== 0 || base.ate !== altura) blocosErrados++;
+                const alagada = altura < NIVEL_DA_AGUA;
+                if (alagada && visita.caixas.length !== 2) aguaFaltando++;
+                if (!alagada && visita.caixas.length !== 1) aguaIndevida++;
+                if (alagada && visita.caixas.length === 2) {
+                    const agua = visita.caixas[1];
+                    if (agua.de !== altura || agua.ate !== NIVEL_DA_AGUA || agua.contorno.indexOf("255, 255, 255") === -1) aguaMalPosta++;
+                }
+            });
+            conferirIgual("blocos pintados de 0 até a altura do mapa: erros", blocosErrados, 0);
+            conferirIgual("casas mais baixas que o nível sem água: ", aguaFaltando, 0);
+            conferirIgual("casas no nível ou acima COM água (indevida): ", aguaIndevida, 0);
+            conferirIgual("água pintada da altura da casa até o nível, com a borda branca: erros", aguaMalPosta, 0);
+            const comAgua = visitas.filter(function (visita) { return visita.caixas.length === 2; });
+            conferirIgual("o número de casas com água é o de casas mais baixas que o nível", comAgua.length, contarCasasAlagadas());
+            conferir("e há água a ver (a ilha tem mar e lago)", comAgua.length > 40);
+            conferir("nenhuma casa com altura ≥ nível recebeu água", comAgua.every(function (visita) { return alturas[visita.y][visita.x] < NIVEL_DA_AGUA; }));
+        });
+
+        testar("a água aparece na caixa certa também com outro terreno (regra, não mapa fixo)", function () {
+            semearSorteio(99);
+            sortearTerreno();
+            irParaOGiro(2);
+            const visitas = agruparPorCasa(espiarUmQuadro());
+            const comAgua = visitas.filter(function (visita) { return visita.caixas.length === 2; });
+            conferirIgual("casas com água = casas de altura 0 no terreno sorteado", comAgua.length, contarCasasAlagadas());
+            conferir("todas as molhadas têm altura menor que o nível", comAgua.every(function (visita) { return alturas[visita.y][visita.x] < NIVEL_DA_AGUA; }));
+            conferir("todas as secas ficaram sem água", visitas.filter(function (visita) { return visita.caixas.length === 1; }).every(function (visita) { return alturas[visita.y][visita.x] >= NIVEL_DA_AGUA; }));
+            restaurarTerreno();
+        });
+
+        testar("o jogador não muda a água nem o terreno (guarda do GDD)", function () {
+            irParaOGiro(0);
+            const antes = JSON.stringify({ alturas: alturas, texto: ALTURAS_EM_TEXTO, objetos: OBJETOS_EM_TEXTO, nivel: NIVEL_DA_AGUA, degrau: ALTURA_DO_DEGRAU });
+            const casasAlagadasAntes = contarCasasAlagadas();
+
+            for (let y = 0; y < TAMANHO; y++) {
+                for (let x = 0; x < TAMANHO; x++) {
+                    const centro = mundoParaTela(x + 0.5, y + 0.5, alturas[y][x]);
+                    const caixa = tela.getBoundingClientRect();
+                    ["pointerdown", "pointermove"].forEach(function (tipo) {
+                        tela.dispatchEvent(new PointerEvent(tipo, { clientX: caixa.left + centro.x * caixa.width / tela.width, clientY: caixa.top + centro.y * caixa.height / tela.height, bubbles: true }));
+                    });
+                }
+            }
+            "qrhqrhrrrqQRHxz ".split("").forEach(apertarTecla);
+            apertarTecla("Enter");
+            apertarTecla("ArrowUp");
+            apertarTecla(" ");
+            document.querySelectorAll("#botoes button").forEach(function (botao) { botao.click(); botao.click(); });
+            avancarQuadros(60, 16);
+
+            const depois = JSON.stringify({ alturas: alturas, texto: ALTURAS_EM_TEXTO, objetos: OBJETOS_EM_TEXTO, nivel: NIVEL_DA_AGUA, degrau: ALTURA_DO_DEGRAU });
+            conferir("terreno, mapas em texto, nível e degrau idênticos depois de mouse, toque, teclado e botões", depois === antes);
+            conferirIgual("as casas alagadas são as mesmas", contarCasasAlagadas(), casasAlagadasAntes);
+
+            irParaOGiro(0);
+            const visitas = agruparPorCasa(espiarUmQuadro());
+            conferir("o quadro seguinte só molha casas mais baixas que o nível",
+                visitas.every(function (visita) { return (visita.caixas.length === 2) === (alturas[visita.y][visita.x] < NIVEL_DA_AGUA); }));
+        });
+
+        testar("a onda mexe só no brilho da água (e dentro de uma faixa)", function () {
+            if (movimentoReduzido) {
+                conferir("movimento reduzido ativo no navegador de teste: faixa da onda não aplicável", true);
+                return;
+            }
+            const fasesEmTeste = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6.28];
+            const casas = [{ x: 0, y: 0 }, { x: 3, y: 7 }, { x: 9, y: 9 }];
+            const faseGuardada = faseDaOnda;
+            const alfas = [];
+            fasesEmTeste.forEach(function (fase) {
+                faseDaOnda = fase;
+                casas.forEach(function (casa) {
+                    const alfa = Number(/, ([\d.]+)\)$/.exec(estiloDaAgua(casa).topo)[1]);
+                    alfas.push(alfa);
+                });
+            });
+            faseDaOnda = faseGuardada;
+            conferir("todo alfa fica entre 0,48 e 0,62", alfas.every(function (alfa) { return alfa >= 0.48 - 1e-9 && alfa <= 0.62 + 1e-9; }), alfas.join(","));
+            conferir("e o brilho varia com a fase", new Set(alfas).size > 5);
+            conferir("a água segue translúcida (nunca opaca)", alfas.every(function (alfa) { return alfa < 1; }));
+        });
+
+        testar("o relógio: dt com piso e teto", function () {
+            if (movimentoReduzido) {
+                conferir("movimento reduzido ativo no navegador de teste: relógio da onda não aplicável", true);
+                return;
+            }
+            function avancoDaFaseEm(milissegundos) {
+                const antes = faseDaOnda;
+                avancarQuadro(milissegundos);
+                return faseDaOnda - antes;
+            }
+            avancarQuadro(16);
+            conferir("16 ms avançam a fase em 2 × 0,016", Math.abs(avancoDaFaseEm(16) - 0.032) < 1e-9);
+            conferir("50 ms (o teto) avançam 0,1", Math.abs(avancoDaFaseEm(50) - 0.1) < 1e-9);
+            conferir("1.000 ms são cortados no teto (0,1)", Math.abs(avancoDaFaseEm(1000) - 0.1) < 1e-9);
+            conferir("10.000 ms também", Math.abs(avancoDaFaseEm(10000) - 0.1) < 1e-9);
+            conferirIgual("um relógio que anda para trás (−300 ms) não faz a fase recuar (piso 0)", avancoDaFaseEm(-300), 0);
+            conferirIgual("um quadro no mesmo instante (0 ms) não avança", avancoDaFaseEm(0), 0);
+            conferir("e depois do piso o relógio volta ao normal", Math.abs(avancoDaFaseEm(16) - 0.032) < 1e-9);
+
+            const antes = faseDaOnda;
+            atualizar(0);
+            conferirIgual("atualizar(0) não mexe na onda", faseDaOnda, antes);
+            atualizar(0.1);
+            conferir("atualizar(0,1) soma 0,2", Math.abs(faseDaOnda - antes - 0.2) < 1e-9);
+            conferir("o loop segue pedindo quadros", avancarQuadro(16));
+            conferir("a fase sempre cresce, nunca é NaN", Number.isFinite(faseDaOnda) && faseDaOnda > 0);
+        });
+
+        testar("girar a vista: Q, R, botões, lista refeita", function () {
+            irParaOGiro(0);
+            const listaAntes = listaDeDesenho;
+            apertarTecla("r");
+            conferirIgual("R gira para a direita (1)", rotacao, 1);
+            conferir("a lista foi refeita (outro objeto)", listaDeDesenho !== listaAntes);
+            conferirIgual("e a lista é a do giro 1", listaDeDesenho.map(nomeDaCasa).join("|"), montarListaDeDesenho().map(nomeDaCasa).join("|"));
+            conferir("a ordem de desenho mudou com o giro", listaDeDesenho.map(nomeDaCasa).join("|") !== listaAntes.map(nomeDaCasa).join("|"));
+            conferir("a proximidade da lista é a do giro 1", listaDeDesenho.every(function (casa) { return Math.abs(casa.proximidade - proximidadeIndependente(casa, 1)) < TOLERANCIA; }));
+
+            apertarTecla("R");
+            conferirIgual("R maiúsculo também gira (2)", rotacao, 2);
+            apertarTecla("r"); apertarTecla("r");
+            conferirIgual("quatro R no total voltam ao início (0)", rotacao, 0);
+            irParaOGiro(0);
+
+            apertarTecla("q");
+            conferirIgual("Q gira para a esquerda (3)", rotacao, 3);
+            apertarTecla("q");
+            conferirIgual("Q de novo (2)", rotacao, 2);
+            apertarTecla("q"); apertarTecla("q");
+            conferirIgual("quatro Q voltam ao início (0)", rotacao, 0);
+
+            document.querySelector('[data-acao="girarDireita"]').click();
+            conferirIgual("o botão ⟳ gira para a direita", rotacao, 1);
+            document.querySelector('[data-acao="girarEsquerda"]').click();
+            conferirIgual("o botão ⟲ desfaz", rotacao, 0);
+            document.querySelector('[data-acao="girarEsquerda"]').click();
+            conferirIgual("o botão ⟲ a partir do 0 vai ao 3", rotacao, 3);
+            document.querySelector('[data-acao="girarDireita"]').click();
+            conferirIgual("e o ⟳ volta ao 0", rotacao, 0);
+            conferirIgual("a lista voltou à do giro 0", listaDeDesenho.map(nomeDaCasa).join("|"), (irParaOGiro(0), listaDeDesenho.map(nomeDaCasa).join("|")));
+
+            const rotacoesVistas = [];
+            for (let i = 0; i < 4; i++) { apertarTecla("r"); rotacoesVistas.push(rotacao); }
+            conferirIgual("R quatro vezes percorre 1, 2, 3, 0", rotacoesVistas.join(","), "1,2,3,0");
+            conferir("rotacao nunca sai de 0 a 3 mesmo com 50 giros", (function () {
+                for (let i = 0; i < 50; i++) { apertarTecla(i % 3 === 0 ? "q" : "r"); if (rotacao < 0 || rotacao > 3 || !Number.isInteger(rotacao)) return false; }
+                return true;
+            })());
+            irParaOGiro(0);
+
+            const cinco = listaDeDesenho.slice(0, 5).map(nomeDaCasa).join("|");
+            apertarTecla("r"); apertarTecla("r"); apertarTecla("r"); apertarTecla("r");
+            conferirIgual("depois de 4 R a lista é igual à inicial", listaDeDesenho.slice(0, 5).map(nomeDaCasa).join("|"), cinco);
+        });
+
+        testar("H e a leitura da ordem do pintor", function () {
+            irParaOGiro(0);
+            if (depuracaoLigada) apertarTecla("h");
+            avancarQuadro(16);
+            conferirIgual("sem H a leitura fica vazia", leitura.textContent, "");
+
+            apertarTecla("h");
+            conferirIgual("H liga", depuracaoLigada, true);
+            avancarQuadro(16);
+            const posicao = listaDeDesenho.findIndex(function (casa) { return casa.x === cursor.x && casa.y === cursor.y; });
+            conferir("a leitura diz em que posição a casa marcada é pintada",
+                leitura.textContent.indexOf("pintada em " + (posicao + 1) + "º de " + listaDeDesenho.length) !== -1, JSON.stringify(leitura.textContent));
+            conferir("e o x'+y' dela", leitura.textContent.indexOf("x'+y' = " + listaDeDesenho[posicao].proximidade) !== -1, JSON.stringify(leitura.textContent));
+            conferir("e a altura", leitura.textContent.indexOf("altura " + listaDeDesenho[posicao].altura) !== -1);
+            conferir("e o determinante", leitura.textContent.indexOf("det M = " + DETERMINANTE) !== -1);
+
+            apertarTecla("r");
+            avancarQuadro(16);
+            conferir("depois de girar a leitura mostra giro 90°", leitura.textContent.indexOf("giro 90°") !== -1, JSON.stringify(leitura.textContent));
+            const novaPosicao = listaDeDesenho.findIndex(function (casa) { return casa.x === cursor.x && casa.y === cursor.y; });
+            conferir("e a nova posição na lista", leitura.textContent.indexOf("pintada em " + (novaPosicao + 1) + "º") !== -1);
+
+            document.querySelector('[data-acao="alternarVer"]').click();
+            conferirIgual("o botão Ver desliga", depuracaoLigada, false);
+            avancarQuadro(16);
+            conferirIgual("e a leitura volta a ficar vazia", leitura.textContent, "");
+            irParaOGiro(0);
+        });
+
+        testar("o ponteiro marca uma casa e o loop segue (o picking com alturas é do passo 3)", function () {
+            irParaOGiro(0);
+            const caixa = tela.getBoundingClientRect();
+            const centro = mundoParaTela(6.5, 3.5, 0);
+            tela.dispatchEvent(new PointerEvent("pointermove", { clientX: caixa.left + centro.x * caixa.width / tela.width, clientY: caixa.top + centro.y * caixa.height / tela.height, bubbles: true }));
+            conferir("o cursor ficou dentro da ilha", cursor.x >= 0 && cursor.y >= 0 && cursor.x < TAMANHO && cursor.y < TAMANHO);
+            conferir("e a leitura do chão sob o ponteiro é um ponto do mundo", chaoSobOPonteiro !== null && Number.isFinite(chaoSobOPonteiro.x) && Number.isFinite(chaoSobOPonteiro.y));
+            avancarQuadros(30, 16);
+            conferir("o loop segue pedindo quadros", avancarQuadro(16));
+        });
+
+        testar("verificarMapa aceita o mapa de verdade e recusa mapas quebrados", function () {
+            function trocarEContar(lista, indice, textoNovo) {
+                const original = lista[indice];
+                lista[indice] = textoNovo;
+                const avisosAntes = errosDeConsole.length;
+                let valido;
+                try {
+                    valido = verificarMapa();
+                } finally {
+                    lista[indice] = original;
+                }
+                return { valido: valido, avisos: errosDeConsole.length - avisosAntes, ultimoAviso: errosDeConsole[errosDeConsole.length - 1] };
+            }
+
+            const avisosAntes = errosDeConsole.length;
+            conferirIgual("o mapa de verdade é válido", verificarMapa(), true);
+            conferirIgual("e não avisa nada", errosDeConsole.length - avisosAntes, 0);
+
+            const casos = [
+                ["terra na borda de cima", ALTURAS_EM_TEXTO, 0, "~~~~1~~~~~"],
+                ["terra na borda de baixo", ALTURAS_EM_TEXTO, 9, "~~~~~~~~~1"],
+                ["terra na borda da esquerda", ALTURAS_EM_TEXTO, 4, "112344321~"],
+                ["terra na borda da direita", ALTURAS_EM_TEXTO, 4, "~12344321" + "2"],
+                ["símbolo fora da legenda (x)", ALTURAS_EM_TEXTO, 4, "~12x44321~"],
+                ["altura 5 (acima do máximo)", ALTURAS_EM_TEXTO, 4, "~12354321~"],
+                ["linha de altura mais curta", ALTURAS_EM_TEXTO, 5, "~1234012"],
+                ["linha de altura mais comprida", ALTURAS_EM_TEXTO, 5, "~12340121~~"],
+                ["linha de objetos mais curta", OBJETOS_EM_TEXTO, 2, "...C......".slice(0, 9)],
+                ["linha de objetos mais comprida", OBJETOS_EM_TEXTO, 2, "...C......."],
+                ["objeto no mar (borda)", OBJETOS_EM_TEXTO, 0, "C........."],
+                ["objeto fora da legenda (Z)", OBJETOS_EM_TEXTO, 3, ".......Z.."],
+            ];
+            casos.forEach(function (caso) {
+                const resultado = trocarEContar(caso[1], caso[2], caso[3]);
+                conferir(caso[0] + ": recusa, com um aviso", resultado.valido === false && resultado.avisos === 1, "válido = " + resultado.valido + ", avisos = " + resultado.avisos);
+            });
+
+            const ultimo = trocarEContar(ALTURAS_EM_TEXTO, 0, "~~~~1~~~~~");
+            conferir("o aviso explica que o mapa é inválido", /Mapa inválido/.test(ultimo.ultimoAviso), ultimo.ultimoAviso);
+            conferirIgual("depois dos testes o mapa de verdade ainda é válido", verificarMapa(), true);
+            errosDeConsole.length = avisosAntes;
+        });
+
+        testar("sem erro de console na carga e nos quadros", function () {
+            conferirIgual("a carga da página não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("o terreno de verdade foi restaurado", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("e o giro final é 0", rotacao, 0);
+            conferirIgual("nenhum aviso sobrou", errosDeConsole.join(" | "), "");
+        });
+
+        // ------------------------------------------------------------
+        // Movimento reduzido: uma página nova (iframe srcdoc, mesma origem) em que o navegador pede menos movimento.
+        // ------------------------------------------------------------
+        function montarPaginaComMovimentoReduzido() {
+            const fecharScript = "<" + "/script>";
+            return "<!DOCTYPE html><html><body>"
+                + '<canvas id="jogo" width="384" height="252"></canvas><div id="botoes"></div><pre id="leitura"></pre>'
+                + "<script>"
+                + "window.errosNaoTratados = []; window.proximoQuadro = null; window.errosDeConsole = [];"
+                + "console.error = function () { window.errosDeConsole.push(Array.prototype.join.call(arguments, ' ')); };"
+                + "window.addEventListener('error', function (evento) { window.errosNaoTratados.push(evento.message); });"
+                + "window.requestAnimationFrame = function (funcao) { window.proximoQuadro = funcao; return 1; };"
+                + "performance.now = function () { return 0; };"
+                + "window.matchMedia = function (consulta) { return { matches: /reduce/.test(consulta), media: consulta, addEventListener: function () {}, removeEventListener: function () {} }; };"
+                + fecharScript
+                + '<script src="../../dique/02-alturas/regras.js">' + fecharScript
+                + '<script src="../../dique/02-alturas/script.js">' + fecharScript
+                + "</body></html>";
+        }
+
+        let jaFinalizou = false;
+        function terminarUmaVez() {
+            if (!jaFinalizou) {
+                jaFinalizou = true;
+                finalizar();
+            }
+        }
+
+        const quadroReduzido = document.createElement("iframe");
+        quadroReduzido.style.display = "none";
+        quadroReduzido.addEventListener("load", function () {
+            testar("movimento reduzido: a onda para e a água fica estável", function () {
+                const janela = quadroReduzido.contentWindow;     // os let/const do script ficam fora de window: lê-se por eval
+                conferirIgual("o script do passo carregou no quadro", typeof janela.atualizar, "function");
+                conferirIgual("o jogo leu prefers-reduced-motion: reduce", janela.eval("movimentoReduzido"), true);
+                conferirIgual("o loop do quadro começou", typeof janela.proximoQuadro, "function");
+
+                let relogio = 0;
+                for (let i = 0; i < 120; i++) {
+                    const funcao = janela.proximoQuadro;
+                    janela.proximoQuadro = null;
+                    relogio += 16;
+                    funcao(relogio);
+                }
+                conferirIgual("depois de 120 quadros a fase da onda continua em 0", janela.eval("faseDaOnda"), 0);
+                janela.atualizar(1);
+                conferirIgual("e atualizar(1) também não mexe", janela.eval("faseDaOnda"), 0);
+
+                const alfas = [{ x: 0, y: 0 }, { x: 3, y: 7 }, { x: 9, y: 4 }].map(function (casa) {
+                    return /, ([\d.]+)\)$/.exec(janela.estiloDaAgua(casa).topo)[1];
+                });
+                conferirIgual("o brilho da água é fixo (0,55) em qualquer casa", alfas.join(","), "0.55,0.55,0.55");
+                conferirIgual("o loop segue vivo", typeof janela.proximoQuadro, "function");
+                conferirIgual("nenhum erro não tratado", janela.errosNaoTratados.join(" | "), "");
+                conferirIgual("nenhum console.error", janela.errosDeConsole.join(" | "), "");
+            });
+            terminarUmaVez();
+        });
+        quadroReduzido.srcdoc = montarPaginaComMovimentoReduzido();
+        document.body.appendChild(quadroReduzido);
+
+        setTimeout(function () {
+            if (!jaFinalizou) {
+                conferir("o quadro do movimento reduzido carregou", false);
+                terminarUmaVez();
+            }
+        }, 5000);
+    </script>
+</body>
+
+</html>
