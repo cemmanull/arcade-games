@@ -150,8 +150,8 @@ function acharVizinhaNoCanto(coluna, linha, z) {    // o raio passa exatamente p
 function acharCasaPeloRaio(sx, sy) {            // o raio do pixel desce pelas colunas, da frente para trás: o DDA do reflexo/03-um-raio, na diagonal
     const CASAS_POR_ALTURA = 2 * ALTURA_DO_DEGRAU / LARGURA_DO_BLOCO;    // quanto o raio anda em x' e em y' a cada unidade de z
     const entrada = telaParaGirado(sx, sy, ALTURA_MAXIMA);               // o ponto do raio no alto, onde ele entra
-    let coluna = Math.floor(entrada.x), linha = Math.floor(entrada.y);
-    let faltaX = entrada.x - coluna, faltaY = entrada.y - linha;         // quanto falta, andando para trás, até a próxima linha da grade
+    let coluna = Math.floor(entrada.x + MARGEM_DO_PONTO_FLUTUANTE), linha = Math.floor(entrada.y + MARGEM_DO_PONTO_FLUTUANTE);   // 6,99999999… é a linha 7: o pixel sobre a grade fica na casa da frente, com zero a andar
+    let faltaX = Math.max(0, entrada.x - coluna), faltaY = Math.max(0, entrada.y - linha);        // quanto falta, andando para trás, até a próxima linha da grade
     let z = ALTURA_MAXIMA, face = "topo";
     const visitadas = [];
     while (coluna >= 0 && linha >= 0 && z >= 0) {                        // andar para trás até sair do mapa pelos fundos ou chegar ao chão fora dele

@@ -73,7 +73,8 @@
             dia: { ler: ["moldar"], moldar: ["mare"], mare: ["contar"], contar: ["ler", "fim"], fim: [] },
             mare: { baixa: ["enchente"], enchente: ["preamar"], preamar: ["vazante"], vazante: ["baixa"] },
         };
-        const ALVO_DO_REINICIAR = { dia: "ler", mare: "baixa" };
+        const ALVO_DO_REINICIAR = { dia: "ler", mare: "baixa" };   // o reiniciar não é transição: só ele pode pôr as fases aqui sem passar pelo irPara
+        const MOTIVOS_DE_REINICIO = ["reiniciar", "tecla n", "clique reiniciar"];
 
         // ------------------------------------------------------------
         // Ajudantes de entrada, de estado e de conta
@@ -165,6 +166,10 @@
 
         const vigia = { dia: fase, mare: faseDaMare, chamadasLidas: chamadasDeIrPara.length, mudancas: [] };
 
+        function ehReinicioLimpo(motivo, agora, maquina) {   // o único desvio aceito: o reiniciar, e só se o resultado for o estado inicial com o relógio e o passo zerados
+            return MOTIVOS_DE_REINICIO.indexOf(String(motivo).toLowerCase()) !== -1 && agora === ALVO_DO_REINICIAR[maquina] && relogioDaFase === 0 && passoDaMare === 0;
+        }
+
         function olharAsMaquinas(motivo) {
             [["dia", fase], ["mare", faseDaMare]].forEach(function (par) {
                 const maquina = par[0], agora = par[1];
@@ -174,7 +179,7 @@
                     vigia.mudancas.push({ maquina: maquina, de: atual, para: chamada.para, via: "irPara", motivo: motivo });
                     atual = chamada.para;
                 });
-                if (atual !== agora) vigia.mudancas.push({ maquina: maquina, de: atual, para: agora, via: "direto", motivo: motivo });
+                if (atual !== agora) vigia.mudancas.push({ maquina: maquina, de: atual, para: agora, via: ehReinicioLimpo(motivo, agora, maquina) ? "reinicio" : "direto", motivo: motivo });
                 vigia[maquina] = agora;
             });
             vigia.chamadasLidas = chamadasDeIrPara.length;
@@ -360,7 +365,7 @@
             conferirIgual("as três casas do mapa", textoDasCasas(CASAS_COM_CASA), textoDasCasas(CASAS_DO_TEXTO));
         });
 
-        testar("as tabelas das máquinas: tudo da tábua do GDD vale, o resto só leva ao reiniciar; transicaoValida lê a tabela; irPara recusa o que não consta", function () {
+        testar("as tabelas das máquinas: a tabela é exatamente a do GDD (o reiniciar não consta); transicaoValida lê a tabela; irPara recusa o que não consta", function () {
             const estados = { dia: ["ler", "moldar", "mare", "contar", "fim"], mare: ["baixa", "enchente", "preamar", "vazante"] };
             ["dia", "mare"].forEach(function (maquina) {
                 let divergenciaDeLeitura = 0, foraDaBase = [], baseFaltando = [];
@@ -370,12 +375,12 @@
                         if (transicaoValida(maquina, de, para) !== naTabela) divergenciaDeLeitura++;
                         const naBase = BASE_DAS_MAQUINAS[maquina][de].indexOf(para) !== -1;
                         if (naBase && !naTabela) baseFaltando.push(de + "→" + para);
-                        if (naTabela && !naBase && para !== ALVO_DO_REINICIAR[maquina]) foraDaBase.push(de + "→" + para);
+                        if (naTabela && !naBase) foraDaBase.push(de + "→" + para);
                     });
                 });
                 conferirIgual("máquina " + maquina + ": transicaoValida concorda com a tabela em todos os pares", divergenciaDeLeitura, 0);
                 conferirIgual("máquina " + maquina + ": toda transição do GDD consta", baseFaltando.join(" "), "");
-                conferirIgual("máquina " + maquina + ": nenhuma transição extra, fora o reiniciar (→ " + ALVO_DO_REINICIAR[maquina] + ")", foraDaBase.join(" "), "");
+                conferirIgual("máquina " + maquina + ": nenhuma transição extra (o reiniciar não é uma transição)", foraDaBase.join(" "), "");
             });
             voltarAoComeco();
             const antes = fase + "/" + faseDaMare;
@@ -386,6 +391,32 @@
             conferirIgual("e muda a fase", fase, "moldar");
             conferirIgual("irPara('mare', 'enchente') vale", irPara("mare", "enchente"), true);
             olharAsMaquinas("teste");
+            voltarAoComeco();
+        });
+
+        testar("irPara: cada par da tabela vale e zera o relógio, todos os outros pares são recusados sem mexer na fase nem no relógio", function () {
+            const estados = { dia: ["ler", "moldar", "mare", "contar", "fim"], mare: ["baixa", "enchente", "preamar", "vazante"] };
+            voltarAoComeco();
+            ["dia", "mare"].forEach(function (maquina) {
+                const problemas = [];
+                let validos = 0, recusados = 0;
+                estados[maquina].forEach(function (de) {
+                    estados[maquina].forEach(function (para) {
+                        if (maquina === "dia") fase = de; else faseDaMare = de;
+                        vigia[maquina] = de;                  // o teste põe o estado de propósito: o vigia é avisado
+                        relogioDaFase = 0.7;
+                        const devolveu = irPara(maquina, para);
+                        const naTabela = BASE_DAS_MAQUINAS[maquina][de].indexOf(para) !== -1;
+                        const faseDepois = maquina === "dia" ? fase : faseDaMare;
+                        if (devolveu !== naTabela) problemas.push(de + "→" + para + " devolveu " + devolveu);
+                        if (faseDepois !== (naTabela ? para : de)) problemas.push(de + "→" + para + " deixou a fase em " + faseDepois);
+                        if (relogioDaFase !== (naTabela ? 0 : 0.7)) problemas.push(de + "→" + para + " deixou o relógio em " + relogioDaFase);
+                        if (naTabela) validos++; else recusados++;
+                        olharAsMaquinas("teste");
+                    });
+                });
+                conferirIgual("máquina " + maquina + ": " + validos + " pares valem, " + recusados + " são recusados, sem desvio: " + problemas.slice(0, 3).join(" | "), problemas.length, 0);
+            });
             voltarAoComeco();
         });
 
@@ -564,7 +595,7 @@
             voltarAoComeco();
         });
 
-        testar("AS MÁQUINAS SÓ FAZEM TRANSIÇÕES DA TABELA, o reiniciar incluído, de qualquer fase, e o relógio da fase recomeça", function () {
+        testar("AS MÁQUINAS SÓ FAZEM TRANSIÇÕES DA TABELA; só o reiniciar volta direto ao estado inicial, de qualquer fase, com o relógio zerado", function () {
             const alcancar = {
                 "ler": function () { },
                 "moldar": function () { avancarAte(function () { return fase === "moldar"; }, 400); },
@@ -593,10 +624,11 @@
                 conferir("  a leitura dura a duração inteira (" + quadrosAteMoldar + " quadros, esperado " + quadrosDe(TEMPO_DE_LEITURA) + " ±1)", Math.abs(quadrosAteMoldar - quadrosDe(TEMPO_DE_LEITURA)) <= 1);
             });
             const problemas = [];
-            vigia.mudancas.forEach(function (mudanca) {
+            const reinicios = vigia.mudancas.filter(function (mudanca) { return mudanca.via === "reinicio"; });
+            vigia.mudancas.filter(function (mudanca) { return mudanca.via !== "reinicio"; }).forEach(function (mudanca) {
                 const nome = mudanca.maquina + " " + mudanca.de + "→" + mudanca.para + " (" + mudanca.motivo + ", " + mudanca.via + ")";
                 if (TRANSICOES[mudanca.maquina][mudanca.de] === undefined || TRANSICOES[mudanca.maquina][mudanca.de].indexOf(mudanca.para) === -1) problemas.push("fora da tabela: " + nome);
-                else if (BASE_DAS_MAQUINAS[mudanca.maquina][mudanca.de].indexOf(mudanca.para) === -1 && mudanca.para !== ALVO_DO_REINICIAR[mudanca.maquina]) problemas.push("não é do GDD nem reiniciar: " + nome);
+                else if (BASE_DAS_MAQUINAS[mudanca.maquina][mudanca.de].indexOf(mudanca.para) === -1) problemas.push("não é do GDD: " + nome);
             });
             chamadasDeIrPara.forEach(function (chamada) {
                 const naTabela = TRANSICOES[chamada.maquina][chamada.de].indexOf(chamada.para) !== -1;
@@ -604,7 +636,8 @@
             });
             const diretos = vigia.mudancas.filter(function (mudanca) { return mudanca.via === "direto"; });
             conferir(vigia.mudancas.length + " mudanças de fase vigiadas, " + chamadasDeIrPara.length + " chamadas de irPara: todas dentro da tabela. " + problemas.slice(0, 3).join(" | "), problemas.length === 0 && vigia.mudancas.length > 80);
-            conferir("e nenhuma mudança fora do irPara (o reiniciar passa pela tabela): " + diretos.slice(0, 3).map(function (d) { return d.maquina + " " + d.de + "→" + d.para + " em " + d.motivo; }).join(" | "), diretos.length === 0);
+            conferir(reinicios.length + " voltas ao estado inicial pelo reiniciar (esperado ao menos 6: dia moldar/mare/contar... e maré enchente/preamar/vazante)", reinicios.length >= 6);
+            conferir("e nenhuma mudança fora do irPara além do reiniciar: " + diretos.slice(0, 3).map(function (d) { return d.maquina + " " + d.de + "→" + d.para + " em " + d.motivo; }).join(" | "), diretos.length === 0);
             voltarAoComeco();
         });
 
