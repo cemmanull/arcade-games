@@ -107,6 +107,9 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
   Chrome de teste deve ser `--headless=new` com `--user-data-dir` temporário.
 - `Emulation.setCPUThrottlingRate` do Chrome não serve para simular celular nesta máquina: 4× e 8×
   deixaram o JS só 1,2–1,5× mais lento. Desempenho em celular só vale medido num aparelho real.
+- O executor abre cada página de teste com `--virtual-time-budget=60000`: um `setTimeout` de mais de 60 s nunca dispara
+  (vigia de página fica abaixo disso), e depois da carga o `Date.now` fica parado dentro de cada tarefa. Tempo medido dentro
+  da página só vale aberta por duplo clique; no executor, o tempo real é o da linha `PASS` (medido em 2026-10-29).
 - Com vários agentes rodando o Chrome do harness ao mesmo tempo, o tempo de cada página é dominado pela
   carga da máquina, não pelo trabalho dela. Em 2026-10-28, com quatro agentes, uma página de 10 asserções
   levou 58 s e `tetris/03-queda.html` levou 63 s; sozinha, essa página leva uns 3 s. Uma execução de gate
