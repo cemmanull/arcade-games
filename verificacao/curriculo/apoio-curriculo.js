@@ -199,14 +199,20 @@ async function testarAssincrono(nome, funcaoDoCaso) {
     }
 }
 
-/* Se a página nunca terminar (iframe que não carrega), o executor leria "SEM MARCADOR": aqui vira uma FALHA com nome. */
-function vigiarOFim(segundos) {
+/*
+  Se a página nunca terminar (iframe que não carrega), o executor leria "SEM MARCADOR": aqui vira uma FALHA com nome.
+  O prazo fica abaixo dos 60 s de --virtual-time-budget do rodar.mjs: passado o orçamento, o Chrome entrega a página do jeito que
+  estiver, e um timer mais longo nunca dispara. Medido em 2026-10-29: cada página gasta até 2 s de tempo virtual e 5 s de tempo real.
+*/
+const PRAZO_DO_VIGIA_EM_SEGUNDOS = 30;
+
+function vigiarOFim() {
     setTimeout(function () {
         if (document.getElementById("resultado").textContent.indexOf("RESULTADO:") === -1) {
-            conferir("a página terminou em " + segundos + " s (um iframe não carregou?)", false);
+            conferir("a página terminou em " + PRAZO_DO_VIGIA_EM_SEGUNDOS + " s (um iframe não carregou?)", false);
             finalizar();
         }
-    }, segundos * 1000);
+    }, PRAZO_DO_VIGIA_EM_SEGUNDOS * 1000);
 }
 
 

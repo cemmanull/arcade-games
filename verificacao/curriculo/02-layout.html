@@ -118,7 +118,7 @@
     <script>
         const PASSO = "02-layout";
         async function principal() {
-            vigiarOFim(60);
+            vigiarOFim();
             const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX, { largura: 390, altura: 750 });
             const janela = quadro.contentWindow, documento = janela.document;
             const cartoes = Array.from(documento.querySelectorAll(".cartao"));

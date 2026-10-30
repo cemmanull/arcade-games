@@ -296,7 +296,7 @@ function conferirParedesDaAgua(rotulo, alagado, nivelDe, giros, desenharUmQuadro
     const indice = indexarPreenchimentos(quadro.preenchimentos);
     const casaNoCentro = new Map();                  // o centro girado de cada casa → a casa
     for (let y = 0; y < tamanho; y++) for (let x = 0; x < tamanho; x++) { const c = girarComTamanho(x + 0.5, y + 0.5, giros, tamanho); casaNoCentro.set(c[0] + "," + c[1], { x: x, y: y }); }
-    let esperadas = 0, faltando = [], sobrando = [], opacas = [], curtas = [];
+    let esperadas = 0, faltando = [], sobrando = [], curtas = [];
     casasDaMatriz(alagado).forEach(function (casa) {
         const nivel = nivelDaCasa(casa.x, casa.y);
         const topo = meusCantos(casa.x, casa.y, nivel, giros, tamanho);
@@ -317,7 +317,7 @@ function conferirParedesDaAgua(rotulo, alagado, nivelDe, giros, desenharUmQuadro
             }
         });
     });
-    return { esperadas: esperadas, faltando: faltando, sobrando: sobrando, opacas: opacas, curtas: curtas, quadro: quadro };
+    return { esperadas: esperadas, faltando: faltando, sobrando: sobrando, curtas: curtas, quadro: quadro };
 }
 
 
@@ -454,8 +454,13 @@ async function conferirLayoutDoPasso(config, largura, altura) {
 
 
 // ============================================================
-// 5. O TEMPO DA PÁGINA (informativo: o relógio real, porque o apoio.js troca o performance.now)
+// 5. O TEMPO DA PÁGINA (informativo: o Date.now, porque o apoio.js troca o performance.now)
 // ============================================================
+/*
+  Só vale com a página aberta por duplo clique. O executor (rodar.mjs) abre o Chrome com --virtual-time-budget, e aí o Date.now é
+  tempo virtual: depois da carga ele fica parado dentro de cada tarefa e pula as esperas (medido em 2026-10-29: um laço de 2 s marcou
+  0 ms). No executor, o tempo real de cada página é o da linha PASS.
+*/
 const MEDINDO_O_TEMPO = false;                    // true: cada caso com mais de 1 s e o total saem como FALHA, só para a medição
 const instanteReal = function () { return Date.now(); };
 
@@ -476,6 +481,6 @@ finalizar = function () {
     temposDosCasos.filter(function (caso) { return MEDINDO_O_TEMPO && caso.segundos > 1; }).forEach(function (caso) {
         escreverLinha(prefixo + caso.segundos.toFixed(1) + " s  " + caso.nome.slice(0, 90));
     });
-    escreverLinha(prefixo + total.toFixed(1) + " s de execução da página, sem a abertura do navegador");
+    escreverLinha(prefixo + total.toFixed(1) + " s de execução da página, sem a abertura do navegador (vale com duplo clique; no executor, veja a linha PASS)");
     finalizarSemMedida();
 };

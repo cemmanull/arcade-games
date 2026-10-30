@@ -98,7 +98,7 @@
         const PASSO = "04-amostras";
 
         async function principal() {
-            vigiarOFim(90);
+            vigiarOFim();
             const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
             const janela = quadro.contentWindow, documento = janela.document;
             const projetos = janela.eval("projetos");

@@ -95,7 +95,7 @@ async function executarOsCasosDeAcabamento(passo, espelhoDoIndex, espelhoDoCss) 
     testar("preparação: o passo 5 de verdade rodou no iframe", function () {
         conferirIgual("a carga não deu erro nem escreveu no console.error", janela.__erros.concat(janela.__consoleErros).join(" | "), "");
         conferirIgual("o tema só muda por escolha: sem data-tema na carga", documento.documentElement.hasAttribute("data-tema"), false);
-        conferirIgual("o botão de tema começa com aria-pressed false", documento.getElementById("botao-tema").getAttribute("aria-pressed"), String(janela.temaEmUso() === "escuro"));
+        conferirIgual("o aria-pressed do botão de tema começa igual ao tema em uso (true só no escuro)", documento.getElementById("botao-tema").getAttribute("aria-pressed"), String(janela.temaEmUso() === "escuro"));
         conferirCartoesIguaisAosDados(janela);
         conferirImagensComAlt(documento);
     });

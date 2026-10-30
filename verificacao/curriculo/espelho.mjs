@@ -14,7 +14,7 @@
 // apoio-curriculo.js). O espelho é a cópia dele DENTRO da página; este script mantém a cópia fiel.
 // Não faz parte do curso (que não instala nada): é só do harness, e o harness já exige o Node.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
@@ -34,6 +34,11 @@ const PAGINAS = [
 ];
 
 const argumentos = process.argv.slice(2);
+const problemaDeUso = problemaNosArgumentos();
+if (problemaDeUso) {
+    console.error(`${problemaDeUso} Uso: node verificacao/curriculo/espelho.mjs [--conferir] [--raiz <pasta>] (veja o começo do arquivo).`);
+    process.exit(2);
+}
 const soConferir = argumentos.includes("--conferir");
 const raiz = lerRaiz();
 
@@ -45,6 +50,19 @@ function principal() {
     problemas.forEach((problema) => console.error("FALHA " + problema));
     if (problemas.length === 0) console.log(soConferir ? "Espelhos, inventário e trechos em dia." : "Espelhos atualizados.");
     return problemas.length === 0 ? 0 : 1;
+}
+
+/* Um --conferi mal digitado rodaria o modo que escreve e sairia com 0: o gate passaria sem conferir nada. */
+function problemaNosArgumentos() {
+    const restantes = [...argumentos];
+    const posicaoDaRaiz = restantes.indexOf("--raiz");
+    if (posicaoDaRaiz >= 0) {
+        const pasta = restantes[posicaoDaRaiz + 1];
+        if (pasta === undefined || pasta.startsWith("--")) return "--raiz precisa de uma pasta.";
+        restantes.splice(posicaoDaRaiz, 2);
+    }
+    const desconhecido = restantes.find((argumento) => argumento !== "--conferir");
+    return desconhecido === undefined ? null : `Argumento desconhecido: ${desconhecido}.`;
 }
 
 function lerRaiz() {
@@ -146,6 +164,7 @@ function conferirAmostrasDoFinal({ AMOSTRAS_DO_FINAL, PASTA_DAS_AMOSTRAS, TAMANH
         const bytes = readFileSync(join(pasta, nome));
         if (bytes.length > TAMANHO_MAXIMO_DA_AMOSTRA_EM_BYTES) problemas.push(`miniatura ${nome}: pesa ${(bytes.length / 1024).toFixed(1)} KB, o teto é ${TAMANHO_MAXIMO_DA_AMOSTRA_EM_BYTES / 1024} KB`);
         if (!bytes.subarray(0, 8).equals(ASSINATURA_DO_PNG)) problemas.push(`miniatura ${nome}: não é um PNG (assinatura errada)`);
+        else if (bytes.length < 24) problemas.push(`miniatura ${nome}: o PNG está cortado (${bytes.length} bytes, sem a largura e a altura)`);
         else if (bytes.readUInt32BE(16) === 0 || bytes.readUInt32BE(20) === 0) problemas.push(`miniatura ${nome}: o PNG tem largura ou altura 0`);
     }
     for (const nome of nomesNoDisco.filter((nome) => !AMOSTRAS_DO_FINAL.includes(nome))) {
@@ -188,7 +207,7 @@ function lerAsTabelasDoApoio() {
 function existeComCaixaExata(caminhoRelativo) {
     let pasta = raiz;
     for (const nome of caminhoRelativo.split("/")) {
-        if (!readdirSync(pasta).includes(nome)) return false;
+        if (!statSync(pasta).isDirectory() || !readdirSync(pasta).includes(nome)) return false;
         pasta = join(pasta, nome);
     }
     return true;

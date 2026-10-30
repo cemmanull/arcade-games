@@ -82,8 +82,7 @@ async function executarCasosDeCompartilhamento(passo, espelhoDoIndex) {
 
     testar("tudo que o cartão diz é dado fictício, sem recurso de fora e sem dado pessoal", function () {
         const todasAsMetas = Array.from(pagina.head.querySelectorAll("meta[content]")).map(function (meta) { return meta.getAttribute("content"); }).join("\n");
-        conferir("nenhum e-mail real: só @exemplo.invalid", (todasAsMetas.match(/[\w.+-]+@[\w.-]+/g) || []).every(function (email) { return /@exemplo\.invalid$/.test(email); }));
-        conferir("nenhum telefone nem CPF nas metas", !/\d{3}\.\d{3}\.\d{3}-\d{2}|\(?\d{2}\)?\s?9?\d{4}-?\d{4}/.test(todasAsMetas));
+        conferirIgual("nenhum dado pessoal nas metas (CPF, RG, telefone; e-mail só @exemplo.invalid), pela tabela de apoio-curriculo.js", achadosDePrivacidade(todasAsMetas).join(" | "), "");
         const remotos = Array.from(pagina.querySelectorAll("script[src], link[href], img[src], iframe[src]")).filter(function (elemento) {
             const endereco = elemento.getAttribute("src") || elemento.getAttribute("href");
             return /^(https?:)?\/\//i.test(endereco);
