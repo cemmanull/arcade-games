@@ -573,7 +573,7 @@
             const janela = quadro.contentWindow, documento = janela.document;
 
             testar("a conferência de privacidade não é vazia: ela enxerga CPF, RG, telefone e e-mail real, e deixa passar o fictício", function () {
-                ["123.456.789-09", "12.345.678-9", "(11) 98765-4321", "11 98765-4321", "+55 11 98765-4321", "98765-4321", "11987654321", "joao.silva@gmail.com", "alex@exemplo.com"].forEach(function (dado) {
+                ["123.456.789-09", "12.345.678-9", "(11) 98765-4321", "11 98765-4321", "+55 11 98765-4321", "98765-4321", "11987654321", "joao.silva@example.com", "alex@exemplo.com"].forEach(function (dado) {
                     conferir("detecta " + dado, achadosDePrivacidade("contato: " + dado).length >= 1);
                 });
                 ["alex@exemplo.invalid", "#1f6f43", "390×750", "2026-10-28", "2024-2026", "rgb(1, 3, 5)", "Cidade Exemplo, UF"].forEach(function (inocente) {
