@@ -146,8 +146,9 @@ Os dias são **dados**: `{ mapa: [...], tabua: [ficha...], meta, par, dica }`. T
 3. **chuva** com nascentes, e dias em que cavar o certo exige girar a vista (o dique alto esconde a casa de trás).
    "Exige" vale para o **dedo**: o cursor de setas alcança a casa escondida (tracejada). No dia 10 a **casa-chave**
    (uma casa que todo plano de tamanho `par` toca) é a brecha da muralha oeste, (2, 5), e a torre de 4 em (3, 6) a
-   cobre na vista inicial: nenhum pixel do canvas a acerta pelo picking, e em outro giro ela é tocável. A torre do dia 4
-   é só um convite (há plano que não precisa dela).
+   cobre na vista inicial: nenhum pixel do canvas a acerta pelo picking, e em outro giro ela é tocável. Outra casa-chave,
+   a do centro, (4, 4), fica atrás das quinas de 3 em todos os giros: o dedo nunca a acerta, só o cursor, e os guias dos
+   passos 7 e 8 ensinam esse caminho. A torre do dia 4 é só um convite (há plano que não precisa dela).
 
 ~10 dias: 1–2 ensinam erguer; 3–4, cavar; 5–6, duas marés; 7–8, sizígia; 9–10, chuva e tudo junto.
 
