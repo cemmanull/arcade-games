@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 7: os dias</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 7: os dias</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
+
+    <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids.
+         Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
+    <script>
+        // ESPELHO:inicio dique/07-dias/index.html corpo
+        const MARCACAO_DO_PASSO = '<h1>Dique <small id="dia"></small></h1>'
+            + '<canvas id="jogo" width="384" height="252">Seu navegador não suporta canvas.</canvas>'
+            + '<p id="painel"></p>'
+            + '<p id="objetivo"></p>'
+            + '<p id="tabua" title="Tábua de marés: n = nível da água, passos × casas por passo (com chuva, já somadas as 2 da chuva), + blocos que chegam, ☂ chuva; [colchetes] marcam a maré de agora"></p>'
+            + '<div id="ferramentas">'
+            + '<button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true" aria-label="Ferramenta Erguer: sobe a casa um degrau e gasta um bloco (1)">Erguer</button>'
+            + '<button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false" aria-label="Ferramenta Cavar: desce a casa um degrau e devolve um bloco (2)">Cavar</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar a ferramenta na casa marcada (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="desfazer" aria-label="Desfazer a última jogada (Z)">Desfazer</button>'
+            + '<button type="button" data-acao="avancar" aria-label="Liberar a maré; depois que ela passa, chamar a próxima ficha; no fim de um dia vencido, abrir o próximo dia (M)">Maré</button>'
+            + '<button type="button" data-acao="reiniciar" aria-label="Recomeçar o dia (N)">Refazer</button>'
+            + '</div>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<div id="setas">'
+            + '<button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>'
+            + '<button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>'
+            + '<button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>'
+            + '<button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<pre id="leitura" aria-live="off"></pre>';
+        // ESPELHO:fim
+        document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="252"', 'width="1" height="1"'));
+    </script>
+
+    <!-- Guarda os console.error (um dia inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/07-dias/regras.js"></script>
+    <script src="../../dique/07-dias/script.js"></script>
+
+    <script>
+        const errosNaCarga = errosDeConsole.slice();
+        const DIAS_ORIGINAIS = JSON.stringify(DIAS);
+        const SETAS_DA_TELA = [["cursorParaEsquerda", -1, 0], ["cursorParaCima", 0, -1], ["cursorParaBaixo", 0, 1], ["cursorParaDireita", 1, 0]];
+
+        // Os números do GDD e do GUIA, escritos aqui de propósito (não lidos do jogo).
+        const PARES_ESPERADOS = [1, 2, 2, 3, 2, 3, 3, 4, 3, 5];
+        const FICHAS_ESPERADAS = [1, 1, 1, 1, 2, 2, 1, 2, 1, 2];
+        const ESTADOS_DO_GUIA = [34, 1911, 62, 3383, 10916, 8022, 5170, 7437, 3355, 6234];
+        const CASAS_CHAVE_DO_DIA_10 = ["2,5", "4,4", "4,7"];
+        const PLANOS_DE_5_JOGADAS_DO_DIA_10 = 55;
+        const TETO_DO_GUIA = 2000000, LIMITE_DO_GUIA = 6;
+        const CASA_CHAVE_ESCONDIDA = { x: 2, y: 5 };
+        const NOMES_DAS_VARIAVEIS_DO_ROBO = ["diaCarregado", "alturasEmTexto", "objetosEmTexto", "alturasIniciais", "alturas", "casasDoMar", "casasComCasa", "casasDeNascente", "tabuaDeMares", "metaDoDia"];
+
+        /* Um plano que vence cada dia, achado FORA do jogo (uma busca própria em node que lista os planos do tamanho do par) e jogado aqui pelo teclado.
+           PLANOS[dia][ficha] = jogadas da maré: [ferramenta, x, y]. O dia 5 e o 6 guardam os blocos da 1ª ficha para a 2ª. */
+        const PLANOS_DOS_DIAS = [
+            [[["erguer", 3, 6]]],
+            [[["erguer", 2, 4], ["erguer", 5, 6]]],
+            [[["cavar", 2, 2], ["erguer", 5, 6]]],
+            [[["cavar", 2, 2], ["erguer", 4, 3], ["erguer", 5, 7]]],
+            [[], [["erguer", 7, 3], ["erguer", 3, 7]]],
+            [[], [["erguer", 3, 7], ["erguer", 4, 7], ["erguer", 5, 7]]],
+            [[["cavar", 1, 2], ["erguer", 8, 5], ["erguer", 3, 7]]],
+            [[["erguer", 3, 4], ["erguer", 4, 7]], [["erguer", 3, 4], ["erguer", 4, 7]]],
+            [[["cavar", 1, 2], ["cavar", 5, 2], ["erguer", 3, 4]]],
+            [[["cavar", 5, 3], ["erguer", 2, 5]], [["erguer", 4, 4], ["erguer", 2, 5], ["erguer", 4, 7]]],
+        ];
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada, de estado e de conta
+        // ------------------------------------------------------------
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(0);
+            }
+        }
+
+        function definirCamera(zoom, desvioX, desvioY) {
+            camera.zoom = zoom;
+            camera.desvioX = desvioX;
+            camera.desvioY = desvioY;
+            limitarCamera();
+        }
+
+        function apertarTecla(tecla, modificadores) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, modificadores || {}));
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function quadros(vezes) {
+            for (let i = 0; i < vezes; i++) avancarQuadro(16);
+        }
+
+        function avancarAte(condicao, limiteDeQuadros) {  // quadros até a condição valer; -1 se passar do limite
+            let passados = 0;
+            while (!condicao() && passados < limiteDeQuadros) { avancarQuadro(16); passados++; }
+            return condicao() ? passados : -1;
+        }
+
+        function esperarAMare() {                         // até a maré passar (contar na baixa-mar) ou o dia acabar
+            return avancarAte(function () { return fase === "fim" || (fase === "contar" && faseDaMare === "baixa"); }, 3000);
+        }
+
+        function prepararDia(indice) {                    // o que o Refazer não limpa (giro, câmera, cursor, H, ferramenta) e, por último, o dia
+            depuracaoLigada = false;
+            escolherFerramenta("erguer");
+            rotacao = 0;
+            definirCamera(1, 0, 0);
+            cursor = { x: 4, y: 4 };
+            marcada = false;
+            ponteiro = null;
+            dedo = null;
+            giroDaRoda = 0;
+            iniciarDia(indice);
+        }
+
+        function sorteio(limite) {
+            return Math.floor(Math.random() * limite);
+        }
+
+        function copiaDoDia(indice) {
+            return JSON.parse(JSON.stringify(DIAS[indice]));
+        }
+
+        function trocarSimbolo(texto, posicao, simbolo) {
+            return texto.slice(0, posicao) + simbolo + texto.slice(posicao + 1);
+        }
+
+        function alturasDoTexto(dia) {                    // o mapa de alturas pela minha leitura do texto
+            return dia.mapa.map(function (linha) { return linha[0].split("").map(function (simbolo) { return simbolo === "~" ? 0 : Number(simbolo); }); });
+        }
+
+        function casasDoTexto(dia, objeto) {
+            const casas = [];
+            dia.mapa.forEach(function (linha, y) { linha[1].split("").forEach(function (simbolo, x) { if (simbolo === objeto) casas.push({ x: x, y: y }); }); });
+            return casas;
+        }
+
+        function marEmTexto(dia) {
+            return dia.mapa.map(function (linha) { return linha[0].split("").map(function (simbolo) { return simbolo === "~"; }); });
+        }
+
+        function somaDoTerreno(terreno) {
+            return terreno.reduce(function (soma, linha) { return soma + linha.reduce(function (parcial, altura) { return parcial + altura; }, 0); }, 0);
+        }
+
+        function fotoDoEstado() {
+            return JSON.stringify({ alturas: alturas, blocos: estadoAtual.blocos });
+        }
+
+        function capturarErros(executar) {                // os console.error esperados saem da lista geral e voltam como resultado
+            const antes = errosDeConsole.length;
+            executar();
+            return errosDeConsole.splice(antes);
+        }
+
+        // O robô sobrescreve estas dez variáveis; o teste as guarda e devolve por conta própria.
+        function lerAsVariaveisDoRobo() {
+            return [diaCarregado, alturasEmTexto, objetosEmTexto, alturasIniciais, alturas, casasDoMar, casasComCasa, casasDeNascente, tabuaDeMares, metaDoDia];
+        }
+
+        function porAsVariaveisDoRobo(valores) {
+            [diaCarregado, alturasEmTexto, objetosEmTexto, alturasIniciais, alturas, casasDoMar, casasComCasa, casasDeNascente, tabuaDeMares, metaDoDia] = valores;
+        }
+
+        function comODiaCarregado(dia, executar) {        // põe o dia nas regras só para a busca da página e devolve o jogo como estava
+            const guardadas = lerAsVariaveisDoRobo();
+            try {
+                carregarDia(dia);
+                return executar();
+            } finally {
+                porAsVariaveisDoRobo(guardadas);
+            }
+        }
+
+        function variaveisIguaisPorReferencia(antes, depois) {
+            return NOMES_DAS_VARIAVEIS_DO_ROBO.filter(function (nome, i) { return antes[i] !== depois[i]; });
+        }
+
+        const desenharVerdadeiro = desenhar;
+        desenhar = function () { };                       // o desenho de 100 casas por quadro não ajuda os casos de regra; quem lê o texto chama desenharVerdadeiro()
+
+        /* Um dia fechado por um anel de cais (P, altura 2) com `brechas` casas moldáveis de altura 1 no anel; dentro, 4 casas (C). Cada brecha pede 1 bloco,
+           e a água (nível 2, volume de sobra) alaga tudo por qualquer brecha aberta. Par verdadeiro = brechas (se há blocos); acima do limite do robô, sem solução. */
+        function diaDoAnel(brechas, blocos, par) {
+            const alturasDaIlha = Array.from({ length: TAMANHO }, function () { return new Array(TAMANHO).fill("~"); });
+            const objetosDaIlha = Array.from({ length: TAMANHO }, function () { return new Array(TAMANHO).fill("."); });
+            for (let y = 2; y <= 5; y++) {
+                for (let x = 2; x <= 5; x++) {
+                    const noAnel = x === 2 || x === 5 || y === 2 || y === 5;
+                    alturasDaIlha[y][x] = noAnel ? "2" : "1";
+                    objetosDaIlha[y][x] = noAnel ? "P" : "C";
+                }
+            }
+            const lugaresDeBrecha = [[3, 2], [4, 2], [3, 5], [4, 5], [2, 3], [2, 4], [5, 3], [5, 4]];     // sem os cantos: um canto aberto não deixa a água entrar
+            lugaresDeBrecha.slice(0, brechas).forEach(function (lugar) {
+                alturasDaIlha[lugar[1]][lugar[0]] = "1";
+                objetosDaIlha[lugar[1]][lugar[0]] = ".";
+            });
+            return {
+                mapa: alturasDaIlha.map(function (linha, y) { return [linha.join(""), objetosDaIlha[y].join("")]; }),
+                tabua: [{ nivel: 2, passos: 1, volume: 60, chuva: false, blocos: blocos }],
+                meta: 3, par: par, dica: "anel de teste",
+            };
+        }
+
+        let relatoriosDosDias = null;
+        function relatorios() {                           // o robô nos 10 dias, uma vez só
+            if (relatoriosDosDias === null) relatoriosDosDias = DIAS.map(function (dia) { return certificarDia(dia); });
+            return relatoriosDosDias;
+        }
+
+        function resumoDoRelatorio(relatorio) {
+            return JSON.stringify(relatorio);
+        }
+
+        // ------------------------------------------------------------
+        // Jogar um plano pelo teclado (as mesmas funções que o toque chama), ficha a ficha
+        // ------------------------------------------------------------
+        function jogadasDaFicha(jogadas) {                // cavar primeiro: o estoque nunca fica negativo no meio da maré
+            return jogadas.filter(function (jogada) { return jogada[0] === "cavar"; }).concat(jogadas.filter(function (jogada) { return jogada[0] === "erguer"; }));
+        }
+
+        /* O dia de agora (já em "ler", ficha 0). `pularJogada` = índice (na lista inteira do plano) de uma jogada a omitir; com ele, jogadas recusadas são esperadas. */
+        function jogarOPlano(plano, pularJogada) {
+            const problemas = [], recusadas = [];
+            let numero = 0;
+            plano.forEach(function (jogadasDaMare, ficha) {
+                if (fase !== "ler" || indiceDaMare !== ficha) problemas.push("ficha " + (ficha + 1) + ": começo em " + fase + "/" + indiceDaMare);
+                const ordenadas = jogadasDaFicha(jogadasDaMare);
+                ordenadas.forEach(function (jogada) {
+                    const esteNumero = numero++;
+                    if (esteNumero === pularJogada) return;
+                    cursor = { x: jogada[1], y: jogada[2] };
+                    apertarTecla(jogada[0] === "erguer" ? "1" : "2");
+                    const antes = jogadas;
+                    apertarTecla("Enter");
+                    if (jogadas === antes) (pularJogada === undefined ? problemas : recusadas).push("a jogada " + jogada + " foi recusada: " + aviso.textContent);
+                });
+                apertarTecla("m");
+                if (esperarAMare() < 0) problemas.push("ficha " + (ficha + 1) + ": a maré não terminou");
+                if (ficha < plano.length - 1) {
+                    if (fase !== "contar") problemas.push("ficha " + (ficha + 1) + ": esperava contar, veio " + fase);
+                    apertarTecla("m");
+                }
+            });
+            return { problemas: problemas, recusadas: recusadas };
+        }
+
+        function casasSalvasPelaMinhaConta(dia) {         // as casas do texto que nenhuma maré alagou, pela matriz `perdidas` do jogo
+            return casasDoTexto(dia, "C").filter(function (casa) { return !perdidas[casa.y][casa.x]; }).length;
+        }
+
+        // ------------------------------------------------------------
+        // A foto do jogo inteiro (para provar que o robô não o mexe) e a partida no meio
+        // ------------------------------------------------------------
+        const PIXELS_DA_AMOSTRA = [];
+        for (let y = 10.5; y < ALTURA_DA_VISTA; y += 40) for (let x = 10.5; x < LARGURA_DA_VISTA; x += 48) PIXELS_DA_AMOSTRA.push({ x: x, y: y });
+
+        function fotoDoJogo() {
+            return JSON.stringify({
+                indiceDoDia: indiceDoDia, diaCarregado: diaCarregado === null ? null : DIAS.indexOf(diaCarregado), alturasEmTexto: alturasEmTexto, objetosEmTexto: objetosEmTexto, alturasIniciais: alturasIniciais,
+                alturas: alturas, blocos: estadoAtual.blocos, jogadas: jogadas, historico: historico.length, fase: fase, faseDaMare: faseDaMare, indiceDaMare: indiceDaMare, passoDaMare: passoDaMare,
+                perdidas: perdidas, agua: agua, listaDeDesenho: listaDeDesenho, previsao: previsao, alcance: alcance, camera: camera, rotacao: rotacao, cursor: cursor, ferramenta: ferramenta,
+                casasDoMar: casasDoMar, casasComCasa: casasComCasa, casasDeNascente: casasDeNascente, tabuaDeMares: tabuaDeMares, metaDoDia: metaDoDia,
+                pixels: PIXELS_DA_AMOSTRA.map(function (pixel) { const acerto = casaSobOPixel(pixel); return acerto && [acerto.x, acerto.y, acerto.face]; }),
+            });
+        }
+
+        function montarPartidaNoMeio() {                  // dia 5, 3 jogadas, vista girada, zoom e rolagem mexidos
+            prepararDia(4);
+            quadros(10);
+            [["1", 7, 3], ["2", 6, 3], ["1", 5, 5]].forEach(function (jogada) {
+                cursor = { x: jogada[1], y: jogada[2] };
+                apertarTecla(jogada[0]);
+                apertarTecla("Enter");
+            });
+            apertarTecla("r");
+            apertarTecla("+");
+            apertarTecla("d");
+            quadros(5);
+        }
+
+        function terminarAMare() {                        // o que a partida faz depois, para ver se o robô deixou algo torto
+            apertarTecla("m");
+            const quadrosGastos = esperarAMare();
+            desenharVerdadeiro();
+            return JSON.stringify({ quadros: quadrosGastos, fase: fase, faseDaMare: faseDaMare, indiceDaMare: indiceDaMare, perdidas: perdidas, aviso: aviso.textContent, painel: painel.textContent, agua: agua });
+        }
+
+        // ------------------------------------------------------------
+        // A busca da página: todo plano do tamanho do par (sem memória), para achar as casas que todos tocam
+        // ------------------------------------------------------------
+        function casasQueMudaram(antes, depois) {
+            const mudadas = [];
+            depois.forEach(function (linha, y) { linha.forEach(function (altura, x) { if (altura !== antes[y][x]) mudadas.push(x + "," + y); }); });
+            return mudadas;
+        }
+
+        function planosDoTamanhoDoPar(dia) {              // cada plano vira a lista (ordenada, sem repetição) das casas que ele muda
+            return comODiaCarregado(dia, function () {
+                const candidatas = candidatasDoDia(), planos = [];
+                function seguir(indice, estado, perdidasAteAgora, gasto, tocadas) {
+                    if (indice === tabuaDeMares.length) {
+                        if (contarCasas(perdidasAteAgora).salvas >= metaDoDia) planos.push(Array.from(new Set(tocadas)).sort());
+                        return;
+                    }
+                    const ficha = tabuaDeMares[indice], comBlocos = receberBlocos(estado, ficha);
+                    terrenosAte(comBlocos, dia.par - gasto, candidatas, function (terreno, custo, blocos) {
+                        const novasPerdidas = acumularPerdidas(perdidasAteAgora, aguaDaFicha(terreno, ficha, ficha.passos).alagado);
+                        if (contarCasas(novasPerdidas).salvas < metaDoDia) return false;
+                        seguir(indice + 1, { alturas: terreno, blocos: blocos }, novasPerdidas, gasto + custo, tocadas.concat(casasQueMudaram(comBlocos.alturas, terreno)));
+                        return false;
+                    });
+                }
+                seguir(0, estadoInicial(), criarMatriz(false), 0, []);
+                return planos;
+            });
+        }
+
+        function casasDeTodosOsPlanos(planos) {
+            const primeiro = planos.length > 0 ? planos[0] : [];
+            return primeiro.filter(function (casa) { return planos.every(function (plano) { return plano.indexOf(casa) !== -1; }); });
+        }
+
+        // ------------------------------------------------------------
+        // O pixel sob a casa-chave
+        // ------------------------------------------------------------
+        function pixelsDaCasa(casa, deslocamento) {       // varre o canvas inteiro; deslocamento 0.5 = o centro de cada pixel, 0 = o canto
+            let achados = 0, somaX = 0, somaY = 0;
+            const pixels = [];
+            for (let y = 0; y < ALTURA_DA_VISTA; y++) {
+                for (let x = 0; x < LARGURA_DA_VISTA; x++) {
+                    const acerto = casaSobOPixel({ x: x + deslocamento, y: y + deslocamento });
+                    if (acerto && acerto.x === casa.x && acerto.y === casa.y) { achados++; somaX += x; somaY += y; pixels.push({ x: x, y: y }); }
+                }
+            }
+            const meio = { x: somaX / Math.max(1, achados), y: somaY / Math.max(1, achados) };
+            const maisPerto = pixels.slice().sort(function (a, b) { return Math.hypot(a.x - meio.x, a.y - meio.y) - Math.hypot(b.x - meio.x, b.y - meio.y); })[0] || null;
+            return { achados: achados, maisPertoDoMeio: maisPerto };
+        }
+
+        function tocarNoPixel(pixel) {                    // pointerdown no canvas e pointerup na janela, como o dedo
+            const caixa = tela.getBoundingClientRect();
+            const opcoes = { button: 0, pointerId: 11, bubbles: true, clientX: caixa.left + pixel.x * caixa.width / tela.width, clientY: caixa.top + pixel.y * caixa.height / tela.height };
+            tela.dispatchEvent(new PointerEvent("pointerdown", opcoes));
+            window.dispatchEvent(new PointerEvent("pointerup", opcoes));
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("[CARGA] o passo carrega o dia 1, sem erro, e o script dimensiona o canvas", function () {
+            conferirIgual("[CARGA] a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("[CARGA] o dia 1 vale (MAPA_VALIDO)", MAPA_VALIDO, true);
+            conferirIgual("[CARGA] o jogo começa no dia 1, lendo a ficha", indiceDoDia + "/" + fase + "/" + faseDaMare + "/" + jogadas, "0/ler/baixa/0");
+            conferirIgual("[CARGA] o canvas nasceu 1×1 na marcação e o script o fez 384×252", tela.width + "×" + tela.height, "384×252");
+            conferir("[CARGA] o laço de quadros foi pedido", avancarQuadro(16));
+        });
+
+        testar("[DADOS] são 10 dias; cada um é um objeto válido; par, fichas e chuva batem com a tabela do GUIA", function () {
+            conferirIgual("[DADOS] são 10 dias", DIAS.length, 10);
+            DIAS.forEach(function (dia, i) {
+                const nome = "[DADOS] dia " + (i + 1) + ": ";
+                conferirIgual(nome + "problemasDoMapa devolve a lista vazia", problemasDoMapa(dia).join(" | "), "");
+                conferirIgual(nome + "par " + PARES_ESPERADOS[i] + " e " + FICHAS_ESPERADAS[i] + " fichas", dia.par + "/" + dia.tabua.length, PARES_ESPERADOS[i] + "/" + FICHAS_ESPERADAS[i]);
+                conferir(nome + "tem dica em texto e meta entre 1 e as casas (" + dia.meta + " de " + casasDoTexto(dia, "C").length + ")", typeof dia.dica === "string" && dia.dica.length > 10 && dia.meta >= 1 && dia.meta <= casasDoTexto(dia, "C").length);
+                conferir(nome + "toda ficha traz nível, passos, volume e blocos inteiros, chuva booleana", dia.tabua.every(function (ficha) {
+                    return [ficha.nivel, ficha.passos, ficha.volume, ficha.blocos].every(Number.isInteger) && ficha.nivel >= 1 && ficha.passos >= 1 && ficha.blocos >= 0 && typeof ficha.chuva === "boolean";
+                }));
+            });
+            conferirIgual("[DADOS] só os dias 9 e 10 têm chuva", DIAS.map(function (dia, i) { return dia.tabua.some(function (ficha) { return ficha.chuva; }) ? i + 1 : 0; }).filter(Boolean).join(","), "9,10");
+            conferirIgual("[DADOS] o dia 3 começa sem blocos (terra não se cria)", DIAS[2].tabua[0].blocos, 0);
+            conferirIgual("[DADOS] o dia 7 é a sizígia (nível 3) e o dia 8 sobe de 2 para 3", DIAS[6].tabua[0].nivel + "/" + DIAS[7].tabua.map(function (ficha) { return ficha.nivel; }).join(">"), "3/2>3");
+            conferirIgual("[DADOS] o teto do robô é de 2 milhões de estados e o limite, de 6 jogadas (GUIA)", TETO_DE_ESTADOS + "/" + LIMITE_DE_JOGADAS, TETO_DO_GUIA + "/" + LIMITE_DO_GUIA);
+        });
+
+        testar("[CERTIFICA] o robô certifica os 10 dias: mapa válido, tem solução, par = o menor achado, não é trivial, teto respeitado", function () {
+            const todos = relatorios();
+            DIAS.forEach(function (dia, i) {
+                const relatorio = todos[i];
+                const completo = relatorio.mapaValido && relatorio.temSolucao && relatorio.parConfere && relatorio.naoTrivial && !relatorio.estourou && relatorio.certificado;
+                conferir("[CERTIFICA] dia " + (i + 1) + ": par " + dia.par + " (achado " + relatorio.parAchado + "), " + relatorio.estados + " estados, certificado", completo && relatorio.parAchado === PARES_ESPERADOS[i] && relatorio.problemas.length === 0, resumoDoRelatorio(relatorio));
+            });
+            conferirIgual("[CERTIFICA] o par que o robô achou em cada dia", todos.map(function (relatorio) { return relatorio.parAchado; }).join(","), PARES_ESPERADOS.join(","));
+            conferirIgual("[CERTIFICA] os estados simulados em cada dia são os da tabela do GUIA (a poda e a memória seguem como foram medidas)", todos.map(function (relatorio) { return relatorio.estados; }).join(","), ESTADOS_DO_GUIA.join(","));
+            const maior = Math.max.apply(null, todos.map(function (relatorio) { return relatorio.estados; }));
+            conferir("[CERTIFICA] o dia que mais estados gasta é o 5, com " + maior + " (teto " + TETO_DE_ESTADOS + ")", maior === todos[4].estados && maior < TETO_DE_ESTADOS / 100);
+        });
+
+        testar("[DEFEITOS] falha proposital detectada: dia com mapa torto sai com mapaValido false, certificado false e o problema certo, sem o robô simular nada", function () {
+            const defeitos = [
+                ["meta maior que o número de casas", 0, function (dia) { dia.meta = 4; }, "a meta precisa estar entre 1 e 3 casas"],
+                ["meta zero", 0, function (dia) { dia.meta = 0; }, "a meta precisa estar entre 1 e 3 casas"],
+                ["borda aberta em cima", 0, function (dia) { dia.mapa[0][0] = trocarSimbolo(dia.mapa[0][0], 5, "1"); }, "a borda precisa ser mar em 5, 0"],
+                ["borda aberta embaixo", 0, function (dia) { dia.mapa[9][0] = trocarSimbolo(dia.mapa[9][0], 4, "1"); }, "a borda precisa ser mar em 4, 9"],
+                ["borda aberta à esquerda", 0, function (dia) { dia.mapa[4][0] = trocarSimbolo(dia.mapa[4][0], 0, "2"); }, "a borda precisa ser mar em 0, 4"],
+                ["borda aberta à direita", 0, function (dia) { dia.mapa[4][0] = trocarSimbolo(dia.mapa[4][0], 9, "2"); }, "a borda precisa ser mar em 9, 4"],
+                ["casa no mar", 0, function (dia) { dia.mapa[7][1] = trocarSimbolo(dia.mapa[7][1], 1, "C"); }, "objeto no mar em 1, 7"],
+                ["cais no mar", 0, function (dia) { dia.mapa[7][1] = trocarSimbolo(dia.mapa[7][1], 1, "P"); }, "objeto no mar em 1, 7"],
+                ["nascente num dia sem chuva", 0, function (dia) { dia.mapa[3][1] = trocarSimbolo(dia.mapa[3][1], 4, "N"); }, "nascente sem chuva em 4, 3"],
+                ["altura fora da legenda", 0, function (dia) { dia.mapa[3][0] = trocarSimbolo(dia.mapa[3][0], 4, "9"); }, "símbolo inválido em 4, 3"],
+                ["objeto fora da legenda", 0, function (dia) { dia.mapa[3][1] = trocarSimbolo(dia.mapa[3][1], 4, "X"); }, "símbolo inválido em 4, 3"],
+                ["mapa com 9 linhas", 0, function (dia) { dia.mapa.pop(); }, "o mapa precisa de 10 linhas"],
+                ["linha com 9 símbolos", 0, function (dia) { dia.mapa[5][0] = dia.mapa[5][0].slice(1); }, "o mapa precisa de 10 linhas"],
+                ["tábua vazia", 0, function (dia) { dia.tabua = []; }, "a tábua de ao menos uma ficha"],
+            ];
+            defeitos.forEach(function (defeito) {
+                const dia = copiaDoDia(defeito[1]);
+                defeito[2](dia);
+                const relatorio = certificarDia(dia, 200);     // o teto curto limita o estrago se a validação do mapa estiver quebrada: sem ela o robô tentaria resolver o dia torto
+                const acusou = relatorio.problemas.some(function (problema) { return problema.indexOf(defeito[3]) !== -1; });
+                conferir("[DEFEITOS] " + defeito[0] + ": problemas «" + relatorio.problemas.join("; ") + "», certificado false", !relatorio.mapaValido && acusou && !relatorio.certificado && !relatorio.temSolucao && relatorio.estados === 0 && relatorio.parAchado === null, resumoDoRelatorio(relatorio));
+                const erros = capturarErros(function () { conferirIgual("[DEFEITOS] " + defeito[0] + ": carregarDia recusa o mesmo dia", carregarDiaSemMudar(dia), true); });
+                conferir("[DEFEITOS] " + defeito[0] + ": e avisa no console «Dia inválido»", erros.length === 1 && erros[0].indexOf("Dia inválido: ") === 0, erros.join(" | "));
+            });
+        });
+
+        function carregarDiaSemMudar(dia) {               // true se carregarDia recusou o dia e não mexeu em nenhuma das dez variáveis
+            const antes = lerAsVariaveisDoRobo();
+            const aceitou = carregarDia(dia);
+            return !aceitou && variaveisIguaisPorReferencia(antes, lerAsVariaveisDoRobo()).length === 0;
+        }
+
+        testar("[DEFEITOS] falha proposital detectada: dia com mapa bom mas afirmação falsa (par errado, dia trivial, sem solução) nunca é certificado, e o campo certo acusa", function () {
+            const trivial = copiaDoDia(0);
+            trivial.tabua[0].nivel = 1;                   // a água de nível 1 não cobre terra de altura 1: o dia já nasce ganho
+            const trivialComParCerto = JSON.parse(JSON.stringify(trivial));
+            trivialComParCerto.par = 0;
+            const parParaMais = copiaDoDia(0);
+            parParaMais.par = 2;
+            const parParaMenos = copiaDoDia(1);
+            parParaMenos.par = 1;
+            const parZero = copiaDoDia(0);
+            parZero.par = 0;
+            const defeitos = [
+                ["par errado para mais (dia 1 diz 2, o menor é 1)", parParaMais, { temSolucao: true, parAchado: 1, parConfere: false, naoTrivial: true }],
+                ["par errado para menos (dia 2 diz 1, o menor é 2)", parParaMenos, { temSolucao: true, parAchado: 2, parConfere: false, naoTrivial: true }],
+                ["par 0 num dia que pede uma jogada", parZero, { temSolucao: true, parAchado: 1, parConfere: false, naoTrivial: true }],
+                ["dia trivial com o par certo (0): só o naoTrivial acusa", trivialComParCerto, { temSolucao: true, parAchado: 0, parConfere: true, naoTrivial: false }],
+                ["dia trivial com o par do dia 1: o par e o naoTrivial acusam", trivial, { temSolucao: true, parAchado: 0, parConfere: false, naoTrivial: false }],
+                ["sem solução em 6 jogadas (anel com 7 brechas e 7 blocos, par 7)", diaDoAnel(7, 7, 7), { temSolucao: false, parAchado: null, parConfere: false, naoTrivial: true }],
+                ["sem blocos e sem de onde cavar (anel com 3 brechas, 0 blocos)", diaDoAnel(3, 0, 3), { temSolucao: false, parAchado: null, parConfere: false, naoTrivial: true }],
+            ];
+            defeitos.forEach(function (defeito) {
+                const relatorio = certificarDia(defeito[1]);
+                const campos = Object.keys(defeito[2]);
+                const certos = campos.every(function (campo) { return relatorio[campo] === defeito[2][campo]; });
+                conferir("[DEFEITOS] " + defeito[0] + ": certificado false, " + campos.map(function (campo) { return campo + " " + relatorio[campo]; }).join(", "), certos && relatorio.mapaValido && !relatorio.estourou && !relatorio.certificado, resumoDoRelatorio(relatorio));
+            });
+            const noLimite = certificarDia(diaDoAnel(6, 6, 6));
+            conferir("[DEFEITOS] controle: o anel com 6 brechas e 6 blocos tem par 6 (o limite do robô, inclusive): certificado, par achado " + noLimite.parAchado + ", " + noLimite.estados + " estados", noLimite.certificado && noLimite.parAchado === 6 && !noLimite.estourou, resumoDoRelatorio(noLimite));
+            const simples = certificarDia(diaDoAnel(1, 1, 1));
+            conferir("[DEFEITOS] controle: o anel com 1 brecha e 1 bloco é certificado com par 1 (o construtor de anéis não é o defeito)", simples.certificado && simples.parAchado === 1, resumoDoRelatorio(simples));
+        });
+
+        testar("[TETO] o teto de estados: estourar nunca vira 'tem solução' nem 'não é trivial'; no teto exato ainda certifica", function () {
+            const apertado = certificarDia(DIAS[4], 1);
+            conferir("[TETO] dia 5 com teto 1: estourou true, naoTrivial false, temSolucao false, parAchado null, certificado false (" + apertado.estados + " estados)", apertado.estourou && !apertado.naoTrivial && !apertado.temSolucao && apertado.parAchado === null && !apertado.certificado && !apertado.parConfere && apertado.mapaValido, resumoDoRelatorio(apertado));
+            const folgado = certificarDia(DIAS[4], 100);
+            conferir("[TETO] dia 5 com teto 100: estourou, não é certificado e a solução que existe não conta como achada (" + folgado.estados + " estados)", folgado.estourou && !folgado.temSolucao && folgado.parAchado === null && !folgado.certificado, resumoDoRelatorio(folgado));
+            [0, 2].forEach(function (indice) {
+                const gasto = relatorios()[indice].estados;
+                const exato = certificarDia(DIAS[indice], gasto);
+                conferir("[TETO] dia " + (indice + 1) + " com teto = " + gasto + " (os estados que ele gasta): ainda certifica", exato.certificado && !exato.estourou && exato.estados === gasto, resumoDoRelatorio(exato));
+                const curto = certificarDia(DIAS[indice], gasto - 1);
+                conferir("[TETO] dia " + (indice + 1) + " com teto = " + (gasto - 1) + ": estoura e não certifica", curto.estourou && !curto.certificado && !curto.temSolucao, resumoDoRelatorio(curto));
+            });
+            const semTeto = certificarDia(DIAS[0], 0);
+            conferir("[TETO] teto 0 ou ausente vale o teto padrão: o dia 1 certifica", semTeto.certificado && !semTeto.estourou, resumoDoRelatorio(semTeto));
+        });
+
+        testar("[NÃO MEXE] o robô deixa o jogo exatamente como estava: no meio de uma partida, com tetos estourados, com dia inválido, e a partida segue igual", function () {
+            montarPartidaNoMeio();
+            const antesDaFoto = fotoDoJogo();
+            const antesDasVariaveis = lerAsVariaveisDoRobo();
+            const jogadasAntes = jogadas, blocosAntes = estadoAtual.blocos, alturasAntes = JSON.stringify(alturas);
+            conferir("[NÃO MEXE] a partida no meio: dia 5, " + jogadasAntes + " jogadas, estoque " + blocosAntes + ", vista girada " + rotacao * 90 + "°, zoom " + camera.zoom + ", rolagem (" + camera.desvioX + ", " + camera.desvioY + ")", indiceDoDia === 4 && jogadasAntes === 3 && rotacao === 1 && camera.zoom === 1.5 && camera.desvioX !== 0);
+
+            const invalido = copiaDoDia(0);
+            invalido.meta = 99;
+            const nessaPartida = DIAS.map(function (dia) { return certificarDia(dia); });
+            const comTetoCurto = certificarDia(DIAS[4], 1);
+            const comDiaInvalido = certificarDia(invalido, 200);     // teto curto: com a validação quebrada o robô não tenta resolver o dia torto por minutos
+
+            const fichaNula = copiaDoDia(0);
+            fichaNula.tabua = [null];                     // o mapa vale, mas a busca tropeça na ficha: o robô lança, e o finally ainda devolve o jogo
+            let buscaLancou = false;
+            try { certificarDia(fichaNula); } catch (erro) { buscaLancou = true; }
+            conferir("[NÃO MEXE] uma busca que dá erro lança para quem chamou (" + buscaLancou + ")", buscaLancou);
+
+            const depoisDasVariaveis = lerAsVariaveisDoRobo();
+            conferirIgual("[NÃO MEXE] as dez variáveis do robô são as mesmas (por referência) depois de 13 chamadas (uma delas lança); as que mudaram", variaveisIguaisPorReferencia(antesDasVariaveis, depoisDasVariaveis).join(","), "");
+            conferirIgual("[NÃO MEXE] o dia, o terreno de agora (alturas), o estoque e as jogadas", [indiceDoDia, JSON.stringify(alturas) === alturasAntes, estadoAtual.blocos, jogadas].join("/"), [4, true, blocosAntes, jogadasAntes].join("/"));
+            conferir("[NÃO MEXE] a foto inteira (dia, camadas, água, lista de desenho, previsão, câmera, rotação, cursor, " + PIXELS_DA_AMOSTRA.length + " pixels do picking) é igual", fotoDoJogo() === antesDaFoto);
+            conferirIgual("[NÃO MEXE] o relatório de cada dia no meio da partida é o mesmo do dia limpo (o robô não depende do estado do jogo)", nessaPartida.map(resumoDoRelatorio).join("\n"), relatorios().map(resumoDoRelatorio).join("\n"));
+            conferir("[NÃO MEXE] o teto curto e o dia inválido também voltam relatório (estourou " + comTetoCurto.estourou + ", mapaValido " + comDiaInvalido.mapaValido + ")", comTetoCurto.estourou && !comDiaInvalido.mapaValido);
+
+            const seguiu = terminarAMare();
+            montarPartidaNoMeio();
+            const semRobo = terminarAMare();
+            conferirIgual("[NÃO MEXE] a partida que seguiu depois do robô (maré, água, casas perdidas, aviso) é a mesma de uma partida sem robô", seguiu, semRobo);
+        });
+
+        testar("[NÃO MEXE] sem nenhum dia carregado (o dia 1 inválido na carga, diaCarregado === null) o robô devolve o relatório, não lança, e deixa tudo como estava", function () {
+            const guardadas = lerAsVariaveisDoRobo();
+            try {
+                porAsVariaveisDoRobo([null, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined]);
+                let relatorio = null, lancou = null;
+                try { relatorio = certificarDia(DIAS[1]); } catch (erro) { lancou = erro; }
+                conferirIgual("[NÃO MEXE] sem dia carregado, certificarDia(DIAS[1]) não lança", String(lancou), "null");
+                conferir("[NÃO MEXE] e certifica o dia 2 (par " + (relatorio && relatorio.parAchado) + ", " + (relatorio && relatorio.estados) + " estados)", relatorio !== null && relatorio.certificado && relatorio.parAchado === 2);
+                const depois = lerAsVariaveisDoRobo();
+                conferirIgual("[NÃO MEXE] depois dele, diaCarregado continua null e as outras nove continuam sem valor", depois[0] === null && depois.slice(1).every(function (valor) { return valor === undefined; }), true);
+                let invalidoLancou = null;
+                const diaInvalido = copiaDoDia(0);
+                diaInvalido.tabua = [];
+                try { certificarDia(diaInvalido); } catch (erro) { invalidoLancou = erro; }
+                conferirIgual("[NÃO MEXE] sem dia carregado, um dia inválido também não lança", String(invalidoLancou), "null");
+                conferirIgual("[NÃO MEXE] e nada foi carregado", lerAsVariaveisDoRobo()[0], null);
+            } finally {
+                porAsVariaveisDoRobo(guardadas);
+            }
+        });
+
+        testar("[ESCONDIDA] dia 10: a casa-chave (2, 5) não tem um pixel que a acerte na vista inicial, e volta a ser tocável nos giros 1, 2 e 3", function () {
+            prepararDia(9);
+            conferirIgual("[ESCONDIDA] a vista inicial: dia 10, giro 0, zoom " + camera.zoom + ", rolagem (" + camera.desvioX + ", " + camera.desvioY + ")", [indiceDoDia, rotacao, camera.zoom, camera.desvioX, camera.desvioY].join("/"), "9/0/1/0/0");
+            conferir("[ESCONDIDA] a casa (2, 5) é moldável e o estoque tem blocos (" + estadoAtual.blocos + "): esconder importa", motivoDaRecusa(estadoAtual, "erguer", 2, 5) === "" && estadoAtual.blocos >= 1);
+            const cobridora = quemEsconde(2, 5);
+            conferir("[ESCONDIDA] quem a esconde é a torre de altura 4 em (3, 6)" + (cobridora ? " (achou " + cobridora.x + ", " + cobridora.y + " altura " + cobridora.altura + ")" : ""), cobridora && cobridora.x === 3 && cobridora.y === 6 && cobridora.altura === 4);
+
+            const noCentro = pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0.5), noCanto = pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0);
+            conferir("[ESCONDIDA] giro 0: de " + LARGURA_DA_VISTA * ALTURA_DA_VISTA + " pixels do canvas " + LARGURA_DA_VISTA + "×" + ALTURA_DA_VISTA + ", " + noCentro.achados + " têm (2, 5) sob o centro e " + noCanto.achados + " sob o canto (esperado 0 e 0)", noCentro.achados === 0 && noCanto.achados === 0);
+
+            const contagens = [];
+            for (let giro = 1; giro <= 3; giro++) {
+                irParaOGiro(giro);
+                const centro = pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0.5), canto = pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0);
+                contagens.push(giro * 90 + "°: " + centro.achados + " (centro) / " + canto.achados + " (canto)");
+                conferir("[ESCONDIDA] giro " + giro + ": " + centro.achados + " pixels (centro de cada pixel) e " + canto.achados + " (canto inteiro) acertam (2, 5), pelo menos 100", centro.achados >= 100 && canto.achados >= 100);
+            }
+            irParaOGiro(0);
+            conferirIgual("[ESCONDIDA] de volta ao giro 0 a casa continua sem pixel", pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0.5).achados, 0);
+
+            irParaOGiro(0);
+            const lugarDoTopo = paraATela(mundoParaTela(2.5, 5.5, alturaVisivel(2, 5)));
+            const acertoNoLugar = casaSobOPixel(lugarDoTopo);
+            conferir("[ESCONDIDA] onde o topo de (2, 5) é desenhado (pixel " + Math.round(lugarDoTopo.x) + ", " + Math.round(lugarDoTopo.y) + ") o picking acerta a torre (" + (acertoNoLugar && acertoNoLugar.x + ", " + acertoNoLugar.y) + ")", acertoNoLugar && acertoNoLugar.x === 3 && acertoNoLugar.y === 6);
+
+            cursor = { x: 4, y: 4 };
+            apertarTecla("ArrowLeft"); apertarTecla("ArrowLeft"); apertarTecla("ArrowDown");
+            conferirIgual("[ESCONDIDA] o cursor de setas chega à (2, 5) mesmo escondida", cursor.x + "," + cursor.y, "2,5");
+            conferir("[ESCONDIDA] e o aviso diz que ela está escondida: " + aviso.textContent, /escondida atrás de um bloco/.test(aviso.textContent));
+            apertarTecla("Enter");
+            conferirIgual("[ESCONDIDA] erguer pelo cursor funciona na casa escondida: 1 → 2", alturas[5][2] + "/" + jogadas, "2/1");
+            prepararDia(0);
+        });
+
+        testar("[ESCONDIDA] o dedo: no giro 0 o toque onde (2, 5) seria desenhada marca a torre; depois de girar, o toque marca (2, 5) e o segundo toque ergue", function () {
+            prepararDia(9);
+            const lugarDoTopo = paraATela(mundoParaTela(2.5, 5.5, alturaVisivel(2, 5)));
+            tocarNoPixel(lugarDoTopo);
+            conferirIgual("[ESCONDIDA] giro 0: o toque marcou a torre (3, 6), não a (2, 5)", cursor.x + "," + cursor.y + "/" + marcada, "3,6/true");
+            clicar("girarDireita");
+            conferirIgual("[ESCONDIDA] ⟳ gira 90°", rotacao, 1);
+            const alvo = pixelsDaCasa(CASA_CHAVE_ESCONDIDA, 0.5).maisPertoDoMeio;
+            conferir("[ESCONDIDA] no giro 1 há pixel para tocar", alvo !== null);
+            const pixel = { x: alvo.x + 0.5, y: alvo.y + 0.5 };
+            tocarNoPixel(pixel);
+            conferirIgual("[ESCONDIDA] giro 1: o primeiro toque marca (2, 5)", cursor.x + "," + cursor.y + "/" + marcada, "2,5/true");
+            conferir("[ESCONDIDA] e o aviso pede o segundo toque: " + aviso.textContent, /^Marcada: casa 2, 5.*Toque de novo para erguer/.test(aviso.textContent));
+            tocarNoPixel(pixel);
+            conferirIgual("[ESCONDIDA] o segundo toque ergue (2, 5): 1 → 2, uma jogada, desmarcada", alturas[5][2] + "/" + jogadas + "/" + marcada, "2/1/false");
+            prepararDia(0);
+        });
+
+        testar("[CHAVES] dia 10: os " + PLANOS_DE_5_JOGADAS_DO_DIA_10 + " planos de 5 jogadas tocam todos (2, 5), (4, 4) e (4, 7); sem o cais em (3, 5) a (2, 5) deixa de ser obrigatória", function () {
+            const planos = planosDoTamanhoDoPar(DIAS[9]);
+            const chaves = casasDeTodosOsPlanos(planos);
+            conferirIgual("[CHAVES] planos do tamanho do par (5) no dia 10", planos.length, PLANOS_DE_5_JOGADAS_DO_DIA_10);
+            conferirIgual("[CHAVES] as casas que todos os " + planos.length + " planos tocam", chaves.join(" "), CASAS_CHAVE_DO_DIA_10.join(" "));
+
+            const semOCais = copiaDoDia(9);
+            conferirIgual("[CHAVES] controle: a casa (3, 5) do dia 10 é o cais P", DIAS[9].mapa[5][1][3], "P");
+            semOCais.mapa[5][1] = trocarSimbolo(semOCais.mapa[5][1], 3, ".");
+            const planosSemOCais = planosDoTamanhoDoPar(semOCais);
+            const chavesSemOCais = casasDeTodosOsPlanos(planosSemOCais);
+            const semBrecha = planosSemOCais.filter(function (plano) { return plano.indexOf("2,5") === -1; }).length;
+            conferir("[CHAVES] controle: tirado o cais de (3, 5), " + semBrecha + " de " + planosSemOCais.length + " planos de 5 jogadas vencem sem tocar (2, 5) (a casa deixa de ser chave: " + chavesSemOCais.join(" ") + ")", semBrecha > 0 && chavesSemOCais.indexOf("2,5") === -1);
+        });
+
+        testar("[INICIAR] iniciarDia carrega cada um dos 10 dias do zero (indo e voltando, com o jogo sujo): mapa, estoque, tábua, água de baixa-mar, textos", function () {
+            const ordem = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+            ordem.forEach(function (indice, passo) {
+                if (passo > 0) {                          // sujar o jogo: uma jogada, vista girada, câmera
+                    cursor = { x: 4, y: 4 };
+                    apertarTecla("2"); apertarTecla("Enter"); apertarTecla("r"); apertarTecla("+");
+                }
+                iniciarDia(indice);
+                desenharVerdadeiro();
+                const dia = DIAS[indice], nome = "[INICIAR] passo " + passo + ", dia " + (indice + 1) + ": ";
+                const esperadas = alturasDoTexto(dia);
+                conferirIgual(nome + "o terreno é o do texto do mapa", primeiraDiferenca(alturas, esperadas), "");
+                conferirIgual(nome + "índice, ficha, fases, jogadas e história", [indiceDoDia, indiceDaMare, passoDaMare, fase, faseDaMare, jogadas, historico.length].join("/"), [indice, 0, 0, "ler", "baixa", 0, 0].join("/"));
+                conferirIgual(nome + "estoque = os blocos da 1ª ficha (" + dia.tabua[0].blocos + ")", estadoAtual.blocos, dia.tabua[0].blocos);
+                conferirIgual(nome + "a terra do mundo = o texto + o estoque", blocosNoMundo(estadoAtual), somaDoTerreno(esperadas) + dia.tabua[0].blocos);
+                conferirIgual(nome + "nenhuma casa perdida", casasDaMatriz(perdidas).length, 0);
+                conferirIgual(nome + "as casas e as nascentes são as do texto", textoDasCasas(casasComCasa) + "|" + textoDasCasas(casasDeNascente), textoDasCasas(casasDoTexto(dia, "C")) + "|" + textoDasCasas(casasDoTexto(dia, "N")));
+                conferirIgual(nome + "o mar é o do texto (o mar de outro dia não sobra)", textoDasCasas(casasDoMar), textoDasCasas(casasDaMatriz(marEmTexto(dia))));
+                conferirIgual(nome + "a água é a baixa-mar (o ponto fixo do nível 1)", primeiraDiferenca(agua.alagado, alagarPorPontoFixo(esperadas, 1, casasDaMatriz(marEmTexto(dia)))), "");
+                conferirIgual(nome + "o aviso é a dica do dia", aviso.textContent, "Dia " + (indice + 1) + " de 10: " + dia.dica);
+                conferirIgual(nome + "o título e a linha da meta", titulo.textContent + " | " + objetivo.textContent, "dia " + (indice + 1) + "/10 | Meta: " + dia.meta + " casas · jogadas 0 (par " + dia.par + ")");
+                conferir(nome + "a faixa da tábua marca a 1ª ficha: " + tabua.textContent, tabua.textContent.indexOf("Tábua: [n" + dia.tabua[0].nivel + " " + dia.tabua[0].passos + "×" + (dia.tabua[0].volume + (dia.tabua[0].chuva ? 2 : 0)) + " +" + dia.tabua[0].blocos) === 0);
+            });
+            const antes = fotoDoJogo();
+            DIAS.push(Object.assign(copiaDoDia(0), { meta: 99 }));
+            let aviso1 = "", erros = [];
+            try {
+                erros = capturarErros(function () { iniciarDia(DIAS.length - 1); });
+                aviso1 = aviso.textContent;
+            } finally {
+                DIAS.pop();
+            }
+            conferirIgual("[INICIAR] um dia inválido: o aviso fala do defeito", aviso1, "Este dia está com defeito: veja o console");
+            conferirIgual("[INICIAR] e o jogo não mudou (o dia de antes segue)", fotoDoJogo(), antes);
+            conferir("[INICIAR] e o console recebe o motivo: " + erros.join(" | "), erros.length === 1 && /meta precisa estar entre 1 e 3 casas/.test(erros[0]));
+            conferirIgual("[INICIAR] DIAS voltou a ter 10 dias", DIAS.length, 10);
+            prepararDia(0);
+        });
+
+        testar("[JOGADAS] erguer e cavar contam, a recusa não conta, desfazer devolve o bloco e a jogada, e nunca passa de zero", function () {
+            prepararDia(0);
+            cursor = { x: 3, y: 6 };
+            apertarTecla("Enter");
+            conferirIgual("[JOGADAS] erguer a brecha (3, 6): altura 1 → 2, estoque 1 → 0, jogadas 0 → 1", alturas[6][3] + "/" + estadoAtual.blocos + "/" + jogadas, "2/0/1");
+            conferirIgual("[JOGADAS] o aviso diz o novo estado", aviso.textContent, "Casa 3, 6 subiu para 2. Blocos: 0");
+            const recusas = [
+                ["sem blocos no estoque", 3, 6, "erguer", "Não dá: sem blocos no estoque"],
+                ["o mar não se molda", 0, 0, "erguer", "Não dá: o mar não se molda"],
+                ["casa, cais e nascente ficam como estão", 3, 3, "cavar", "Não dá: casa, cais e nascente ficam como estão"],
+            ];
+            recusas.forEach(function (recusa) {
+                const antes = fotoDoEstado() + "/" + jogadas;
+                cursor = { x: recusa[1], y: recusa[2] };
+                apertarTecla(recusa[3] === "erguer" ? "1" : "2");
+                apertarTecla("Enter");
+                conferir("[JOGADAS] a recusa «" + recusa[0] + "» não conta jogada nem muda o estado, e avisa: " + aviso.textContent, fotoDoEstado() + "/" + jogadas === antes && aviso.textContent === recusa[4]);
+            });
+            apertarTecla("z");
+            conferirIgual("[JOGADAS] desfazer devolve a altura, o bloco e a jogada: 1/1/0", alturas[6][3] + "/" + estadoAtual.blocos + "/" + jogadas, "1/1/0");
+            apertarTecla("z");
+            conferir("[JOGADAS] desfazer sem jogada avisa e a contagem não fica negativa (" + jogadas + "): " + aviso.textContent, jogadas === 0 && /nada para desfazer nesta maré/i.test(aviso.textContent));
+            cursor = { x: 4, y: 3 };
+            apertarTecla("2"); apertarTecla("Enter");
+            apertarTecla("1"); apertarTecla("Enter");
+            conferirIgual("[JOGADAS] cavar e erguer a mesma casa são 2 jogadas, o terreno volta ao que era e o estoque também", alturas[3][4] + "/" + estadoAtual.blocos + "/" + jogadas, "1/1/2");
+            apertarTecla("n");
+            conferirIgual("[JOGADAS] N (reiniciar) zera as jogadas e devolve o terreno e o estoque", jogadas + "/" + alturas[3][4] + "/" + estadoAtual.blocos + "/" + historico.length, "0/1/1/0");
+
+            prepararDia(2);                               // dia 3: sem blocos, e uma torre de altura 4 em (4, 4); a recusa por altura vem antes da do estoque
+            [["erguer", 4, 4, "Não dá: já está na altura máxima"], ["erguer", 2, 3, "Não dá: sem blocos no estoque"]].forEach(function (recusa) {
+                cursor = { x: recusa[1], y: recusa[2] };
+                apertarTecla("1"); apertarTecla("Enter");
+                conferirIgual("[JOGADAS] dia 3, " + recusa[0] + " em (" + recusa[1] + ", " + recusa[2] + ")", aviso.textContent + "/" + jogadas, recusa[3] + "/0");
+            });
+            prepararDia(8);                               // dia 9: uma cova de altura 0 em (3, 4)
+            cursor = { x: 3, y: 4 };
+            apertarTecla("2"); apertarTecla("Enter");
+            conferirIgual("[JOGADAS] dia 9, cavar uma cova que já está no fundo", aviso.textContent + "/" + jogadas, "Não dá: já está no fundo/0");
+        });
+
+        testar("[JOGADAS] a contagem atravessa as fichas e o desfazer só volta até o começo da maré; durante a água não se joga nem se desfaz", function () {
+            prepararDia(4);                               // dia 5: duas fichas, um bloco em cada
+            cursor = { x: 7, y: 3 };
+            apertarTecla("Enter");
+            conferirIgual("[JOGADAS] ficha 1: uma jogada", jogadas + "/" + estadoAtual.blocos, "1/0");
+            apertarTecla("m");
+            apertarTecla("Enter");
+            conferir("[JOGADAS] durante a água, aplicar avisa e não conta: " + aviso.textContent, /agora não/i.test(aviso.textContent) && jogadas === 1);
+            apertarTecla("z");
+            conferir("[JOGADAS] durante a água, desfazer avisa e não desfaz: " + aviso.textContent, /maré não se desfaz/i.test(aviso.textContent) && jogadas === 1);
+            apertarTecla("m");
+            conferir("[JOGADAS] M durante a água avisa: " + aviso.textContent, /espere a água/i.test(aviso.textContent));
+            esperarAMare();
+            apertarTecla("m");
+            conferirIgual("[JOGADAS] a ficha 2 chegou: a jogada da 1ª fica contada (1) e o estoque é só o da ficha (1)", indiceDaMare + "/" + jogadas + "/" + estadoAtual.blocos, "1/1/1");
+            cursor = { x: 3, y: 7 };
+            apertarTecla("Enter");
+            conferirIgual("[JOGADAS] ficha 2: 2 jogadas no dia", jogadas + "/" + estadoAtual.blocos, "2/0");
+            apertarTecla("z");
+            conferirIgual("[JOGADAS] desfazer devolve só a jogada da maré de agora: 1", jogadas + "/" + estadoAtual.blocos + "/" + alturas[7][3], "1/1/1");
+            apertarTecla("z");
+            conferir("[JOGADAS] e a da maré anterior fica (jogadas " + jogadas + ", altura de (7, 3) " + alturas[3][7] + "): " + aviso.textContent, jogadas === 1 && alturas[3][7] === 2 && /nada para desfazer nesta maré/i.test(aviso.textContent));
+            apertarTecla("n");
+            conferirIgual("[JOGADAS] N no meio do dia: ficha 1, 0 jogadas, estoque da ficha 1", indiceDaMare + "/" + jogadas + "/" + estadoAtual.blocos + "/" + alturas[3][7], "0/0/1/1");
+        });
+
+        testar("[ESTOQUE] 10 dias × 140 ações ao acaso (erguer, cavar, desfazer em casas sorteadas): o estoque nunca é negativo, as jogadas = a história, a terra só vem das fichas, e desfazer devolve a foto exata", function () {
+            semearSorteio(7007);
+            const violacoes = [];
+            let aceitas = 0, recusadas = 0, desfeitas = 0, estoqueMinimo = 99;
+            DIAS.forEach(function (dia, indice) {
+                prepararDia(indice);
+                const inicial = alturasDoTexto(dia), terra = somaDoTerreno(inicial) + dia.tabua[0].blocos, fotos = [];
+                const registrar = function (texto) { if (violacoes.length < 5) violacoes.push("dia " + (indice + 1) + ": " + texto); };
+                for (let passo = 0; passo < 140; passo++) {
+                    cursor = { x: sorteio(TAMANHO), y: sorteio(TAMANHO) };
+                    const escolha = sorteio(5), antes = fotoDoEstado(), jogadasAntes = jogadas;
+                    if (escolha === 4) {
+                        apertarTecla("z");
+                        if (fotos.length > 0) {
+                            desfeitas++;
+                            if (fotoDoEstado() !== fotos.pop()) registrar("desfazer não devolveu a foto exata");
+                            if (jogadas !== jogadasAntes - 1) registrar("desfazer não tirou uma jogada");
+                        } else if (fotoDoEstado() !== antes || jogadas !== jogadasAntes) registrar("desfazer sem história mudou o jogo");
+                    } else {
+                        apertarTecla(escolha % 2 === 0 ? "1" : "2");
+                        apertarTecla("Enter");
+                        if (jogadas === jogadasAntes + 1) { aceitas++; fotos.push(antes); }
+                        else {
+                            recusadas++;
+                            if (jogadas !== jogadasAntes || fotoDoEstado() !== antes) registrar("uma recusa mudou o jogo");
+                        }
+                    }
+                    estoqueMinimo = Math.min(estoqueMinimo, estadoAtual.blocos);
+                    if (estadoAtual.blocos < 0) registrar("estoque negativo " + estadoAtual.blocos);
+                    if (jogadas !== historico.length || jogadas !== fotos.length) registrar("jogadas " + jogadas + ", história " + historico.length + ", fotos " + fotos.length);
+                    if (blocosNoMundo(estadoAtual) !== terra) registrar("a terra do mundo é " + blocosNoMundo(estadoAtual) + ", esperada " + terra);
+                    alturas.forEach(function (linha, y) {
+                        linha.forEach(function (altura, x) {
+                            if (altura < 0 || altura > 4) registrar("altura " + altura + " em " + x + "," + y);
+                            const fixa = dia.mapa[y][0][x] === "~" || dia.mapa[y][1][x] !== ".";
+                            if (fixa && altura !== inicial[y][x]) registrar("mar, casa, cais ou nascente mudou em " + x + "," + y);
+                        });
+                    });
+                }
+                for (let desfeitasDeNovo = 0; historico.length > 0 && desfeitasDeNovo < 500; desfeitasDeNovo++) { apertarTecla("z"); fotos.pop(); }     // limitado: um Z sem ouvinte não pode travar a página
+                conferirIgual("[ESTOQUE] dia " + (indice + 1) + ": desfeito tudo, o terreno e o estoque voltam ao começo", primeiraDiferenca(alturas, inicial) + "/" + estadoAtual.blocos + "/" + jogadas, "/" + dia.tabua[0].blocos + "/0");
+            });
+            conferir("[ESTOQUE] nenhuma violação em 1.400 ações (" + aceitas + " jogadas aceitas, " + recusadas + " recusadas, " + desfeitas + " desfeitas, estoque mínimo visto " + estoqueMinimo + ")", violacoes.length === 0 && aceitas > 200 && recusadas > 200 && desfeitas > 50 && estoqueMinimo >= 0, violacoes.join(" | "));
+        });
+
+        testar("[TROCA] dia vencido: M abre o próximo; dia perdido: M avisa e só N recomeça; depois do dia 10, M volta ao dia 1", function () {
+            prepararDia(0);
+            apertarTecla("m");                            // sem jogar: o dia 1 se perde
+            esperarAMare();
+            desenharVerdadeiro();
+            conferirIgual("[TROCA] dia 1 sem jogar: fim, perdido", fase + "/" + diaVencido(), "fim/false");
+            conferir("[TROCA] o aviso diz perdido, jogadas 0 (par 1) e não promete o próximo dia: " + aviso.textContent, /^Dia perdido: 0 de 3 casas salvas, meta 3, jogadas 0 \(par 1\)\. N recomeça$/.test(aviso.textContent));
+            conferirIgual("[TROCA] e o botão diz Maré, não Próximo", botaoDaMare.textContent, "Maré");
+            apertarTecla("m");
+            conferir("[TROCA] M num dia perdido só avisa (" + aviso.textContent + ") e fica no dia 1", /dia acabou/i.test(aviso.textContent) && indiceDoDia === 0 && fase === "fim");
+            apertarTecla("n");
+            conferirIgual("[TROCA] N recomeça o dia 1", indiceDoDia + "/" + fase + "/" + jogadas, "0/ler/0");
+
+            cursor = { x: 3, y: 6 };
+            apertarTecla("Enter");
+            apertarTecla("m");
+            esperarAMare();
+            desenharVerdadeiro();
+            conferirIgual("[TROCA] dia 1 com a brecha fechada: fim, vencido, 3 salvas", fase + "/" + diaVencido() + "/" + casasSalvasPelaMinhaConta(DIAS[0]), "fim/true/3");
+            conferirIgual("[TROCA] o botão diz Próximo", botaoDaMare.textContent, "Próximo");
+            apertarTecla("m");
+            desenharVerdadeiro();
+            conferirIgual("[TROCA] M abre o dia 2: ficha 0, ler, 0 jogadas, estoque de 2 blocos, mapa do dia 2", [indiceDoDia, fase, indiceDaMare, jogadas, estadoAtual.blocos, primeiraDiferenca(alturas, alturasDoTexto(DIAS[1])) === ""].join("/"), "1/ler/0/0/2/true");
+            conferirIgual("[TROCA] e o título diz dia 2/10", titulo.textContent, "dia 2/10");
+
+            prepararDia(9);                               // duas fichas: M libera a 1ª maré, M segue, M libera a 2ª
+            apertarTecla("m");
+            esperarAMare();
+            apertarTecla("m");
+            apertarTecla("m");
+            esperarAMare();
+            conferirIgual("[TROCA] dia 10 sem jogar: perdido; M não o pula", (fase === "fim") + "/" + diaVencido(), "true/false");
+            apertarTecla("m");
+            conferirIgual("[TROCA] M num dia 10 perdido não troca de dia", indiceDoDia, 9);
+            prepararDia(0);
+        });
+
+        testar("[CAMPANHA] o plano de cada dia, jogado pelo teclado, vence com jogadas = par, e M abre o dia seguinte até voltar ao dia 1; tirar qualquer jogada do plano perde o dia", function () {
+            prepararDia(0);
+            DIAS.forEach(function (dia, i) {
+                const nome = "[CAMPANHA] dia " + (i + 1) + ": ";
+                const total = PLANOS_DOS_DIAS[i].reduce(function (soma, mare) { return soma + mare.length; }, 0);
+                conferirIgual(nome + "o plano tem tantas jogadas quanto o par (" + dia.par + ")", total, dia.par);
+                conferirIgual(nome + "o jogo está no dia certo, na ficha 0", indiceDoDia + "/" + indiceDaMare + "/" + fase, i + "/0/ler");
+                const resultado = jogarOPlano(PLANOS_DOS_DIAS[i]);
+                desenharVerdadeiro();
+                const casas = casasDoTexto(dia, "C").length, salvas = casasSalvasPelaMinhaConta(dia);
+                conferir(nome + "jogou sem recusa nem atraso: " + resultado.problemas.slice(0, 2).join(" | "), resultado.problemas.length === 0);
+                conferirIgual(nome + "fim de dia vencido, " + salvas + " de " + casas + " casas salvas (meta " + dia.meta + "), jogadas " + jogadas + " = par " + dia.par, fase + "/" + diaVencido() + "/" + (salvas >= dia.meta) + "/" + jogadas, "fim/true/true/" + dia.par);
+                conferirIgual(nome + "o aviso do fim", aviso.textContent, "Dia vencido: " + salvas + " de " + casas + " casas salvas, meta " + dia.meta + ", jogadas " + dia.par + " (par " + dia.par + "). " + (i === 9 ? "M volta ao dia 1. " : "M abre o próximo dia. ") + "N recomeça");
+                conferirIgual(nome + "o painel e o botão", painel.textContent + " | " + botaoDaMare.textContent, "Dia vencido · salvas " + salvas + "/" + casas + " | Próximo");
+                apertarTecla("m");
+                conferirIgual(nome + "M abre o dia " + ((i + 1) % 10 + 1) + (i === 9 ? " (volta ao 1)" : ""), indiceDoDia + "/" + fase + "/" + jogadas, ((i + 1) % 10) + "/ler/0");
+            });
+
+            const aindaVencem = [];
+            let tentativas = 0;
+            DIAS.forEach(function (dia, i) {
+                const jogadasDoPlano = PLANOS_DOS_DIAS[i].reduce(function (soma, mare) { return soma + mare.length; }, 0);
+                for (let omitida = 0; omitida < jogadasDoPlano; omitida++) {
+                    prepararDia(i);
+                    jogarOPlano(PLANOS_DOS_DIAS[i], omitida);
+                    tentativas++;
+                    if (fase !== "fim" || diaVencido()) aindaVencem.push("dia " + (i + 1) + " sem a jogada " + (omitida + 1) + (fase === "fim" ? "" : " (parou em " + fase + ")"));
+                }
+            });
+            conferir("[CAMPANHA] nenhum dia vence com uma jogada a menos que o plano (" + tentativas + " planos curtos jogados; o par não está alto demais): " + aindaVencem.slice(0, 3).join(" | "), aindaVencem.length === 0 && tentativas === DIAS.reduce(function (soma, dia) { return soma + dia.par; }, 0));
+            prepararDia(0);
+        });
+
+        testar("[BOTÕES] cada botão [data-acao] responde a um clique de verdade: ferramentas, aplicar, desfazer, Maré/Seguir/Próximo, refazer, giro, zoom, ver e as 4 setas (pela TELA, nos 4 giros)", function () {
+            prepararDia(0);
+            const clicadas = new Set();
+            function clicarEAnotar(acao) {                  // só a primeira vez de cada ação vira linha de resultado
+                const existe = clicar(acao);
+                if (!clicadas.has(acao) || !existe) conferir("[BOTÕES] o botão " + acao + " existe e recebe o clique", existe);
+                clicadas.add(acao);
+            }
+            function pressionado(ferramentaDoBotao) {
+                return document.querySelector('[data-ferramenta="' + ferramentaDoBotao + '"]').getAttribute("aria-pressed");
+            }
+
+            conferir("[BOTÕES] todo [data-acao] da página tem uma intenção no jogo", acoesDosBotoes().every(function (acao) { return typeof intencoes[acao] === "function"; }), acoesDosBotoes().filter(function (acao) { return typeof intencoes[acao] !== "function"; }).join(","));
+            cursor = { x: 4, y: 3 };
+            clicarEAnotar("escolherCavar");
+            conferirIgual("[BOTÕES] Cavar escolhe a ferramenta e fica aria-pressed", ferramenta + " " + pressionado("cavar") + "/" + pressionado("erguer"), "cavar true/false");
+            clicarEAnotar("aplicar");
+            conferirIgual("[BOTÕES] Aplicar cava (4, 3): altura 1 → 0, estoque 2, jogadas 1", alturas[3][4] + "/" + estadoAtual.blocos + "/" + jogadas, "0/2/1");
+            clicarEAnotar("desfazer");
+            conferirIgual("[BOTÕES] Desfazer devolve a altura 1, o estoque 1 e a jogada: 0", alturas[3][4] + "/" + estadoAtual.blocos + "/" + jogadas, "1/1/0");
+            clicarEAnotar("escolherErguer");
+            conferirIgual("[BOTÕES] Erguer escolhe a ferramenta e fica aria-pressed", ferramenta + " " + pressionado("erguer") + "/" + pressionado("cavar"), "erguer true/false");
+            clicarEAnotar("aplicar");
+            conferirIgual("[BOTÕES] Aplicar ergue (4, 3): altura 1 → 2, estoque 0, jogadas 1", alturas[3][4] + "/" + estadoAtual.blocos + "/" + jogadas, "2/0/1");
+            clicarEAnotar("reiniciar");
+            conferirIgual("[BOTÕES] Refazer volta ao terreno do dia, ao estoque e a 0 jogadas", primeiraDiferenca(alturas, alturasDoTexto(DIAS[0])) + "/" + estadoAtual.blocos + "/" + jogadas, "/1/0");
+            clicarEAnotar("avancar");
+            conferirIgual("[BOTÕES] Maré libera a maré (mare/enchente)", fase + "/" + faseDaMare, "mare/enchente");
+            esperarAMare();
+            desenharVerdadeiro();
+            conferirIgual("[BOTÕES] o dia 1 sem jogar acaba perdido, e o botão segue dizendo Maré", fase + "/" + botaoDaMare.textContent, "fim/Maré");
+            clicarEAnotar("avancar");
+            conferirIgual("[BOTÕES] Maré num dia perdido não troca de dia", indiceDoDia, 0);
+            clicarEAnotar("reiniciar");
+            conferirIgual("[BOTÕES] Refazer recomeça o dia perdido", fase + "/" + jogadas, "ler/0");
+            cursor = { x: 3, y: 6 };
+            clicarEAnotar("aplicar");
+            clicarEAnotar("avancar");
+            esperarAMare();
+            desenharVerdadeiro();
+            conferirIgual("[BOTÕES] o dia 1 vencido: o botão diz Próximo", fase + "/" + botaoDaMare.textContent, "fim/Próximo");
+            clicarEAnotar("avancar");
+            conferirIgual("[BOTÕES] Próximo abre o dia 2", indiceDoDia + "/" + fase, "1/ler");
+            prepararDia(4);
+            clicarEAnotar("avancar");
+            esperarAMare();
+            desenharVerdadeiro();
+            conferirIgual("[BOTÕES] no dia 5, depois da 1ª maré o botão diz Seguir", fase + "/" + botaoDaMare.textContent, "contar/Seguir");
+            clicarEAnotar("avancar");
+            desenharVerdadeiro();
+            conferirIgual("[BOTÕES] Seguir chama a ficha 2 e o botão volta a dizer Maré", indiceDaMare + "/" + fase + "/" + botaoDaMare.textContent, "1/ler/Maré");
+            prepararDia(0);
+
+            semearSorteio(4403);
+            const partidas = [{ x: 0, y: 0 }, { x: 9, y: 9 }, { x: 0, y: 9 }, { x: 9, y: 0 }];
+            for (let i = 0; i < 16; i++) partidas.push({ x: sorteio(TAMANHO), y: sorteio(TAMANHO) });
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, paradas = 0, continuouMarcada = 0;
+                partidas.forEach(function (partida) {
+                    SETAS_DA_TELA.forEach(function (seta) {
+                        cursor = { x: partida.x, y: partida.y };
+                        marcada = true;
+                        clicarEAnotar(seta[0]);
+                        const centro = girarComTamanho(partida.x + 0.5, partida.y + 0.5, giro, TAMANHO);
+                        const alvo = casaDoCentroGiradoNoApoio(centro[0] + seta[1], centro[1] + seta[2], giro, TAMANHO);
+                        if (!alvo) paradas++;
+                        const esperada = alvo || partida;
+                        if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                            erros++;
+                            if (primeiro === null) primeiro = seta[0] + " a partir de (" + partida.x + "," + partida.y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                        }
+                        if (marcada) continuouMarcada++;
+                    });
+                });
+                conferir("[BOTÕES] giro " + giro * 90 + "°: " + partidas.length * 4 + " cliques nas setas andam uma casa pela tela (ou ficam na borda: " + paradas + ")", erros === 0 && paradas > 0, primeiro);
+                conferirIgual("[BOTÕES] giro " + giro * 90 + "°: mexer o cursor desmarca", continuouMarcada, 0);
+            });
+
+            clicarEAnotar("girarDireita");
+            conferirIgual("[BOTÕES] ⟳ gira 90°", rotacao, 1);
+            clicarEAnotar("girarEsquerda");
+            clicarEAnotar("girarEsquerda");
+            conferirIgual("[BOTÕES] ⟲ duas vezes: 270°", rotacao, 3);
+            irParaOGiro(0);
+            clicarEAnotar("aproximar");
+            conferirIgual("[BOTÕES] Perto aproxima", camera.zoom, 1.5);
+            clicarEAnotar("afastar");
+            conferirIgual("[BOTÕES] Longe afasta", camera.zoom, 1);
+            clicarEAnotar("alternarVer");
+            conferirIgual("[BOTÕES] Ver liga o H", depuracaoLigada, true);
+            clicarEAnotar("alternarVer");
+            conferirIgual("[BOTÕES] e outro clique desliga", depuracaoLigada, false);
+
+            conferirIgual("[BOTÕES] nenhum botão ficou sem teste: as ações da página = as clicadas", acoesDosBotoes().sort().join(" "), Array.from(clicadas).sort().join(" "));
+            prepararDia(0);
+        });
+
+        function clicar(acao) {
+            return clicarNoBotao(acao);
+        }
+
+        testar("[FIM] sem erro de console e com o jogo e os dados como estavam", function () {
+            prepararDia(0);
+            conferirIgual("[FIM] a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("[FIM] nenhum console.error sobrou além dos esperados", errosDeConsole.join(" | "), "");
+            conferirIgual("[FIM] DIAS não foi editado (nem o robô, nem os defeitos plantados em cópias)", JSON.stringify(DIAS), DIAS_ORIGINAIS);
+            conferirIgual("[FIM] o giro final é 0 e a câmera é a inicial", rotacao + "/" + camera.zoom + "/" + camera.desvioX + "/" + camera.desvioY, "0/1/0/0");
+            conferir("[FIM] o laço segue vivo", avancarQuadro(16));
+        });
+
+        finalizar();
+    </script>
+</body>
+
+</html>

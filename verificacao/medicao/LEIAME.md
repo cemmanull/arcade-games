@@ -74,6 +74,8 @@ em cerca de 16,7 ms. "JS do jogo" é a lógica; "desenho (CPU)" é o tempo que o
 desenhar (a placa de vídeo termina depois, por isso o **fps** e o intervalo entre quadros são o número que
 manda). No Dique, "JS do jogo" é a lógica (as máquinas de estados e a água, quase nada) e "desenho (CPU)" é a ilha, a água, os rótulos e o H; o texto traz o dia, a maré e quantas casas de terra tinham água. No Reflexo o jogo não separa lógica de desenho: sai uma linha só, "tempo do jogo (atualizar + desenhar, CPU)",
 que inclui o envio da imagem ao canvas, e o texto traz o que o robô viu (receptores acesos, sombras vivas, toques). O modo de teste do desenvolvedor (`?quadros=60&aquecimento=10&auto=1` no fim do endereço) mede
-poucos quadros e começa sozinho.
+poucos quadros e começa sozinho. Antes de pedir uma medição, `node verificacao/medicao/conferir.mjs` abre as três páginas assim no
+Chrome headless e falha se faltar no esqueleto um `id` ou `data-acao` que o passo procura, se houver erro de console ou se a medição
+não terminar (o Proa Acesa precisa de internet).
 
 **O que se mediu antes:** [GDD do Proa Acesa, §9](../../proa-acesa/proa-acesa_gdd.md) · **Passos medidos:** [Proa Acesa, passo 8](../../proa-acesa/08-depuracao/GUIA.md) · [Reflexo, passo 8](../../reflexo/08-sombras/GUIA.md) · [Dique, passo 8](../../dique/08-celular/GUIA.md) · **Verificação:** [README](../README.md)
