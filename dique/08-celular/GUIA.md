@@ -157,7 +157,7 @@ No computador de desenvolvimento, em Chrome sem placa de vídeo, o desenho custo
 6. Tire `min-height: 48px` do `button` e olhe a página em 360 de largura. Que botões ficam pequenos? (A página de teste os pegaria.)
 7. Abra `verificacao/medicao/dique-08.html` no computador e aperte **Medir**. Qual cenário custa mais? Por quê (conte as casas com água e o H)?
 8. Com o jogo aberto, ligue e desligue "reduzir animações" no sistema (no Chrome, o painel Rendering do DevTools emula isso). O Calmo acompanha? E depois que você toca no Calmo?
-9. No dia 10, jogue só tocando, sem teclado, e erga o centro, (4, 4). Em que giro o toque o acerta? Chegue a ele pelos botões de seta (o que o aviso diz?) e toque **Aplicar**.
+9. No dia 10, jogue só tocando, sem teclado, e erga o centro, (4, 4). Toque onde ele estaria, em cada giro: que bloco o toque marca? Depois chegue a ele pelos botões de seta (o que o aviso diz?) e toque **Aplicar**.
 10. **Quebre de propósito:** em `avisar`, escreva também no `#resumo`. O leitor de tela fica falando? Por que o aviso é uma frase e o resumo, uma lista que só se reescreve quando muda?
 
 ---

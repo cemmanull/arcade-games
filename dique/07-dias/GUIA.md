@@ -144,7 +144,7 @@ Um robô que diz "tudo certo" para qualquer dia seria pior que não ter robô. A
 6. Escreva o **seu** dia 11: um mapa 10×10, uma ficha, uma meta. Antes de dar o `par`, rode o robô: ele acha um? Escreva o `par` que ele achou.
 7. Ponha uma nascente `N` no dia 1 (sem chuva) e chame `carregarDia(DIAS[0])`. O que aparece no console? O robô aceitaria o dia?
 8. Mude `ALCANCE_DAS_CANDIDATAS` para `9` (a ilha inteira) e rode o robô sobre os dez dias: o `par` de algum muda? E o número de estados? Depois ponha `0`: o `par` muda? Quanto cai a contagem? O que isso diz da poda de 2?
-9. No dia 10, sem girar a vista, tente tocar a brecha oeste, em (2, 5): o que o toque marca? Aperte **Q**, toque de novo e depois **H**. Por que o cursor de setas a alcança mesmo escondida? Agora o centro, (4, 4): dê a volta inteira com **Q** e procure um giro em que o dedo a acerte. Há algum? Chegue a ela só pelas setas: o que o aviso diz quando o cursor chega? Erga com **Enter**.
+9. No dia 10, sem girar a vista, tente tocar a brecha oeste, em (2, 5): o que o toque marca? Aperte **Q**, toque de novo e depois **H**. Por que o cursor de setas a alcança mesmo escondida? Agora o centro, (4, 4): dê a volta inteira com **Q**, tocando onde ela estaria. Que bloco o toque marca em cada giro, e de que altura? Chegue a ela só pelas setas: o que o aviso diz quando o cursor chega? Erga com **Enter**.
 10. **Quebre de propósito:** em `haPlano`, comente a linha que consulta a `memoria`. O `par` muda? E o número de estados do dia 5?
 
 ---
