@@ -580,12 +580,13 @@
         // ------------------------------------------------------------
         // O passo inteiro em iframes (apoio-dique.js): teclado, movimento reduzido e layout
         // ------------------------------------------------------------
-        function sistemaFalso(pedeMenosMovimento) {       // troca o matchMedia ANTES do script do passo: `matches` e o disparo do evento `change` à mão
+        function sistemaFalso(pedeMenosMovimento, comoSafariAntigo) {       // troca o matchMedia ANTES do script do passo: `matches` e o disparo do evento `change` à mão; o Safari antes do 14 só tem addListener
             return "(function () {"
                 + " var ouvintes = [], sistema = { reduz: " + pedeMenosMovimento + " };"
                 + " window.matchMedia = function (consulta) {"
                 + "   var ehMovimento = /reduce/.test(consulta);"
                 + "   var lista = { media: consulta, onchange: null, addEventListener: function (tipo, funcao) { if (ehMovimento && tipo === 'change') ouvintes.push(funcao); }, removeEventListener: function () {}, addListener: function (funcao) { if (ehMovimento) ouvintes.push(funcao); }, removeListener: function () {} };"
+                + (comoSafariAntigo ? "   delete lista.addEventListener; delete lista.removeEventListener;" : "")
                 + "   Object.defineProperty(lista, 'matches', { get: function () { return ehMovimento && sistema.reduz; } });"
                 + "   return lista;"
                 + " };"
@@ -676,6 +677,18 @@
                 conferirIgual("e o sistema segue sem mandar", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "false false");
             } finally {
                 quadroC.remove();
+            }
+
+            const quadroD = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, sistemaFalso(true, true), 390, 750);
+            try {
+                const janela = quadroD.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const botao = documento.querySelector('[data-acao="alternarMovimento"]');
+                conferirIgual("Safari antes do 14 (matchMedia sem addEventListener): o jogo abre mesmo assim, com o movimento reduzido do sistema e o botão ligado",
+                    ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "true true");
+                documento.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "o", bubbles: true }));
+                conferirIgual("e o teclado, registrado depois do ouvinte do sistema, também: O desliga o movimento reduzido", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "false false");
+            } finally {
+                quadroD.remove();
             }
         }
 

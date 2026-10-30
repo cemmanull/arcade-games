@@ -55,8 +55,7 @@ Antes do passo 8 só valia `prefers-reduced-motion`, que o jogador não controla
 
 ```js
 const pedidoDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)");
-const preferenciaDoSistema = pedidoDoSistema.matches;
-let movimentoReduzido = preferenciaDoSistema;       // o botão Calmo (ou a tecla O) a troca
+let movimentoReduzido = pedidoDoSistema.matches;   // o botão Calmo (ou a tecla O) a troca
 
 function definirMovimento(reduzido) {
     movimentoReduzido = reduzido;
@@ -65,7 +64,7 @@ function definirMovimento(reduzido) {
 }
 ```
 
-Ligado, o jogo muda **quatro coisas**, todas já lendo `movimentoReduzido`: a onda de alfa da água fica parada, a chuva não cai, o filme da maré não corre (`atualizar` retorna antes dele) e **M** (ou o botão Maré) dá **um passo** da água por toque, como no GDD §7. O botão é um `aria-pressed`, então o leitor diz "Calmo, ativado". O sistema pode mudar de ideia com o jogo aberto: `pedidoDoSistema.addEventListener("change", …)` chama `definirMovimento` de novo, **até o jogador tocar no Calmo**; depois disso a escolha dele manda mais que a do sistema. A escolha **não é guardada** ao recarregar: o recorde e as opções, com `localStorage`, são do `final`.
+Ligado, o jogo muda **quatro coisas**, todas já lendo `movimentoReduzido`: a onda de alfa da água fica parada, a chuva não cai, o filme da maré não corre (`atualizar` retorna antes dele) e **M** (ou o botão Maré) dá **um passo** da água por toque, como no GDD §7. O botão é um `aria-pressed`, então o leitor diz "Calmo, ativado". O sistema pode mudar de ideia com o jogo aberto: `pedidoDoSistema.addEventListener("change", …)` chama `definirMovimento` de novo (e o aviso diz o que mudou, porque a maré passa a andar de outro jeito), **até o jogador tocar no Calmo**; depois disso a escolha dele manda mais que a do sistema. O `if (pedidoDoSistema.addEventListener)` protege o Safari antes do 14, que não tem esse método: lá o jogo só lê a preferência na carga, em vez de parar com erro. A escolha **não é guardada** ao recarregar: o recorde e as opções, com `localStorage`, são do `final`.
 
 ---
 

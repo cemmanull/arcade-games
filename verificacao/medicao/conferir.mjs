@@ -5,10 +5,10 @@
 //   2. ela carrega e mede (?auto=1&quadros=5&aquecimento=2) sem erro de console e entrega window.resultadoDaMedicao.
 // Uso: node verificacao/medicao/conferir.mjs [trecho do nome]   (sai com 1 se algo falhar)
 // O Proa Acesa baixa o three.js do CDN: sem internet, a página dele falha aqui e no celular.
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { comNavegadorDepuravel } from "../depuracao.mjs";
+import { comNavegadorDepuravel, comPaginaCarregada } from "../depuracao.mjs";
 import { encontrarNavegador, sleep } from "../navegador.mjs";
 
 const PAGINAS = [
@@ -17,6 +17,7 @@ const PAGINAS = [
     { pagina: "dique-08.html", passo: "dique/08-celular", cenarios: 2 },
 ];
 const ESPERA_PELA_MEDICAO_EM_SEGUNDOS = 60;
+const QUADROS_DA_CONFERENCIA = 5;        // quadros pedidos por cenário: um quadro lento (shader no SwiftShader) conta como pausa, não como falta
 
 const pastaDaMedicao = dirname(fileURLToPath(import.meta.url));
 const raiz = resolve(pastaDaMedicao, "..", "..");
@@ -24,7 +25,8 @@ const trecho = process.argv[2] || "";
 
 let falhou = false;
 for (const configuracao of PAGINAS.filter((item) => item.pagina.includes(trecho))) {
-    const falhas = [...faltasNoEsqueleto(configuracao), ...(await falhasAoMedir(configuracao))];
+    const existe = existsSync(join(pastaDaMedicao, configuracao.pagina));
+    const falhas = existe ? [...faltasNoEsqueleto(configuracao), ...(await falhasAoMedir(configuracao))] : ["a página não existe"];
     falhou ||= falhas.length > 0;
     console.log(falhas.length ? `FALHA  ${configuracao.pagina}\n  ${falhas.join("\n  ")}` : `PASS   ${configuracao.pagina}`);
 }
@@ -43,31 +45,29 @@ function faltasNoEsqueleto({ pagina, passo }) {
 }
 
 async function falhasAoMedir({ pagina, cenarios }) {
-    const endereco = pathToFileURL(join(pastaDaMedicao, pagina)).href + "?auto=1&quadros=5&aquecimento=2";
-    const erros = [];
-    const resultado = await comNavegadorDepuravel(encontrarNavegador(), async (conexao) => {
-        const { targetId } = await conexao.enviar("Target.createTarget", { url: "about:blank" });
-        const { sessionId } = await conexao.enviar("Target.attachToTarget", { targetId, flatten: true });
-        conexao.escutarSessao(sessionId, (evento) => {
-            if (evento.method === "Runtime.exceptionThrown") erros.push("exceção: " + (evento.params.exceptionDetails.exception?.description || evento.params.exceptionDetails.text));
-            if (evento.method === "Runtime.consoleAPICalled" && evento.params.type === "error") erros.push("console.error: " + evento.params.args.map((argumento) => argumento.value ?? argumento.description).join(" "));
-            if (evento.method === "Log.entryAdded" && evento.params.entry.level === "error") erros.push("log: " + evento.params.entry.text + " " + (evento.params.entry.url || ""));
-        });
-        for (const dominio of ["Runtime", "Log", "Page"]) await conexao.enviar(`${dominio}.enable`, {}, sessionId);
-        await conexao.enviar("Page.navigate", { url: endereco }, sessionId);
-        let lido = null;
-        for (let tentativa = 0; tentativa < ESPERA_PELA_MEDICAO_EM_SEGUNDOS * 2 && !lido; tentativa++) {
-            await sleep(500);
-            const { result } = await conexao.enviar("Runtime.evaluate", { expression: "window.resultadoDaMedicao ? JSON.stringify(window.resultadoDaMedicao.resultados.map(function (r) { return { nome: r.nome, quadros: r.quadros }; })) : ''", returnByValue: true }, sessionId);
-            lido = result.value || null;
-        }
-        await conexao.enviar("Target.closeTarget", { targetId }).catch(() => {});
-        return lido && JSON.parse(lido);
-    });
+    const endereco = new URL(pathToFileURL(join(pastaDaMedicao, pagina)).href + "?auto=1&quadros=" + QUADROS_DA_CONFERENCIA + "&aquecimento=2");
+    const { erros, carregou, resultado } = await comNavegadorDepuravel(encontrarNavegador(), (conexao) =>
+        comPaginaCarregada(conexao, endereco, null, async ({ sessionId, erros, carregou }) => ({
+            erros, carregou, resultado: carregou ? await esperarOResultado(conexao, sessionId) : null,
+        })));
 
-    const falhas = erros.map((erro) => "erro de console: " + erro);
+    const falhas = erros.map((erro) => "erro: " + erro);
+    if (!carregou) return falhas;
     if (!resultado) return [...falhas, `a medição não terminou em ${ESPERA_PELA_MEDICAO_EM_SEGUNDOS} s (window.resultadoDaMedicao não apareceu)`];
     if (resultado.length !== cenarios) falhas.push(`esperava ${cenarios} cenários, vieram ${resultado.length}`);
-    for (const cenario of resultado) if (!(cenario.quadros >= 5)) falhas.push(`o cenário "${cenario.nome}" mediu só ${cenario.quadros} quadros`);
+    for (const cenario of resultado) {
+        if (cenario.quadros + cenario.pausas < QUADROS_DA_CONFERENCIA || cenario.quadros < 1) falhas.push(`o cenário "${cenario.nome}" mediu ${cenario.quadros} quadros e ${cenario.pausas} pausas`);
+    }
     return falhas;
+}
+
+/* Pergunta à página até ela entregar o resultado; uma pergunta que cai no meio de uma navegação só conta como "ainda não". */
+async function esperarOResultado(conexao, sessionId) {
+    const pergunta = "window.resultadoDaMedicao ? JSON.stringify(window.resultadoDaMedicao.resultados.map(function (r) { return { nome: r.nome, quadros: r.quadros, pausas: r.pausas }; })) : ''";
+    for (let tentativa = 0; tentativa < ESPERA_PELA_MEDICAO_EM_SEGUNDOS * 2; tentativa++) {
+        const resposta = await conexao.enviar("Runtime.evaluate", { expression: pergunta, returnByValue: true }, sessionId).catch(() => null);
+        if (resposta?.result?.value) return JSON.parse(resposta.result.value);
+        await sleep(500);
+    }
+    return null;
 }

@@ -508,6 +508,18 @@
             conferir("[TETO] teto 0 ou ausente vale o teto padrão: o dia 1 certifica", semTeto.certificado && !semTeto.estourou, resumoDoRelatorio(semTeto));
         });
 
+        testar("[NÃO MEXE] as três listas das variáveis do dia batem: o que carregarDia escreve = o que certificarDia guarda = o que devolve = a lista desta página", function () {
+            const escritasPeloCarregar = Array.from(carregarDia.toString().matchAll(/^\s+(\w+) = /gm), function (achado) { return achado[1]; });
+            const listasDoRobo = Array.from(certificarDia.toString().matchAll(/\[(diaCarregado, [\w, ]+)\]/g), function (achado) { return achado[1].split(/,\s*/); });
+            conferirIgual("certificarDia tem duas listas (a que guarda e a que devolve)", listasDoRobo.length, 2);
+            const ordenada = function (lista) { return lista.slice().sort().join(" "); };
+            conferirIgual("carregarDia escreve as mesmas variáveis que a página confere", ordenada(escritasPeloCarregar), ordenada(NOMES_DAS_VARIAVEIS_DO_ROBO));
+            listasDoRobo.forEach(function (lista, indice) {
+                conferirIgual((indice === 0 ? "a lista que o robô guarda" : "a lista que o robô devolve") + " é a de carregarDia, na mesma ordem nas duas", lista.join(" "), listasDoRobo[0].join(" "));
+                conferirIgual((indice === 0 ? "a lista que o robô guarda" : "a lista que o robô devolve") + " tem as variáveis de carregarDia", ordenada(lista), ordenada(escritasPeloCarregar));
+            });
+        });
+
         testar("[NÃO MEXE] o robô deixa o jogo exatamente como estava: no meio de uma partida, com tetos estourados, com dia inválido, e a partida segue igual", function () {
             montarPartidaNoMeio();
             const antesDaFoto = fotoDoJogo();

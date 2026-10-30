@@ -13,8 +13,7 @@ const tabua = document.getElementById("tabua");
 const botaoDaMare = document.querySelector('[data-acao="avancar"]');
 const COR_DA_ALTURA = ["#d9c27a", "#7fb069", "#4f8a4c", "#8d8d8d", "#d0d4d8"];
 const NOME_DA_FACE = { topo: "topo", esquerda: "lateral esquerda", direita: "lateral direita" };
-const pedidoDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)");
-const preferenciaDoSistema = pedidoDoSistema.matches;     // o sistema pede menos movimento; o botão Calmo (ou a tecla O) pede também
+const pedidoDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)");     // o sistema pede menos movimento (.matches); o botão Calmo (ou a tecla O) pede também
 const SETAS = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };     // direções da tela
 const ARESTAS_DO_LOSANGO = [[0, -1], [1, 0], [0, 1], [-1, 0]];      // a vizinha que cada aresta (cima→direita, direita→baixo…) separa
 const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
@@ -51,7 +50,7 @@ let dedo = null;                                // o ponteiro apertado: { id, in
 let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
 let instanteDaRoda = 0;                         // quando veio o último evento da roda
 let jogadorEscolheuMovimento = false;           // depois do primeiro toque no Calmo, a escolha do jogador manda mais que a do sistema
-let movimentoReduzido = preferenciaDoSistema;   // sem ondas, sem chuva em queda, e a maré anda um passo por toque
+let movimentoReduzido = pedidoDoSistema.matches;     // sem ondas, sem chuva em queda, e a maré anda um passo por toque
 let depuracaoLigada = false;
 let ultimoResumo = "";                          // o texto do resumo de agora: o DOM só muda quando ele muda
 let ultimoTempoDeAtualizacao = 0, ultimoTempoDeDesenho = 0, ultimoTempoDeQuadro = 0;     // ms do último quadro (a medição de celular lê estes)
@@ -335,7 +334,7 @@ function pixelDoEvento(evento) {                // do pixel da página para o pi
     return { x: (evento.clientX - caixa.left) * tela.width / caixa.width, y: (evento.clientY - caixa.top) * tela.height / caixa.height };
 }
 
-pedidoDoSistema.addEventListener("change", function (evento) {      // o sistema mudou com o jogo aberto
+if (pedidoDoSistema.addEventListener) pedidoDoSistema.addEventListener("change", function (evento) {      // o sistema mudou com o jogo aberto (Safari antes do 14 não avisa: lá o jogo só lê na carga)
     if (!jogadorEscolheuMovimento) definirMovimento(evento.matches);
 });
 document.addEventListener("keydown", function (evento) {
@@ -618,7 +617,7 @@ function quadroAQuadro(instanteAtual) {
 
 pincel.font = "bold 11px monospace"; pincel.textAlign = "center"; pincel.textBaseline = "middle";
 if (MAPA_VALIDO) {
-    definirMovimento(preferenciaDoSistema);     // põe o botão e o aviso de acordo com o sistema
+    definirMovimento(pedidoDoSistema.matches);  // põe o botão e o aviso de acordo com o sistema
     iniciarDia(0);                              // o primeiro dia começa: ficha 0, estoque vazio mais os blocos dela
     requestAnimationFrame(quadroAQuadro);
 }
