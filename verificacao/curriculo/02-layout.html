@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Currículo, passo 2: o layout</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Currículo, passo 2: o layout</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-curriculo.js"></script>
+
+    <!-- O index.html do passo, copiado por espelho.mjs (por file:// a página não consegue lê-lo). O CSS é o de verdade. -->
+    <script>
+    // ESPELHO:inicio — gerado por node verificacao/curriculo/espelho.mjs a partir de curriculo/02-layout/. Não edite à mão.
+    const ESPELHO_DO_INDEX = [
+        "<\!--",
+        "  CURRÍCULO — PASSO 2: O LAYOUT",
+        "",
+        "  A mesma página do passo 1, agora com layout: começa pensado para o celular (390 px) e cresce até 1280 px.",
+        "  Estique e encolha a janela: o menu quebra de linha e os cartões passam de 1 coluna para várias.",
+        "  O HTML ganhou só três classes: habilidades, projetos e cartao. Todos os dados são fictícios.",
+        "-->",
+        "<!DOCTYPE html>",
+        "<html lang=\"pt-BR\">",
+        "",
+        "<head>",
+        "    <meta charset=\"UTF-8\">",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        "    <title>Alex Exemplo — Programação web e game design<\/title>",
+        "    <link rel=\"stylesheet\" href=\"style.css\">",
+        "<\/head>",
+        "",
+        "<body>",
+        "    <a class=\"pular\" href=\"#principal\">Pular para o conteúdo<\/a>",
+        "",
+        "    <header>",
+        "        <h1>Alex Exemplo<\/h1>",
+        "        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.<\/p>",
+        "",
+        "        <nav aria-label=\"Seções do currículo\">",
+        "            <ul>",
+        "                <li><a href=\"#habilidades\">Habilidades<\/a><\/li>",
+        "                <li><a href=\"#projetos\">Projetos<\/a><\/li>",
+        "                <li><a href=\"#contato\">Contato<\/a><\/li>",
+        "            <\/ul>",
+        "        <\/nav>",
+        "    <\/header>",
+        "",
+        "    <main id=\"principal\">",
+        "        <section id=\"habilidades\" aria-labelledby=\"titulo-habilidades\">",
+        "            <h2 id=\"titulo-habilidades\">Habilidades<\/h2>",
+        "            <p>Cada habilidade vem com a prova: um projeto que a usa.<\/p>",
+        "            <ul class=\"habilidades\">",
+        "                <li><strong>HTML semântico, CSS responsivo e acessibilidade.<\/strong> Prova: esta própria página.<\/li>",
+        "                <li><strong>Canvas e laço de jogo.<\/strong> Prova: <a href=\"#projeto-cobrinha\">Jogo da Cobrinha<\/a>.<\/li>",
+        "                <li><strong>Matrizes e rotação de peças.<\/strong> Prova: <a href=\"#projeto-tetris\">Tetris<\/a>.<\/li>",
+        "                <li><strong>Regras e algoritmos de busca.<\/strong> Prova: <a href=\"#projeto-xadrez\">Xadrez<\/a>.<\/li>",
+        "                <li><strong>Dados separados do código.<\/strong> Prova: <a href=\"#projeto-xenomorph\">Xenomorph<\/a>.<\/li>",
+        "            <\/ul>",
+        "        <\/section>",
+        "",
+        "        <section id=\"projetos\" aria-labelledby=\"titulo-projetos\">",
+        "            <h2 id=\"titulo-projetos\">Projetos<\/h2>",
+        "",
+        "            <div class=\"projetos\">",
+        "                <article class=\"cartao\" id=\"projeto-cobrinha\">",
+        "                    <h3>Jogo da Cobrinha<\/h3>",
+        "                    <p>A cobra clássica em canvas: anda numa grade, cresce ao comer e acaba quando bate.<\/p>",
+        "                    <p><a href=\"../../jogo-da-cobrinha/final/index.html\">Abrir o Jogo da Cobrinha<\/a><\/p>",
+        "                <\/article>",
+        "",
+        "                <article class=\"cartao\" id=\"projeto-tetris\">",
+        "                    <h3>Tetris<\/h3>",
+        "                    <p>Peças que giram e travam num poço, linhas que somem, níveis, som e botões de toque.<\/p>",
+        "                    <p><a href=\"../../tetris/final/index.html\">Abrir o Tetris<\/a><\/p>",
+        "                <\/article>",
+        "",
+        "                <article class=\"cartao\" id=\"projeto-xadrez\">",
+        "                    <h3>Xadrez<\/h3>",
+        "                    <p>Tabuleiro feito de elementos HTML, com todas as regras e um computador que joga contra você.<\/p>",
+        "                    <p><a href=\"../../xadrez/final/index.html\">Abrir o Xadrez<\/a><\/p>",
+        "                <\/article>",
+        "",
+        "                <article class=\"cartao\" id=\"projeto-xenomorph\">",
+        "                    <h3>Xenomorph<\/h3>",
+        "                    <p>Jogo de plataforma com criaturas, armas e campanha salva no navegador, tudo descrito em fichas.<\/p>",
+        "                    <p><a href=\"../../xenomorph/final/index.html\">Abrir o Xenomorph<\/a><\/p>",
+        "                <\/article>",
+        "            <\/div>",
+        "        <\/section>",
+        "",
+        "        <section id=\"contato\" aria-labelledby=\"titulo-contato\">",
+        "            <h2 id=\"titulo-contato\">Contato<\/h2>",
+        "            <p>E-mail: <a href=\"mailto:alex@exemplo.invalid\">alex@exemplo.invalid<\/a><\/p>",
+        "            <p>Cidade Exemplo, UF<\/p>",
+        "        <\/section>",
+        "    <\/main>",
+        "",
+        "    <footer>",
+        "        <p>Feito seguindo o curso <a href=\"https://github.com/cemmanull/arcade-games\">Do zero ao jogo<\/a>. Dados fictícios.<\/p>",
+        "    <\/footer>",
+        "<\/body>",
+        "",
+        "<\/html>",
+        ""
+    ].join("\n");
+    // ESPELHO:fim
+    </script>
+
+    <script>
+        const PASSO = "02-layout";
+        async function principal() {
+            vigiarOFim(60);
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX, { largura: 390, altura: 750 });
+            const janela = quadro.contentWindow, documento = janela.document;
+            const cartoes = Array.from(documento.querySelectorAll(".cartao"));
+
+            testar("preparação: o passo carregou com o CSS de verdade", function () {
+                conferirIgual("o iframe tem 390 px", janela.innerWidth, 390);
+                conferirIgual("são 4 cartões de projeto", cartoes.length, 4);
+                conferirIgual("o CSS foi aplicado: o corpo usa a fonte do passo (system-ui)", janela.getComputedStyle(documento.body).fontFamily.indexOf("system-ui") >= 0, true);
+                const viewport = documento.querySelector('meta[name="viewport"]');
+                conferir("a meta viewport pede width=device-width (sem ela o celular desenha em 980 px)", viewport !== null && /width=device-width/.test(viewport.content));
+            });
+
+            await testarAssincrono("sem rolagem horizontal em 360, 390 e 1280 (e em 320 e 640, o reflow de 400% e 200% de zoom)", async function () {
+                for (const largura of [360, 390, 1280, 320, 640]) {
+                    await mudarTamanho(quadro, largura);
+                    conferirIgual(largura + ": a janela do iframe tem " + largura + " px", janela.innerWidth, largura);
+                    conferirSemRolagemHorizontal(quadro, "passo 2");
+                    conferir(largura + ": todo cartão cabe na janela", cartoes.every(function (cartao) { const caixa = cartao.getBoundingClientRect(); return caixa.left >= -0.5 && caixa.right <= documento.documentElement.clientWidth + 0.5; }));
+                }
+            });
+
+            await testarAssincrono("grade de projetos: 1 coluna em 390 (e 360), 2 ou mais em 1280", async function () {
+                for (const largura of [360, 390, 1280]) {
+                    await mudarTamanho(quadro, largura);
+                    const colunasDaRegra = colunasDaGrade(documento, ".projetos");
+                    const colunasNaTela = colunasVisiveis(cartoes);
+                    const habilidades = Array.from(documento.querySelectorAll(".habilidades li"));
+                    if (largura < 768) {
+                        conferirIgual(largura + ": a grade tem 1 coluna (grid-template-columns)", colunasDaRegra, 1);
+                        conferirIgual(largura + ": e os cartões ficam empilhados (posições à esquerda diferentes)", colunasNaTela, 1);
+                        conferirIgual(largura + ": as habilidades também", colunasVisiveis(habilidades), 1);
+                    } else {
+                        conferir(largura + ": a grade tem 2 ou mais colunas (" + colunasDaRegra + ")", colunasDaRegra >= 2);
+                        conferir(largura + ": e os cartões aparecem lado a lado (" + colunasNaTela + " posições à esquerda)", colunasNaTela >= 2);
+                        conferir(largura + ": as habilidades também (" + colunasVisiveis(habilidades) + ")", colunasVisiveis(habilidades) >= 2);
+                    }
+                    const alturaDeCadaCartao = cartoes.map(function (cartao) { return Math.round(cartao.getBoundingClientRect().height); });
+                    conferir(largura + ": nenhum cartão fica com altura 0 (" + alturaDeCadaCartao.join(",") + ")", alturaDeCadaCartao.every(function (altura) { return altura > 40; }));
+                }
+            });
+
+            await testarAssincrono("o cabeçalho: menu abaixo do título no celular, ao lado dele no desktop", async function () {
+                const titulo = documento.querySelector("h1"), menu = documento.querySelector("nav");
+                await mudarTamanho(quadro, 390);
+                conferir("390: o menu começa abaixo do título", menu.getBoundingClientRect().top >= titulo.getBoundingClientRect().bottom - 0.5);
+                await mudarTamanho(quadro, 1280);
+                conferir("1280: o menu fica à direita do título", menu.getBoundingClientRect().left >= titulo.getBoundingClientRect().left + 100);
+                conferir("1280: e na mesma faixa vertical dele", menu.getBoundingClientRect().top < titulo.getBoundingClientRect().bottom);
+            });
+
+            await testarAssincrono("alvos de toque de pelo menos 48 px em 360 e 390 (a regra começa no passo 2)", async function () {
+                for (const largura of [360, 390]) {
+                    await mudarTamanho(quadro, largura);
+                    const alvos = alvosDeToque(documento);
+                    conferir(largura + ": " + alvos.length + " alvos conferidos (menu, projetos e contato)", alvos.length >= 8);
+                    conferirIgual(largura + ": alvos com menos de 48 px", alvosPequenos(documento).join(" | "), "");
+                }
+                const links = Array.from(documento.querySelectorAll("nav a"));
+                conferir("os alvos do menu não se tocam (há espaço entre eles)", links.every(function (link, i) { return i === 0 || link.getBoundingClientRect().left >= links[i - 1].getBoundingClientRect().right || link.getBoundingClientRect().top >= links[i - 1].getBoundingClientRect().bottom; }));
+                const pular = documento.querySelector(".pular");
+                pular.focus();
+                conferir("o link 'Pular' tem 48 px de altura quando aparece (" + Math.round(pular.getBoundingClientRect().height) + ")", pular.getBoundingClientRect().height >= ALTURA_MINIMA_DO_ALVO);
+                pular.blur();
+            });
+
+            await testarAssincrono("a conferência de alvos não é vazia: ela enxerga um link pequeno", async function () {
+                await mudarTamanho(quadro, 390);
+                const intruso = documento.createElement("a");
+                intruso.href = "#principal";
+                intruso.textContent = "Pequeno";
+                intruso.style.cssText = "display:block;height:20px;min-height:0;width:60px";
+                documento.querySelector("#contato").appendChild(intruso);
+                conferir("um link de 20 px de altura entra na lista de alvos pequenos", alvosPequenos(documento).length === 1, alvosPequenos(documento).join("|"));
+                intruso.remove();
+            });
+
+            testar("sem erro nem JavaScript no passo 2", function () {
+                conferirIgual("nenhum erro não tratado", janela.__erros.join(" | "), "");
+                conferirIgual("nenhum erro de console", janela.__consoleErros.join(" | "), "");
+            });
+
+            quadro.remove();
+            finalizar();
+        }
+
+        principal();
+    </script>
+</body>
+
+</html>

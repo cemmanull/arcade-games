@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Currículo, passo 4: amostras</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Currículo, passo 4: amostras</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-curriculo.js"></script>
+
+    <!-- O index.html do passo, copiado por espelho.mjs (por file:// a página não consegue lê-lo). O CSS e o JS são os de verdade. -->
+    <script>
+    // ESPELHO:inicio — gerado por node verificacao/curriculo/espelho.mjs a partir de curriculo/04-amostras/. Não edite à mão.
+    const ESPELHO_DO_INDEX = [
+        "<\!--",
+        "  CURRÍCULO — PASSO 4: AMOSTRAS",
+        "",
+        "  O HTML é o do passo 3. Os cartões, desenhados a partir de projetos.js, ganham um selo (\"abre sem internet\"),",
+        "  um trecho do código do jogo e, nos projetos com jogarAqui: true, um botão que carrega o jogo ao clicar.",
+        "  Todos os dados são fictícios.",
+        "-->",
+        "<!DOCTYPE html>",
+        "<html lang=\"pt-BR\">",
+        "",
+        "<head>",
+        "    <meta charset=\"UTF-8\">",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        "    <title>Alex Exemplo — Programação web e game design<\/title>",
+        "    <link rel=\"stylesheet\" href=\"style.css\">",
+        "    <\script src=\"projetos.js\" defer><\/script>",
+        "    <\script src=\"script.js\" defer><\/script>",
+        "<\/head>",
+        "",
+        "<body>",
+        "    <a class=\"pular\" href=\"#principal\">Pular para o conteúdo<\/a>",
+        "",
+        "    <header>",
+        "        <h1>Alex Exemplo<\/h1>",
+        "        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.<\/p>",
+        "",
+        "        <nav aria-label=\"Seções do currículo\">",
+        "            <ul>",
+        "                <li><a href=\"#habilidades\">Habilidades<\/a><\/li>",
+        "                <li><a href=\"#projetos\">Projetos<\/a><\/li>",
+        "                <li><a href=\"#contato\">Contato<\/a><\/li>",
+        "            <\/ul>",
+        "        <\/nav>",
+        "    <\/header>",
+        "",
+        "    <main id=\"principal\">",
+        "        <section id=\"habilidades\" aria-labelledby=\"titulo-habilidades\">",
+        "            <h2 id=\"titulo-habilidades\">Habilidades<\/h2>",
+        "            <p>Cada habilidade vem com a prova: um projeto que a usa.<\/p>",
+        "            <ul class=\"habilidades\">",
+        "                <li><strong>HTML semântico, CSS responsivo e acessibilidade.<\/strong> Prova: esta própria página.<\/li>",
+        "                <li><strong>Canvas e laço de jogo.<\/strong> Prova: <a href=\"#projeto-cobrinha\">Jogo da Cobrinha<\/a>.<\/li>",
+        "                <li><strong>Matrizes e rotação de peças.<\/strong> Prova: <a href=\"#projeto-tetris\">Tetris<\/a>.<\/li>",
+        "                <li><strong>Regras e algoritmos de busca.<\/strong> Prova: <a href=\"#projeto-xadrez\">Xadrez<\/a>.<\/li>",
+        "                <li><strong>Dados separados do código.<\/strong> Prova: <a href=\"#projeto-xenomorph\">Xenomorph<\/a>.<\/li>",
+        "            <\/ul>",
+        "        <\/section>",
+        "",
+        "        <section id=\"projetos\" aria-labelledby=\"titulo-projetos\">",
+        "            <h2 id=\"titulo-projetos\">Projetos<\/h2>",
+        "",
+        "            <div id=\"avisos\" role=\"alert\"><\/div>",
+        "            <div id=\"lista-projetos\" class=\"projetos\"><\/div>",
+        "        <\/section>",
+        "",
+        "        <section id=\"contato\" aria-labelledby=\"titulo-contato\">",
+        "            <h2 id=\"titulo-contato\">Contato<\/h2>",
+        "            <p>E-mail: <a href=\"mailto:alex@exemplo.invalid\">alex@exemplo.invalid<\/a><\/p>",
+        "            <p>Cidade Exemplo, UF<\/p>",
+        "        <\/section>",
+        "    <\/main>",
+        "",
+        "    <footer>",
+        "        <p>Feito seguindo o curso <a href=\"https://github.com/cemmanull/arcade-games\">Do zero ao jogo<\/a>. Dados fictícios.<\/p>",
+        "    <\/footer>",
+        "<\/body>",
+        "",
+        "<\/html>",
+        ""
+    ].join("\n");
+    // ESPELHO:fim
+    </script>
+
+    <script>
+        const PASSO = "04-amostras";
+
+        async function principal() {
+            vigiarOFim(90);
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+            const projetos = janela.eval("projetos");
+
+            testar("preparação: projetos.js e script.js de verdade rodaram no iframe", function () {
+                conferirIgual("4 projetos", projetos.length, 4);
+                conferirIgual("a carga não deu erro nem escreveu no console.error", janela.__erros.concat(janela.__consoleErros).join(" | "), "");
+                conferirCartoesIguaisAosDados(janela);
+            });
+
+            testar("imagens: toda <img> tem alt que diz o que o jogo é (ou alt vazio marcado como decorativo)", function () {
+                conferirImagensComAlt(documento);
+                conferirIgual("uma miniatura por cartão", documento.querySelectorAll(".cartao img").length, 4);
+            });
+
+            testar("a conferência de imagens não é vazia: ela acha alt ausente, vazio sem marca e 'captura de tela'", function () {
+                const sonda = documento.createElement("div");
+                sonda.innerHTML = '<img src="x.png"><img src="x.png" alt=""><img src="x.png" alt="" role="presentation"><img src="x.png" alt="Captura de tela do jogo"><img src="x.png" alt="Tetris: peças caem num poço">';
+                conferirIgual("das 5 imagens, 3 são ruins (sem alt, alt vazio sem marca, captura de tela)", imagensRuins(sonda).length, 3);
+            });
+
+            testar("os trechos de código são os do arquivo de verdade, linha por linha", function () {
+                conferirTrechosEsperados(janela);
+                conferirDestinosDosDados(janela, PASSO, true);
+            });
+
+            testar("cada cartão: selo de internet em texto, crédito do curso e trecho dentro de <details>", function () {
+                projetos.forEach(function (projeto) {
+                    const cartao = documento.getElementById("projeto-" + projeto.id);
+                    const selo = cartao.querySelector(".selo");
+                    conferirIgual(projeto.id + ": o selo diz em texto se precisa de internet", selo.textContent.indexOf(projeto.internet ? "Precisa de internet" : "Abre sem internet") >= 0, true);
+                    const credito = cartao.querySelector(".credito a");
+                    const enderecoDoCredito = credito === null ? "(sem link)" : credito.getAttribute("href");
+                    conferir(projeto.id + ": o crédito do curso é um link absoluto https:// (um caminho relativo quebra depois de publicar): " + enderecoDoCredito, /^https:\/\//.test(enderecoDoCredito));
+                    const detalhes = cartao.querySelector("details");
+                    conferir(projeto.id + ": o trecho está fechado até a pessoa abrir, com <summary>", detalhes !== null && detalhes.open === false && detalhes.querySelector("summary") !== null);
+                    conferirIgual(projeto.id + ": o arquivo e o que o trecho mostra aparecem em texto", detalhes.querySelector("p").textContent, projeto.oQueMostra + " Arquivo: " + projeto.arquivo + ".");
+                });
+            });
+
+            testar("a conferência dos dados rejeita cada defeito, inclusive trecho sem arquivo ou sem explicação", function () {
+                conferirValidadorDeProjetos(janela, true);
+            });
+
+            testar("trecho, explicação e arquivo também entram como texto (nada vira marcação)", function () {
+                const original = copiaDosProjetos(janela);
+                try {
+                    Object.assign(projetos[0], { trecho: "x = '<b>negrito</b>';\n<script>window.__xss=1<\/script>", oQueMostra: "Veja <i>isto</i>.", arquivo: "a/<u>b</u>.js" });
+                    janela.desenharProjetos();
+                    const cartao = documento.getElementById("projeto-" + projetos[0].id);
+                    conferirIgual("o <pre><code> mostra o trecho como texto", cartao.querySelector("pre code").textContent, projetos[0].trecho);
+                    conferirIgual("nenhum b, i, u nem script nasceu no cartão", cartao.querySelectorAll("b, i, u, script").length, 0);
+                    conferirIgual("e o script do trecho não rodou", janela.__xss, undefined);
+                    conferirIgual("o nome do arquivo no aria-label do bloco fica como texto", cartao.querySelector("pre").getAttribute("aria-label"), "Código de a/<u>b</u>.js");
+                } finally {
+                    projetos.forEach(function (projeto, posicao) { Object.assign(projeto, original[posicao]); });
+                    janela.desenharProjetos();
+                }
+            });
+
+            testar("dados inválidos mostram a mensagem em #avisos em vez de lançar erro", function () {
+                conferirDadosInvalidosViramAviso(janela);
+            });
+
+            testar("'Jogar aqui': nenhum iframe na carga, 1 depois do clique (com title e loading=lazy); Fechar e Esc o removem e devolvem o foco", function () {
+                conferirJogoSobDemanda(janela);
+            });
+
+            await testarAssincrono("layout com tudo aberto (trechos e um jogo): sem rolagem horizontal em 360, 390 e 1280", async function () {
+                documento.querySelectorAll("details").forEach(function (detalhes) { detalhes.open = true; });
+                projetos[0].jogarAqui = true;
+                janela.desenharProjetos();
+                documento.querySelectorAll("details").forEach(function (detalhes) { detalhes.open = true; });
+                documento.querySelector(".acoes button").click();
+                conferirIgual("um jogo aberto para a medida", documento.querySelectorAll("iframe").length, 1);
+
+                for (const largura of [360, 390, 1280]) {
+                    await mudarTamanho(quadro, largura);
+                    conferirSemRolagemHorizontal(quadro, "passo 4 com tudo aberto");
+                    const jogo = documento.querySelector("iframe").getBoundingClientRect();
+                    conferir(largura + ": o jogo cabe na largura da janela (" + Math.round(jogo.left) + " a " + Math.round(jogo.right) + ")", jogo.left >= 0 && jogo.right <= documento.documentElement.clientWidth + 0.5);
+                    conferir(largura + ": o quadro tem no máximo 390 px de largura e a proporção de um celular, 390×750 (" + Math.round(jogo.width) + "×" + Math.round(jogo.height) + ")", jogo.width <= 390.5 && Math.abs(jogo.height / jogo.width - 750 / 390) < 0.02);
+                    conferirIgual(largura + ": alvos com menos de 48 px", alvosPequenos(documento).join(" | "), "");
+                }
+                apertarTecla(janela, documento, "Escape");
+                projetos[0].jogarAqui = false;
+                janela.desenharProjetos();
+                conferirIgual("depois de fechar, nenhum iframe sobra", documento.querySelectorAll("iframe").length, 0);
+            });
+
+            await testarAssincrono("projetos.js com erro de execução (nome: Tetris sem aspas) ou de sintaxe: #avisos explica e a tecla Esc não quebra", async function () {
+                await conferirProjetosJsQuebrado(PASSO, ESPELHO_DO_INDEX, { tema: false, teclado: true });
+            });
+
+            testar("um keydown sem texto em `key` (preenchimento automático) não lança erro", function () {
+                conferirTeclaSemKey(janela);
+            });
+
+            testar("a inicial do bloco colorido é a primeira letra inteira, mesmo fora do plano básico do Unicode", function () {
+                conferirInicialDoBlocoColorido(janela);
+            });
+
+            testar("no fim: os dados e a tela estão como no começo, sem erro", function () {
+                conferirCartoesIguaisAosDados(janela);
+                conferirIgual("nenhum jogarAqui ligado", projetos.filter(function (projeto) { return projeto.jogarAqui; }).length, 0);
+            });
+
+            quadro.remove();
+            finalizar();
+        }
+
+        principal();
+    </script>
+</body>
+
+</html>

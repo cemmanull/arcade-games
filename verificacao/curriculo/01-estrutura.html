@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Currículo, passo 1: a estrutura</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Currículo, passo 1: a estrutura</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-curriculo.js"></script>
+
+    <!-- O index.html do passo, copiado por espelho.mjs (por file:// a página não consegue lê-lo). O CSS é o de verdade. -->
+    <script>
+    // ESPELHO:inicio — gerado por node verificacao/curriculo/espelho.mjs a partir de curriculo/01-estrutura/. Não edite à mão.
+    const ESPELHO_DO_INDEX = [
+        "<\!--",
+        "  CURRÍCULO — PASSO 1: A ESTRUTURA",
+        "",
+        "  Uma página de currículo só com HTML semântico: sem layout, sem JavaScript. A ordem é a que um recrutador lê",
+        "  em 30 segundos: quem é, o que sabe, o que já fez, como falar com a pessoa. Aperte Tab: o primeiro foco é o",
+        "  link \"Pular para o conteúdo\". Todos os dados são fictícios.",
+        "-->",
+        "<!DOCTYPE html>",
+        "<html lang=\"pt-BR\">",
+        "",
+        "<head>",
+        "    <meta charset=\"UTF-8\">",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        "    <title>Alex Exemplo — Programação web e game design<\/title>",
+        "    <link rel=\"stylesheet\" href=\"style.css\">",
+        "<\/head>",
+        "",
+        "<body>",
+        "    <a class=\"pular\" href=\"#principal\">Pular para o conteúdo<\/a>",
+        "",
+        "    <header>",
+        "        <h1>Alex Exemplo<\/h1>",
+        "        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.<\/p>",
+        "",
+        "        <nav aria-label=\"Seções do currículo\">",
+        "            <ul>",
+        "                <li><a href=\"#habilidades\">Habilidades<\/a><\/li>",
+        "                <li><a href=\"#projetos\">Projetos<\/a><\/li>",
+        "                <li><a href=\"#contato\">Contato<\/a><\/li>",
+        "            <\/ul>",
+        "        <\/nav>",
+        "    <\/header>",
+        "",
+        "    <main id=\"principal\">",
+        "        <section id=\"habilidades\" aria-labelledby=\"titulo-habilidades\">",
+        "            <h2 id=\"titulo-habilidades\">Habilidades<\/h2>",
+        "            <p>Cada habilidade vem com a prova: um projeto que a usa.<\/p>",
+        "            <ul>",
+        "                <li><strong>HTML semântico, CSS responsivo e acessibilidade.<\/strong> Prova: esta própria página.<\/li>",
+        "                <li><strong>Canvas e laço de jogo.<\/strong> Prova: <a href=\"#projeto-cobrinha\">Jogo da Cobrinha<\/a>.<\/li>",
+        "                <li><strong>Matrizes e rotação de peças.<\/strong> Prova: <a href=\"#projeto-tetris\">Tetris<\/a>.<\/li>",
+        "                <li><strong>Regras e algoritmos de busca.<\/strong> Prova: <a href=\"#projeto-xadrez\">Xadrez<\/a>.<\/li>",
+        "                <li><strong>Dados separados do código.<\/strong> Prova: <a href=\"#projeto-xenomorph\">Xenomorph<\/a>.<\/li>",
+        "            <\/ul>",
+        "        <\/section>",
+        "",
+        "        <section id=\"projetos\" aria-labelledby=\"titulo-projetos\">",
+        "            <h2 id=\"titulo-projetos\">Projetos<\/h2>",
+        "",
+        "            <article id=\"projeto-cobrinha\">",
+        "                <h3>Jogo da Cobrinha<\/h3>",
+        "                <p>A cobra clássica em canvas: anda numa grade, cresce ao comer e acaba quando bate.<\/p>",
+        "                <p><a href=\"../../jogo-da-cobrinha/final/index.html\">Abrir o Jogo da Cobrinha<\/a><\/p>",
+        "            <\/article>",
+        "",
+        "            <article id=\"projeto-tetris\">",
+        "                <h3>Tetris<\/h3>",
+        "                <p>Peças que giram e travam num poço, linhas que somem, níveis, som e botões de toque.<\/p>",
+        "                <p><a href=\"../../tetris/final/index.html\">Abrir o Tetris<\/a><\/p>",
+        "            <\/article>",
+        "",
+        "            <article id=\"projeto-xadrez\">",
+        "                <h3>Xadrez<\/h3>",
+        "                <p>Tabuleiro feito de elementos HTML, com todas as regras e um computador que joga contra você.<\/p>",
+        "                <p><a href=\"../../xadrez/final/index.html\">Abrir o Xadrez<\/a><\/p>",
+        "            <\/article>",
+        "",
+        "            <article id=\"projeto-xenomorph\">",
+        "                <h3>Xenomorph<\/h3>",
+        "                <p>Jogo de plataforma com criaturas, armas e campanha salva no navegador, tudo descrito em fichas.<\/p>",
+        "                <p><a href=\"../../xenomorph/final/index.html\">Abrir o Xenomorph<\/a><\/p>",
+        "            <\/article>",
+        "        <\/section>",
+        "",
+        "        <section id=\"contato\" aria-labelledby=\"titulo-contato\">",
+        "            <h2 id=\"titulo-contato\">Contato<\/h2>",
+        "            <p>E-mail: <a href=\"mailto:alex@exemplo.invalid\">alex@exemplo.invalid<\/a><\/p>",
+        "            <p>Cidade Exemplo, UF<\/p>",
+        "        <\/section>",
+        "    <\/main>",
+        "",
+        "    <footer>",
+        "        <p>Feito seguindo o curso <a href=\"https://github.com/cemmanull/arcade-games\">Do zero ao jogo<\/a>. Dados fictícios.<\/p>",
+        "    <\/footer>",
+        "<\/body>",
+        "",
+        "<\/html>",
+        ""
+    ].join("\n");
+    // ESPELHO:fim
+    </script>
+
+    <script>
+        const PASSO = "01-estrutura";
+
+        function marcosEmOrdem(documento) {
+            return Array.from(documento.querySelectorAll("header, nav, main, section, footer")).map(function (marco) { return marco.localName; });
+        }
+
+        async function principal() {
+            vigiarOFim(60);
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+
+            testar("a conferência de títulos não é vazia: ela enxerga os saltos", function () {
+                conferirIgual("h1, h2, h4 tem um salto", saltosDeTitulo([1, 2, 4]).length, 1);
+                conferirIgual("começar em h2 é um salto", saltosDeTitulo([2, 3]).length, 1);
+                conferirIgual("h1, h2, h3, h2, h3 não tem salto", saltosDeTitulo([1, 2, 3, 2, 3]).length, 0);
+                conferirIgual("descer vários níveis de uma vez (h3 → h1) é permitido", saltosDeTitulo([1, 2, 3, 1]).length, 0);
+            });
+
+            testar("títulos: um só h1 (o nome, no cabeçalho) e nenhum nível pulado", function () {
+                conferirIgual("exatamente 1 h1", documento.querySelectorAll("h1").length, 1);
+                conferir("o h1 está no header e tem texto", documento.querySelector("header > h1") !== null && documento.querySelector("h1").textContent.trim() !== "");
+                const niveis = niveisDosTitulos(documento);
+                conferir("os níveis (" + niveis.join(",") + ") nunca pulam", saltosDeTitulo(niveis).length === 0, saltosDeTitulo(niveis).join("; "));
+                conferirIgual("cada projeto (article) tem um h3 e só um", Array.from(documento.querySelectorAll("article")).every(function (cartao) { return cartao.querySelectorAll("h3").length === 1; }), true);
+                conferir("todo título tem texto", Array.from(documento.querySelectorAll("h1, h2, h3")).every(function (titulo) { return titulo.textContent.trim() !== ""; }));
+            });
+
+            testar("marcos: header, nav com nome, main, footer e section com aria-labelledby", function () {
+                conferirIgual("um header", documento.querySelectorAll("header").length, 1);
+                conferirIgual("um main", documento.querySelectorAll("main").length, 1);
+                conferirIgual("um footer", documento.querySelectorAll("footer").length, 1);
+                conferirIgual("o header é filho direto do body (marco da página, não de um cartão)", documento.querySelector("header").parentElement, documento.body);
+                conferirIgual("o footer também", documento.querySelector("footer").parentElement, documento.body);
+                const menus = Array.from(documento.querySelectorAll("nav"));
+                conferir("há um nav e todo nav tem aria-label preenchido", menus.length >= 1 && menus.every(function (menu) { return (menu.getAttribute("aria-label") || "").trim() !== ""; }));
+                const secoes = Array.from(documento.querySelectorAll("section"));
+                conferir("há seções e todas ficam dentro do main", secoes.length > 0 && secoes.every(function (secao) { return secao.closest("main") !== null; }));
+                secoes.forEach(function (secao) {
+                    const rotulo = documento.getElementById(secao.getAttribute("aria-labelledby") || "");
+                    conferir("section #" + secao.id + ": aria-labelledby aponta para um título com texto", rotulo !== null && /^H[1-6]$/.test(rotulo.tagName) && rotulo.textContent.trim() !== "", String(secao.getAttribute("aria-labelledby")));
+                });
+                conferir("a ordem dos marcos é header, nav, main, seções, footer", marcosEmOrdem(documento).join(" ").indexOf("header nav main section") === 0 && marcosEmOrdem(documento).pop() === "footer", marcosEmOrdem(documento).join(" "));
+            });
+
+            testar("o link 'pular para o conteúdo' é o primeiro foco e leva ao main", function () {
+                const ordem = elementosNaOrdemDoTab(documento);
+                const principalDoPasso = documento.querySelector("main");
+                conferir("o main tem id", principalDoPasso.id !== "");
+                conferirIgual("nenhum elemento usa tabindex positivo (ele embaralha a ordem do Tab)", ordem.filter(function (e) { return e.tabIndex > 0; }).length, 0);
+                conferirIgual("o primeiro foco do Tab é um link", ordem[0].localName, "a");
+                conferirIgual("e ele aponta para o id do main", ordem[0].getAttribute("href"), "#" + principalDoPasso.id);
+                conferir("e tem texto", nomeAcessivel(ordem[0]) !== "");
+                conferir("o link vem antes do header", Boolean(ordem[0].compareDocumentPosition(documento.querySelector("header")) & 4));
+                const caixa = ordem[0].getBoundingClientRect();
+                conferir("sem foco ele fica fora da tela (bottom " + Math.round(caixa.bottom) + ")", caixa.bottom <= 0);
+                ordem[0].focus();
+                const caixaComFoco = ordem[0].getBoundingClientRect();
+                conferir("com foco ele aparece na tela (top " + Math.round(caixaComFoco.top) + ", bottom " + Math.round(caixaComFoco.bottom) + ")", caixaComFoco.top >= 0 && caixaComFoco.bottom > 0);
+                ordem[0].blur();
+            });
+
+            testar("âncoras: todo href=\"#x\" tem um id, e nenhum id se repete", function () {
+                const ancoras = documento.querySelectorAll('a[href^="#"]');
+                conferir(ancoras.length + " links de âncora", ancoras.length >= 5);
+                conferirIgual("âncoras sem destino", ancorasQuebradas(documento).join(" "), "");
+                conferirIgual("ids repetidos", idsRepetidos(documento).join(" "), "");
+                const destinosDoMenu = Array.from(documento.querySelectorAll("nav a[href^='#']")).map(function (link) { return documento.getElementById(link.getAttribute("href").slice(1)); });
+                conferir("cada link do menu leva a uma section", destinosDoMenu.length > 0 && destinosDoMenu.every(function (destino) { return destino !== null && destino.localName === "section"; }));
+                const destinosDasHabilidades = Array.from(documento.querySelectorAll(".habilidades a[href^='#'], #habilidades a[href^='#']")).map(function (link) { return documento.getElementById(link.getAttribute("href").slice(1)); });
+                conferir("cada prova de uma habilidade leva a um projeto (article)", destinosDasHabilidades.length > 0 && destinosDasHabilidades.every(function (destino) { return destino !== null && destino.localName === "article"; }));
+            });
+
+            testar("nome acessível: botões, campos e links; a conferência enxerga um botão sem nome", function () {
+                const quemPrecisaDeNome = documento.querySelectorAll("button, input, select, textarea, a[href]");
+                const semNome = Array.from(quemPrecisaDeNome).filter(function (elemento) { return nomeAcessivel(elemento) === ""; });
+                conferir(quemPrecisaDeNome.length + " controles e links, todos com nome", quemPrecisaDeNome.length > 0 && semNome.length === 0, semNome.map(function (e) { return e.outerHTML.slice(0, 50); }).join(" | "));
+
+                const sonda = documento.createElement("div");
+                sonda.innerHTML = '<button id="a"></button><button id="b" aria-label="Abrir">☰</button><button id="c">Ir</button><input id="d"><label for="e">Nome</label><input id="e"><input id="f" type="submit" value="Enviar"><button id="g"><img src="x" alt="Menu"></button>';
+                documento.body.appendChild(sonda);
+                const nomes = ["a", "b", "c", "d", "e", "f", "g"].map(function (id) { return nomeAcessivel(documento.getElementById(id)); });
+                sonda.remove();
+                conferirIgual("botão vazio não tem nome", nomes[0], "");
+                conferirIgual("aria-label vence o ícone", nomes[1], "Abrir");
+                conferirIgual("texto do botão", nomes[2], "Ir");
+                conferirIgual("input sem rótulo não tem nome", nomes[3], "");
+                conferirIgual("input com <label for> tem nome", nomes[4], "Nome");
+                conferirIgual("input submit usa o value", nomes[5], "Enviar");
+                conferirIgual("botão com imagem usa o alt", nomes[6], "Menu");
+            });
+
+            testar("links para os jogos: cada destino existe no inventário e termina em index.html", function () {
+                const cartoes = Array.from(documento.querySelectorAll("#projetos article"));
+                conferir(cartoes.length + " projetos", cartoes.length >= 4);
+                cartoes.forEach(function (cartao) {
+                    const links = cartao.querySelectorAll("a[href]");
+                    conferirIgual("#" + cartao.id + ": um link", links.length, 1);
+                    const destino = caminhoNoRepositorio(links[0].getAttribute("href"), PASSO);
+                    conferir("#" + cartao.id + ": " + links[0].getAttribute("href") + " existe (" + destino + ") e termina em index.html", ARQUIVOS_EXISTENTES.indexOf(destino) >= 0 && /\/index\.html$/.test(destino), String(destino));
+                });
+                const locais = Array.from(documento.querySelectorAll("a[href]")).map(function (link) { return caminhoNoRepositorio(link.getAttribute("href"), PASSO); }).filter(function (caminho) { return caminho !== null; });
+                conferir(locais.length + " links de arquivo no total, todos no inventário", locais.length === cartoes.length && locais.every(function (caminho) { return ARQUIVOS_EXISTENTES.indexOf(caminho) >= 0; }), locais.filter(function (caminho) { return ARQUIVOS_EXISTENTES.indexOf(caminho) < 0; }).join(", "));
+                const credito = documento.querySelector("footer a[href]");
+                conferir("o crédito do curso no rodapé é um endereço absoluto https:// (um caminho relativo quebra depois de publicar): " + credito.getAttribute("href"), /^https:\/\//.test(credito.getAttribute("href")));
+                conferir("e o e-mail é um mailto: de domínio .invalid (dado fictício)", Array.from(documento.querySelectorAll('a[href^="mailto:"]')).every(function (link) { return /@exemplo\.invalid$/.test(link.getAttribute("href")); }) && documento.querySelectorAll('a[href^="mailto:"]').length === 1);
+            });
+
+            testar("o passo 1 não tem JavaScript nem imagem (só HTML semântico)", function () {
+                const scriptsDoPasso = Array.from(documento.querySelectorAll("script")).filter(function (script) { return script.textContent.indexOf("window.__erros") < 0; });
+                conferirIgual("nenhum <script> no passo (fora o espião que o teste injeta)", scriptsDoPasso.length, 0);
+                conferirIgual("nenhuma imagem", documento.querySelectorAll("img").length, 0);
+                conferirIgual("nenhum erro não tratado", janela.__erros.join(" | "), "");
+            });
+
+            quadro.remove();
+            finalizar();
+        }
+
+        principal();
+    </script>
+</body>
+
+</html>
