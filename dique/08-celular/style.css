@@ -1,4 +1,4 @@
-/* DIQUE — PASSO 8: estilo. O canvas é a janela da câmera (384x252: o mapa inteiro em zoom 1). O aviso tem altura fixa, e a leitura do H flutua sobre a página: anunciar e ligar o H não a empurram. O resumo em texto só aparece com o foco. */
+/* DIQUE — PASSO 8: estilo. O canvas é a janela da câmera (384x252: o mapa inteiro em zoom 1). O aviso tem altura fixa, e a leitura do H vem por último e só ocupa lugar quando há H: anunciar e ligar o H não mexem em nada acima dela. O resumo em texto só aparece com o foco. */
 
 body {
     display: flex;
@@ -84,20 +84,14 @@ p, pre {
 }
 
 #leitura {
-    position: fixed;                         /* a leitura do H cobre o pé da página em vez de empurrá-la */
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 6px 12px;
+    max-width: 100%;
     white-space: pre-wrap;
-    pointer-events: none;                    /* e deixa o toque passar */
     font-size: 11px;
     color: #eaf0ff;
-    background: rgba(11, 16, 32, 0.92);
 }
 
 #leitura:empty {
-    display: none;
+    display: none;                           /* sem H não ocupa lugar; com H é o último item da página: nada acima dele se mexe e nada fica coberto */
 }
 
 .so-leitor {                                 /* fora da vista, mas lido pelo leitor de tela; com o foco (Tab ou L), cobre a tela inteira */

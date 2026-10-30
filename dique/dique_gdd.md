@@ -1,7 +1,8 @@
 # DIQUE — Documento de design (GDD)
 
-> **Rascunho aguardando aprovação do usuário (TODO IS-A).** O conceito e o nome já foram escolhidos por ele
-> em 2026-10-27 (IS-C, HANDOFF §3.6). Nenhum código nem pasta de passo existe ainda.
+> **Aprovado pelo usuário em 2026-10-27 (TODO IS-A).** O conceito e o nome foram escolhidos por ele no mesmo dia
+> (IS-C, HANDOFF §3.6). Os passos 01 a 08 existem (`dique/01-grade` … `dique/08-celular`); falta o `final` (IS9).
+> Onde o código faz diferente do rascunho, este documento diz o que o código faz (seção 5).
 
 Módulo 9 do curso: o jogo **2.5D isométrico**. Fica entre *Reflexo* (raycaster) e *Proa Acesa* (three.js),
 e é a ponte de câmera: aqui a projeção é uma **matriz 2×2** escrita à mão, e o toque na tela vira, com alturas,
@@ -143,22 +144,36 @@ Os dias são **dados**: `{ mapa: [...], tabua: [ficha...], meta, par, dica }`. T
 1. mais casas e mais terraços (a leitura de altura fica difícil);
 2. tábuas com várias marés e **sizígia** (nível +1, mais volume);
 3. **chuva** com nascentes, e dias em que cavar o certo exige girar a vista (o dique alto esconde a casa de trás).
+   "Exige" vale para o **dedo**: o cursor de setas alcança a casa escondida (tracejada). No dia 10 a **casa-chave**
+   (uma casa que todo plano de tamanho `par` toca) é a brecha da muralha oeste, (2, 5), e a torre de 4 em (3, 6) a
+   cobre na vista inicial: nenhum pixel do canvas a acerta pelo picking, e em outro giro ela é tocável. A torre do dia 4
+   é só um convite (há plano que não precisa dela).
 
 ~10 dias: 1–2 ensinam erguer; 3–4, cavar; 5–6, duas marés; 7–8, sizígia; 9–10, chuva e tudo junto.
 
 **Solubilidade validada por busca** (eco de `xenomorph/06-semente`, "tentou todas as combinações").
-Um **robô** testa jogadas antes da maré: o conjunto de ações é `{erguer(b), cavar(b)}` por bloco candidato,
-e a ordem não importa (basta o multiconjunto, não a sequência). Para cada ficha da tábua, em ordem:
-1. gera os terrenos alcançáveis com até `blocos` ações (busca em profundidade com aprofundamento
-   iterativo, e **memória** de terrenos já vistos, para não repetir);
-2. para cada um, simula a maré inteira (4.6) e guarda os que ainda salvam a meta;
-3. segue para a ficha seguinte só a partir deles (a sobra de blocos entra no estado).
+Um **robô** testa jogadas antes da maré (`certificarDia`, em `regras.js`). O conjunto de ações é `{erguer(b), cavar(b)}`
+por casa candidata, e a ordem não importa (basta o saldo de cada casa, não a sequência). O orçamento é o **dia
+inteiro**, não cada ficha: o robô procura planos de 0 a `LIMITE_DE_JOGADAS` (6) jogadas **somadas em todas as fichas**
+(o `par` mais alto que um dia pode ter), por aprofundamento iterativo; o primeiro tamanho com plano é o `par`. O
+estoque nunca fica negativo (os blocos chegam por ficha, a sobra passa para a seguinte e cavar devolve um bloco), e uma
+ficha pode gastar mais ações que o `blocos` dela, se cavou antes. Para cada ficha da tábua, em ordem:
+1. gera os terrenos alcançáveis com o orçamento que sobrou (busca em profundidade, cada terreno uma vez);
+2. para cada um, simula a maré inteira (4.6) e guarda os que ainda salvam a meta, com as casas perdidas acumuladas;
+3. segue para a ficha seguinte só a partir deles (a sobra de blocos entra no estado). Uma **memória** de
+   (ficha, estoque, terreno, perdidas) → menor gasto evita repetir o que já falhou.
 
-Candidatos podados: só blocos a até 2 de distância de um bloco alagável ou de uma casa (os outros não
-mudam o resultado). O robô tem **teto de 2 milhões de estados**: passou do teto, o dia **não é certificado**
-e a validação falha. Um dia só entra se: (a) tem solução; (b) o `par` do dado é o menor achado pelo robô
-(ordem crescente de ações); (c) **não** é trivial (com zero jogadas, a meta não é batida); (d) mapa fechado,
-casas fora do mar, `N` só em dias com chuva. Ele roda como **página de teste do harness**, não no jogo.
+**Candidatas podadas: uma aposta, não um teorema.** Só se mexe em casas moldáveis a até 2 de distância (em linha reta)
+de uma casa alagável ou de uma casa com casa; as outras ficam fora da busca. Cavar qualquer casa moldável rende um
+bloco e uma vala distante pode absorver volume, então a poda **pode** esconder um plano mais curto: o `par` é o menor
+**dentro das candidatas**. A aposta foi conferida nos dez dias: com o alcance em 1, 2 e 9 (a ilha inteira) todo dia dá o
+mesmo `par` e a mesma contagem de estados. Quem escreve um dia novo faz a mesma conferência (alcance 9: o `par` muda?).
+
+O robô tem **teto de 2 milhões de estados**: passou do teto, o dia **não é certificado** e "não sei" nunca vale como
+resposta (nem como "tem solução", nem como "não é trivial"). Um dia só entra se: (a) tem solução; (b) o `par` do dado é o
+menor achado pelo robô; (c) **não** é trivial (a busca de zero jogadas **terminou** sem bater a meta); (d) mapa fechado,
+casas fora do mar, `N` só em dias com chuva. O robô devolve o jogo exatamente como estava, mesmo chamado no meio de uma
+partida. Ele roda como **página de teste do harness**, não no jogo.
 
 ## 6. Arte
 
@@ -236,7 +251,7 @@ Páginas em `verificacao/dique/NN-passo.html`, no harness existente (`verificaca
 | 04 | rolar e aproximar não mudam o resultado do picking (mesmo bloco sob o mesmo ponto de mundo); 4 giros voltam ao início; limites da rolagem; sem rolagem da página em 390×750 |
 | 05 | **enchente = preenchimento independente** (outra implementação: ponto fixo sobre a grade inteira), sem volume; com volume, ordem baixa → alta; monotonia (alagado nunca seca) |
 | 06 | a **tábua é aplicada nos instantes certos** (nível, passos, volume e blocos conferidos passo a passo); a máquina de estados só faz transições válidas; estoque de blocos conserva |
-| 07 | **cada dia é certificado**: tem solução, `par` = menor achado, não é trivial, mapa fechado; teto de estados respeitado; falha proposital é detectada |
+| 07 | **cada dia é certificado**: tem solução, `par` = menor achado, não é trivial, mapa fechado; teto de estados respeitado; falha proposital é detectada; certificar no meio de uma partida não muda o jogo; a casa-chave do dia 10 está escondida na vista inicial |
 | 08 | página de medição no celular (seção 12); acessibilidade: Tab/teclado alcançam tudo, `aria-live`, alvos ≥ 48 px em 360 e 390 |
 | final | os de cima, mais jogo completo por script (um dia vencido por teclado), `localStorage` corrompido não quebra, movimento reduzido, sem erro de console, links |
 

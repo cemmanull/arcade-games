@@ -153,14 +153,14 @@ const DIAS = [
             ["~~33333~~~", "..PPPPP..."],
             ["~~31013~~~", "..PCN.P..."],
             ["~~31013~~~", "..P..CP..."],
-            ["~~11013~~~", "....C.P..."],
+            ["~~11013~~~", "...PC.P..."],
             ["~~34113~~~", "..P..CP..."],
             ["~~33233~~~", "..PP.PP..."],
             ["~~~~~~~~~~", ".........."],
             ["~~~~~~~~~~", ".........."],
         ],
         tabua: [{ nivel: 2, passos: 3, volume: 5, chuva: false, blocos: 2 }, { nivel: 3, passos: 3, volume: 4, chuva: true, blocos: 1 }],
-        meta: 4, par: 5, dica: "Tudo junto: duas marés, sizígia, chuva e uma torre que esconde a brecha.",
+        meta: 4, par: 5, dica: "Tudo junto: duas marés, sizígia, chuva e uma torre que esconde a brecha: gire a vista (Q ou R).",
     },
 ];
 let diaCarregado = null;                        // o dia que as variáveis abaixo guardam
@@ -549,7 +549,7 @@ function definirAgua(nivel, casas) {            // a água de agora: a superfíc
 // ---- O ROBÔ DE VALIDAÇÃO (eco do xenomorph/06-semente: tentou todas as combinações). Roda na página de teste, nunca no jogo ----
 const TETO_DE_ESTADOS = 2000000;                // terrenos simulados; passou disto, o robô desiste e o dia não é certificado
 const LIMITE_DE_JOGADAS = 6;                    // o robô procura soluções de 0 a este número de jogadas no dia inteiro (o `par` mais alto que um dia pode ter)
-const ALCANCE_DAS_CANDIDATAS = 2;               // só se mexe em casa a até 2 passos (em linha reta, sem diagonal) de uma casa alagável ou de uma casa com casa: as outras não mudam o resultado
+const ALCANCE_DAS_CANDIDATAS = 2;               // só se mexe em casa a até 2 passos (em linha reta, sem diagonal) de uma casa alagável ou de uma casa com casa: as outras ficam de fora da busca (uma aposta, conferida nos dez dias: ver o GUIA)
 
 function candidatasDoDia() {                    // as casas onde erguer ou cavar pode mudar o resultado
     const nivelMaisAlto = Math.max.apply(null, tabuaDeMares.map(function (ficha) { return ficha.nivel; }));
@@ -616,14 +616,18 @@ function certificarDia(dia, teto) {             // o relatório do robô sobre o
     const problemas = problemasDoMapa(dia);
     const relatorio = { problemas: problemas, mapaValido: problemas.length === 0, temSolucao: false, parAchado: null, parConfere: false, naoTrivial: false, estados: 0, estourou: false, certificado: false };
     if (!relatorio.mapaValido) return relatorio;
-    const anterior = diaCarregado;
-    carregarDia(dia);
-    const busca = { candidatas: candidatasDoDia(), estados: 0, teto: teto || TETO_DE_ESTADOS, estourou: false };
-    for (let limite = 0; limite <= LIMITE_DE_JOGADAS && relatorio.parAchado === null && !busca.estourou; limite++) {
-        if (haPlano(limite, busca)) relatorio.parAchado = limite;
-        else if (limite === 0) relatorio.naoTrivial = true;
+    const deAntes = [diaCarregado, alturasEmTexto, objetosEmTexto, alturasIniciais, alturas, casasDoMar, casasComCasa, casasDeNascente, tabuaDeMares, metaDoDia];     // tudo o que carregarDia sobrescreve, inclusive o terreno de agora (alturas): o jogo pode estar no meio de uma partida
+    const busca = { candidatas: [], estados: 0, teto: teto || TETO_DE_ESTADOS, estourou: false };
+    try {
+        carregarDia(dia);
+        busca.candidatas = candidatasDoDia();
+        for (let limite = 0; limite <= LIMITE_DE_JOGADAS && relatorio.parAchado === null && !busca.estourou; limite++) {
+            if (haPlano(limite, busca)) relatorio.parAchado = limite;
+            else if (limite === 0 && !busca.estourou) relatorio.naoTrivial = true;      // "não sei" (teto estourado) nunca conta como "não é trivial"
+        }
+    } finally {
+        [diaCarregado, alturasEmTexto, objetosEmTexto, alturasIniciais, alturas, casasDoMar, casasComCasa, casasDeNascente, tabuaDeMares, metaDoDia] = deAntes;      // o robô devolve o jogo exatamente como estava (até um dia que nunca carregou)
     }
-    carregarDia(anterior);                      // o robô não deixa o dia dele carregado
     relatorio.estados = busca.estados;
     relatorio.estourou = busca.estourou;
     relatorio.temSolucao = relatorio.parAchado !== null;

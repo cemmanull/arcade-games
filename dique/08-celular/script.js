@@ -13,7 +13,8 @@ const tabua = document.getElementById("tabua");
 const botaoDaMare = document.querySelector('[data-acao="avancar"]');
 const COR_DA_ALTURA = ["#d9c27a", "#7fb069", "#4f8a4c", "#8d8d8d", "#d0d4d8"];
 const NOME_DA_FACE = { topo: "topo", esquerda: "lateral esquerda", direita: "lateral direita" };
-const preferenciaDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)").matches;     // o sistema pede menos movimento; o botão Calmo (ou a tecla O) pede também
+const pedidoDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)");
+const preferenciaDoSistema = pedidoDoSistema.matches;     // o sistema pede menos movimento; o botão Calmo (ou a tecla O) pede também
 const SETAS = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };     // direções da tela
 const ARESTAS_DO_LOSANGO = [[0, -1], [1, 0], [0, 1], [-1, 0]];      // a vizinha que cada aresta (cima→direita, direita→baixo…) separa
 const CENTRO_DA_VISTA = { x: LARGURA_DA_VISTA / 2, y: ALTURA_DA_VISTA / 2 };
@@ -49,6 +50,7 @@ let ponteiro = null;                            // o pixel da janela sob o mouse
 let dedo = null;                                // o ponteiro apertado: { id, inicio, ultimo, arrastando }
 let giroDaRoda = 0;                             // deltaY somado (em pixels) desde o último degrau de zoom, pausa ou inversão
 let instanteDaRoda = 0;                         // quando veio o último evento da roda
+let jogadorEscolheuMovimento = false;           // depois do primeiro toque no Calmo, a escolha do jogador manda mais que a do sistema
 let movimentoReduzido = preferenciaDoSistema;   // sem ondas, sem chuva em queda, e a maré anda um passo por toque
 let depuracaoLigada = false;
 let ultimoResumo = "";                          // o texto do resumo de agora: o DOM só muda quando ele muda
@@ -77,7 +79,7 @@ const intencoes = {                             // teclado, mouse e toque chamam
     girarEsquerda: function () { girarVista(3); },
     girarDireita: function () { girarVista(1); },
     alternarVer: function () { depuracaoLigada = !depuracaoLigada; },
-    alternarMovimento: function () { definirMovimento(!movimentoReduzido); },
+    alternarMovimento: function () { jogadorEscolheuMovimento = true; definirMovimento(!movimentoReduzido); },
     abrirResumo: function () { resumo.focus(); },
     aplicar: function () { aplicar(); },
     escolherErguer: function () { escolherFerramenta("erguer"); },
@@ -254,8 +256,9 @@ function desfazer() {
     marcada = false;
     if (!podeMoldar()) return avisar("A maré não se desfaz. N recomeça o dia");
     if (historico.length === 0) return avisar("Nada para desfazer nesta maré");
-    trocarEstado(historico.pop());
-    jogadas--;
+    const estadoDeAntes = historico.pop();
+    jogadas--;                                  // antes de trocar o estado: o resumo, escrito dentro dele, já lê a contagem nova
+    trocarEstado(estadoDeAntes);
     avisar("Desfeito. Blocos: " + estadoAtual.blocos);
 }
 
@@ -332,6 +335,9 @@ function pixelDoEvento(evento) {                // do pixel da página para o pi
     return { x: (evento.clientX - caixa.left) * tela.width / caixa.width, y: (evento.clientY - caixa.top) * tela.height / caixa.height };
 }
 
+pedidoDoSistema.addEventListener("change", function (evento) {      // o sistema mudou com o jogo aberto
+    if (!jogadorEscolheuMovimento) definirMovimento(evento.matches);
+});
 document.addEventListener("keydown", function (evento) {
     if (evento.ctrlKey || evento.metaKey || evento.altKey) return;      // Ctrl+R recarrega a página, não gira a vista
     if (evento.target === resumo) return evento.key === "Escape" ? resumo.blur() : undefined;      // no resumo, as teclas são do leitor: rolar e ler; Esc sai

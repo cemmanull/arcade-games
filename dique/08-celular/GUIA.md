@@ -1,6 +1,6 @@
 # Dique — Passo 8: Para a mão
 
-**Mudou:** `script.js` (o botão **Calmo** e a tecla **O**: `definirMovimento`; o resumo em texto, `atualizarResumo`; os avisos do GDD §7; o painel com **"Casas 3/4"**; o tempo de cada quadro, `ultimoTempoDeQuadro`), `index.html` (o botão Calmo, a lista `#resumo`, `role="img"` no canvas) e `style.css` (a leitura do H flutua, o resumo só aparece com o foco). `regras.js` é o do passo 7. Fora do passo: [`verificacao/medicao/dique-08.html`](../../verificacao/medicao/dique-08.html), a página que mede o jogo **no seu celular**.
+**Mudou:** `script.js` (o botão **Calmo** e a tecla **O**: `definirMovimento`, que também segue o sistema se ele mudar com o jogo aberto; o resumo em texto, `atualizarResumo`; os avisos do GDD §7; o painel com **"Casas 3/4"**; o tempo de cada quadro, `ultimoTempoDeQuadro`), `index.html` (o botão Calmo, a lista `#resumo`, `role="img"` no canvas) e `style.css` (a leitura do H vem por último e some quando vazia, o resumo só aparece com o foco). `regras.js` é o do passo 7. Fora do passo: [`verificacao/medicao/dique-08.html`](../../verificacao/medicao/dique-08.html), a página que mede o jogo **no seu celular**.
 **Rode:** abra o `index.html`. Aperte **Tab** e veja o foco andar pelos botões; aperte **O** (a maré passa a andar um passo por toque); aperte **L** (o resumo do mapa em texto cobre a tela) e **Esc** (ele sai).
 
 ---
@@ -31,7 +31,7 @@ button { min-width: 48px; min-height: 48px; }
 
 A conta do espaço, em pixels, de cima para baixo, em 390×750: título 31, mapa 240, painel 18, meta 15, tábua 14, ferramentas **104** (duas fileiras, com o Calmo na segunda), botões 48, setas 48, aviso 51, mais as folgas de 8 px. Termina em 657 de 750. Em 360 de largura o mapa encolhe (`max-width: 100%`) e o total é 638 de 640 (360×640 não é requisito, mas cabe). A página de teste confere os dois tamanhos: sem rolagem horizontal, todo botão com largura **e** altura de pelo menos 48.
 
-Duas escolhas que liberaram espaço: a leitura do **H** deixou de reservar 59 px no fim da página (agora **flutua** sobre ela: `position: fixed`, `pointer-events: none`, e some quando está vazia com `:empty`), e o espaço entre os itens caiu de 12 para 8 px. O `#aviso` continua com altura fixa (três linhas): um botão que pula de lugar quando o aviso muda é um toque errado.
+Duas escolhas que liberaram espaço: a leitura do **H** deixou de reservar 59 px no fim da página (vazia, some com `:empty`; com H, é o **último** item, depois do aviso, então nada acima dela se mexe e nada fica coberto), e o espaço entre os itens caiu de 12 para 8 px. Com o H ligado, a página mais alta mede 733 de 750 em 390×750 (a leitura tem até 4 linhas): continua sem rolar. Em 360×640 o H faz a página rolar (703 de 640), mas não cobre nada. Uma versão anterior prendia a leitura no pé da janela (`position: fixed`) para caber também em 360×640, e ela cobria o aviso (a voz do jogo) e, em alguns dias, as setas: **cabe em 390×750 e rola em 360×640 é melhor que cobrir o que o jogador precisa ler**. O `#aviso` continua com altura fixa (três linhas): um botão que pula de lugar quando o aviso muda é um toque errado.
 
 ---
 
@@ -54,7 +54,8 @@ No mapa a casa ganha `✓` ou `✗` (o canvas não tem espaço para a palavra in
 Antes do passo 8 só valia `prefers-reduced-motion`, que o jogador não controla dentro do jogo. Agora o `movimentoReduzido` é uma **variável**, ligada pelas duas coisas:
 
 ```js
-const preferenciaDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const pedidoDoSistema = window.matchMedia("(prefers-reduced-motion: reduce)");
+const preferenciaDoSistema = pedidoDoSistema.matches;
 let movimentoReduzido = preferenciaDoSistema;       // o botão Calmo (ou a tecla O) a troca
 
 function definirMovimento(reduzido) {
@@ -64,7 +65,7 @@ function definirMovimento(reduzido) {
 }
 ```
 
-Ligado, o jogo muda **quatro coisas**, todas já lendo `movimentoReduzido`: a onda de alfa da água fica parada, a chuva não cai, o filme da maré não corre (`atualizar` retorna antes dele) e **M** (ou o botão Maré) dá **um passo** da água por toque, como no GDD §7. O botão é um `aria-pressed`, então o leitor diz "Calmo, ativado". A escolha **não é guardada** ao recarregar: o recorde e as opções, com `localStorage`, são do `final`.
+Ligado, o jogo muda **quatro coisas**, todas já lendo `movimentoReduzido`: a onda de alfa da água fica parada, a chuva não cai, o filme da maré não corre (`atualizar` retorna antes dele) e **M** (ou o botão Maré) dá **um passo** da água por toque, como no GDD §7. O botão é um `aria-pressed`, então o leitor diz "Calmo, ativado". O sistema pode mudar de ideia com o jogo aberto: `pedidoDoSistema.addEventListener("change", …)` chama `definirMovimento` de novo, **até o jogador tocar no Calmo**; depois disso a escolha dele manda mais que a do sistema. A escolha **não é guardada** ao recarregar: o recorde e as opções, com `localStorage`, são do `final`.
 
 ---
 
@@ -142,7 +143,6 @@ No computador de desenvolvimento, em Chrome sem placa de vídeo, o desenho custo
 - **Aparelho real.** Os 36 px do bloco, os 48 px dos botões e os ms por quadro são hipóteses até alguém medir e tocar num celular. Os **Pointer Events não foram testados no iOS Safari**.
 - **Opção guardada.** O Calmo volta ao do sistema ao recarregar; `localStorage`, menu, pausa, som e estrelas são do `final`.
 - **Teste com leitor de tela de verdade.** Os avisos e o resumo foram conferidos no DOM (o texto certo, no lugar certo), não ouvidos num NVDA, VoiceOver ou TalkBack.
-- **Mudar a preferência do sistema com o jogo aberto** não é percebido: o jogo lê o `prefers-reduced-motion` ao abrir.
 
 ---
 
@@ -155,7 +155,8 @@ No computador de desenvolvimento, em Chrome sem placa de vídeo, o desenho custo
 5. Em `style.css`, troque `clip-path: inset(50%)` do `.so-leitor` por `display: none`. O que o leitor de tela faz? E o **L**?
 6. Tire `min-height: 48px` do `button` e olhe a página em 360 de largura. Que botões ficam pequenos? (A página de teste os pegaria.)
 7. Abra `verificacao/medicao/dique-08.html` no computador e aperte **Medir**. Qual cenário custa mais? Por quê (conte as casas com água e o H)?
-8. **Quebre de propósito:** em `avisar`, escreva também no `#resumo`. O leitor de tela fica falando? Por que o aviso é uma frase e o resumo, uma lista que só se reescreve quando muda?
+8. Com o jogo aberto, ligue e desligue "reduzir animações" no sistema (no Chrome, o painel Rendering do DevTools emula isso). O Calmo acompanha? E depois que você toca no Calmo?
+9. **Quebre de propósito:** em `avisar`, escreva também no `#resumo`. O leitor de tela fica falando? Por que o aviso é uma frase e o resumo, uma lista que só se reescreve quando muda?
 
 ---
 
