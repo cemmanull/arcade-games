@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Currículo, final</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Currículo, final</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-curriculo.js"></script>
+    <script src="apoio-acabamento.js"></script>
+    <script src="apoio-compartilhar.js"></script>
+
+    <!-- O index.html e o style.css do final, copiados por espelho.mjs (por file:// a página não consegue lê-los nem
+         ler as regras de um <link>). O JS e as miniaturas são os de verdade. O peso das miniaturas e o texto de
+         curriculo/final/** e curriculo/README.md são conferidos por node verificacao/curriculo/espelho.mjs --conferir. -->
+    <script>
+    // ESPELHO:inicio — gerado por node verificacao/curriculo/espelho.mjs a partir de curriculo/final/. Não edite à mão.
+    const ESPELHO_DO_INDEX = [
+        "<\!--",
+        "  CURRÍCULO — FINAL: o modelo completo, com dados FICTÍCIOS (Alex Exemplo). Abre com duplo clique e vira PDF com Ctrl+P.",
+        "",
+        "  LEIA ANTES DE PUBLICAR. Uma página pública é lida por qualquer pessoa e pode ser copiada para sempre.",
+        "  NÃO PUBLIQUE: endereço de casa, telefone pessoal, CPF, RG ou outro documento, data de nascimento completa,",
+        "  fotos de menores de idade, nome da escola com turma e horário, dados bancários.",
+        "  PREFIRA: cidade e estado, um e-mail dedicado ou alias, um link para um perfil profissional.",
+        "",
+        "  TROQUE ESTES DADOS (o GUIA.md tem a lista completa). Aqui no index.html, procure por \"TROQUE\":",
+        "    o nome (<title>, <h1>, descrição e ícone), a frase do cabeçalho, \"Sobre mim\", as habilidades e o Contato.",
+        "  Os cartões dos projetos NÃO estão aqui: ficam em projetos.js.",
+        "-->",
+        "<!DOCTYPE html>",
+        "<html lang=\"pt-BR\">",
+        "",
+        "<head>",
+        "    <meta charset=\"UTF-8\">",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        "    <title>Alex Exemplo — Programação web e game design<\/title> <\!-- TROQUE o nome -->",
+        "    <meta name=\"description\" content=\"Alex Exemplo: currículo online de programação web e game design, com jogos feitos do zero em HTML, CSS e JavaScript.\">",
+        "    <meta name=\"theme-color\" content=\"#f7f7fb\" media=\"(prefers-color-scheme: light)\">",
+        "    <meta name=\"theme-color\" content=\"#12121a\" media=\"(prefers-color-scheme: dark)\">",
+        "",
+        "    <\!-- O cartão que WhatsApp, LinkedIn e Discord mostram ao receber o link. Só aparece depois de publicar. -->",
+        "    <meta property=\"og:type\" content=\"website\">",
+        "    <meta property=\"og:locale\" content=\"pt_BR\">",
+        "    <meta property=\"og:title\" content=\"Alex Exemplo — Programação web e game design\">",
+        "    <meta property=\"og:description\" content=\"Jogos feitos do zero em HTML, CSS e JavaScript, com o código à mostra.\">",
+        "    <\!-- MARCADORES: troque pelos endereços absolutos (https://...) depois de publicar. Caminho relativo não funciona aqui. -->",
+        "    <meta property=\"og:url\" content=\"https://SEU-USUARIO.github.io/SEU-REPOSITORIO/\">",
+        "    <meta property=\"og:image\" content=\"https://SEU-USUARIO.github.io/SEU-REPOSITORIO/cartao.png\">",
+        "    <meta property=\"og:image:alt\" content=\"Cartão do currículo de Alex Exemplo: nome e a frase Programação web e game design.\">",
+        "",
+        "    <\!-- TROQUE a letra A e a cor do ícone (no endereço data:, # vira %23). -->",
+        "    <link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%233b3bb3'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='white' font-family='sans-serif'%3EA%3C/text%3E%3C/svg%3E\">",
+        "    <link rel=\"stylesheet\" href=\"style.css\">",
+        "    <\script src=\"projetos.js\" defer><\/script>",
+        "    <\script src=\"script.js\" defer><\/script>",
+        "<\/head>",
+        "",
+        "<body>",
+        "    <a class=\"pular\" href=\"#principal\">Pular para o conteúdo<\/a>",
+        "",
+        "    <header>",
+        "        <h1>Alex Exemplo<\/h1> <\!-- TROQUE o nome -->",
+        "        <\!-- TROQUE a frase: quem é você, em uma linha. -->",
+        "        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.<\/p>",
+        "",
+        "        <nav aria-label=\"Seções do currículo\">",
+        "            <ul>",
+        "                <li><a href=\"#sobre\">Sobre mim<\/a><\/li>",
+        "                <li><a href=\"#habilidades\">Habilidades<\/a><\/li>",
+        "                <li><a href=\"#projetos\">Projetos<\/a><\/li>",
+        "                <li><a href=\"#contato\">Contato<\/a><\/li>",
+        "                <li><button id=\"botao-tema\" type=\"button\" aria-pressed=\"false\">Tema escuro<\/button><\/li>",
+        "            <\/ul>",
+        "        <\/nav>",
+        "    <\/header>",
+        "",
+        "    <main id=\"principal\">",
+        "        <section id=\"sobre\" aria-labelledby=\"titulo-sobre\">",
+        "            <h2 id=\"titulo-sobre\">Sobre mim<\/h2>",
+        "            <\!-- TROQUE: duas ou três frases suas, em primeira pessoa. -->",
+        "            <p>Comecei a programar neste curso e já fiz quatro jogos completos. Gosto de regras claras, de dados bem",
+        "                organizados e de interfaces que qualquer pessoa consegue usar, inclusive só com o teclado.<\/p>",
+        "        <\/section>",
+        "",
+        "        <section id=\"habilidades\" aria-labelledby=\"titulo-habilidades\">",
+        "            <h2 id=\"titulo-habilidades\">Habilidades<\/h2>",
+        "            <p>Cada habilidade vem com a prova: um projeto que a usa.<\/p>",
+        "            <\!-- TROQUE: cada href=\"#projeto-...\" precisa ser o id de um projeto de projetos.js. -->",
+        "            <ul class=\"habilidades\">",
+        "                <li><strong>HTML semântico, CSS responsivo e acessibilidade.<\/strong> Prova: esta própria página.<\/li>",
+        "                <li><strong>Canvas e laço de jogo.<\/strong> Prova: <a href=\"#projeto-cobrinha\">Jogo da Cobrinha<\/a>.<\/li>",
+        "                <li><strong>Matrizes e rotação de peças.<\/strong> Prova: <a href=\"#projeto-tetris\">Tetris<\/a>.<\/li>",
+        "                <li><strong>Regras e algoritmos de busca.<\/strong> Prova: <a href=\"#projeto-xadrez\">Xadrez<\/a>.<\/li>",
+        "                <li><strong>Dados separados do código.<\/strong> Prova: <a href=\"#projeto-xenomorph\">Xenomorph<\/a>.<\/li>",
+        "            <\/ul>",
+        "        <\/section>",
+        "",
+        "        <section id=\"projetos\" aria-labelledby=\"titulo-projetos\">",
+        "            <h2 id=\"titulo-projetos\">Projetos<\/h2>",
+        "",
+        "            <div id=\"avisos\" role=\"alert\"><\/div>",
+        "            <div id=\"lista-projetos\" class=\"projetos\"><\/div>",
+        "        <\/section>",
+        "",
+        "        <section id=\"contato\" aria-labelledby=\"titulo-contato\">",
+        "            <h2 id=\"titulo-contato\">Contato<\/h2>",
+        "            <\!-- TROQUE: e-mail dedicado (alias), perfil profissional, cidade e estado. Nada além disso. -->",
+        "            <p>E-mail: <a href=\"mailto:alex@exemplo.invalid\">alex@exemplo.invalid<\/a><\/p>",
+        "            <p>Perfil profissional: <a href=\"https://exemplo.invalid/alex\">exemplo.invalid/alex<\/a><\/p>",
+        "            <p>Cidade Exemplo, UF<\/p>",
+        "        <\/section>",
+        "    <\/main>",
+        "",
+        "    <footer>",
+        "        <p>Feito seguindo o curso <a href=\"https://github.com/cemmanull/arcade-games\">Do zero ao jogo<\/a>. Dados fictícios.<\/p>",
+        "        <button id=\"botao-ver\" type=\"button\" aria-pressed=\"false\">Ver estrutura (H)<\/button>",
+        "        <p id=\"aviso-estrutura\" role=\"status\"><\/p>",
+        "    <\/footer>",
+        "<\/body>",
+        "",
+        "<\/html>",
+        ""
+    ].join("\n");
+    const ESPELHO_DO_CSS = [
+        "/*",
+        "  FINAL: O CSS DO PASSO 6 (tema, movimento, impressão, tecla H), com a miniatura quadrada das capturas de celular",
+        "  As regras fora de qualquer media query valem para o celular (390 px). O que muda em tela grande fica",
+        "  no fim, em @media (min-width: 48rem). Cores e espaços são variáveis: troque aqui e muda em tudo.",
+        "*/",
+        ":root {",
+        "    color-scheme: light dark;",
+        "    --fundo: light-dark(#f7f7fb, #12121a);",
+        "    --superficie: light-dark(#ffffff, #1c1c28);",
+        "    --texto: light-dark(#1b1b26, #ececf5);",
+        "    --texto-suave: light-dark(#4a4a5c, #b8b8cc);",
+        "    --destaque: light-dark(#3b3bb3, #9db4ff);",
+        "    --borda: light-dark(#8a8aa0, #7a7a92);",
+        "    --foco: light-dark(#b34700, #ffb454);",
+        "    --espaco: 1rem;",
+        "    --raio: 0.75rem;",
+        "}",
+        "",
+        "/* A escolha do botão (gravada em localStorage) vira data-tema no <html> e vence o sistema. */",
+        ":root[data-tema=\"claro\"] { color-scheme: light; }",
+        ":root[data-tema=\"escuro\"] { color-scheme: dark; }",
+        "",
+        "* { box-sizing: border-box; }",
+        "",
+        "body {",
+        "    margin: 0 auto;",
+        "    padding: 0 var(--espaco);",
+        "    max-width: 70rem;",
+        "    font-family: system-ui, sans-serif;",
+        "    font-size: 1.125rem;",
+        "    line-height: 1.5;",
+        "    color: var(--texto);",
+        "    background: var(--fundo);",
+        "}",
+        "",
+        "h1, h2, h3 { margin: 0 0 0.5rem; line-height: 1.2; }",
+        "h1 { margin-top: var(--espaco); font-size: 2rem; }",
+        "h2 { font-size: 1.5rem; }",
+        "h3 { font-size: 1.25rem; }",
+        "",
+        "a { color: var(--destaque); }",
+        "a:focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }",
+        "",
+        ".pular {",
+        "    position: absolute;",
+        "    left: 0.5rem;",
+        "    top: 0.5rem;",
+        "    padding: 0.75rem 1rem;",
+        "    background: var(--superficie);",
+        "    transform: translateY(-200%);",
+        "}",
+        "",
+        ".pular:focus { transform: none; }",
+        "",
+        "/* O MENU: uma linha que quebra para a seguinte quando falta espaço. Cada alvo tem 3rem (48 px) de altura. */",
+        "nav ul {",
+        "    display: flex;",
+        "    flex-wrap: wrap;",
+        "    gap: 0.5rem;",
+        "    margin: 0;",
+        "    padding: 0;",
+        "    list-style: none;",
+        "}",
+        "",
+        "nav a, nav button, .cartao a, #contato a {",
+        "    display: inline-flex;",
+        "    align-items: center;",
+        "    min-height: 3rem;",
+        "}",
+        "",
+        "nav a, nav button {",
+        "    padding: 0 var(--espaco);",
+        "    border: 2px solid var(--borda);",
+        "    border-radius: var(--raio);",
+        "    background: var(--superficie);",
+        "}",
+        "",
+        "section { margin: 2rem 0; }",
+        "",
+        "/* A GRADE: tantas colunas de pelo menos 16rem (256 px) quantas couberem, com 1rem de vão. Duas pedem 2×256+16 = 528 px de",
+        "   espaço útil e três pedem 800 px. Em 390 px cabe 1. Em 1280 px cabem 3, nunca 4: o corpo para em 70rem e perde 2rem de cada lado. */",
+        ".habilidades, .projetos {",
+        "    display: grid;",
+        "    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));",
+        "    gap: var(--espaco);",
+        "    margin: 0;",
+        "    padding: 0;",
+        "    list-style: none;",
+        "}",
+        "",
+        ".habilidades li, .cartao {",
+        "    padding: var(--espaco);",
+        "    border: 2px solid var(--borda);",
+        "    border-radius: var(--raio);",
+        "    background: var(--superficie);",
+        "}",
+        "",
+        ".cartao { display: flex; flex-direction: column; }",
+        ".cartao p { margin: 0 0 0.5rem; color: var(--texto-suave); }",
+        "",
+        "/* A MINIATURA: um quadrado que enche a largura do cartão. A captura é de celular (390×750, bem mais alta que larga):",
+        "   object-fit cover mostra uma faixa dela, a partir de 30% da altura, onde ficam o título e o jogo. */",
+        ".miniatura {",
+        "    display: block;",
+        "    width: 100%;",
+        "    aspect-ratio: 1 / 1;",
+        "    margin-bottom: var(--espaco);",
+        "    border-radius: calc(var(--raio) / 2);",
+        "    object-fit: cover;",
+        "    object-position: center 30%;",
+        "}",
+        "",
+        "/* As técnicas são texto em etiquetas: o significado está nas palavras, não na cor. */",
+        ".tecnicas {",
+        "    display: flex;",
+        "    flex-wrap: wrap;",
+        "    gap: 0.5rem;",
+        "    margin: 0 0 var(--espaco);",
+        "    padding: 0;",
+        "    list-style: none;",
+        "    font-size: 0.875rem;",
+        "}",
+        "",
+        ".tecnicas li {",
+        "    padding: 0.125rem 0.75rem;",
+        "    border: 1px solid var(--borda);",
+        "    border-radius: 1rem;",
+        "}",
+        "",
+        "/* As ações, o selo e a amostra de código. */",
+        ".acoes { display: flex; flex-wrap: wrap; gap: var(--espaco); align-items: center; }",
+        ".cartao .selo { font-weight: bold; color: var(--texto); }",
+        "",
+        "button {",
+        "    min-height: 3rem;",
+        "    padding: 0 var(--espaco);",
+        "    border: 2px solid var(--borda);",
+        "    border-radius: var(--raio);",
+        "    font: inherit;",
+        "    color: var(--texto);",
+        "    background: var(--superficie);",
+        "}",
+        "",
+        "button:focus-visible, summary:focus-visible, pre:focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }",
+        "",
+        "details { margin-top: var(--espaco); }",
+        "summary { display: flex; align-items: center; gap: 0.5rem; min-height: 3rem; cursor: pointer; color: var(--destaque); text-decoration: underline; }",
+        "summary::before { content: \"▸\"; }",
+        "details[open] summary::before { content: \"▾\"; }",
+        "",
+        "pre {",
+        "    margin: 0;",
+        "    padding: var(--espaco);",
+        "    overflow-x: auto;",
+        "    font-size: 0.875rem;",
+        "    line-height: 1.4;",
+        "    border: 1px solid var(--borda);",
+        "    border-radius: calc(var(--raio) / 2);",
+        "    background: var(--fundo);",
+        "}",
+        "",
+        ".credito { margin: var(--espaco) 0 0; font-size: 0.875rem; }",
+        "",
+        "/* Com o jogo aberto, o cartão ocupa a linha inteira da grade. O quadro tem a proporção de uma tela de celular (390×750) e no",
+        "   máximo 390 px de largura: um jogo pensado para essa tela cabe inteiro, sem corte. */",
+        ".cartao:has(iframe) { grid-column: 1 / -1; }",
+        ".cartao iframe { display: block; width: 100%; max-width: 390px; aspect-ratio: 390 / 750; margin-top: var(--espaco); border: 2px solid var(--borda); }",
+        "",
+        "/* O aviso só ocupa espaço quando os dados têm erro (quem edita projetos.js vê o que arrumar). */",
+        "#avisos:not(:empty) {",
+        "    margin-bottom: var(--espaco);",
+        "    padding: var(--espaco);",
+        "    border: 2px dashed var(--foco);",
+        "    border-radius: var(--raio);",
+        "    background: var(--superficie);",
+        "}",
+        "footer { padding: var(--espaco) 0 2rem; color: var(--texto-suave); }",
+        "",
+        "/* TELAS GRANDES: o título e o menu dividem a primeira linha do cabeçalho. */",
+        "@media (min-width: 48rem) {",
+        "    body { padding: 0 2rem; }",
+        "",
+        "    header {",
+        "        display: grid;",
+        "        grid-template-columns: 1fr auto;",
+        "        grid-template-areas: \"titulo menu\" \"frase frase\";",
+        "        align-items: center;",
+        "    }",
+        "",
+        "    h1 { grid-area: titulo; font-size: 2.75rem; }",
+        "    header p { grid-area: frase; }",
+        "    nav { grid-area: menu; }",
+        "}",
+        "",
+        "/* MOVIMENTO: nada anima sozinho; só a troca de cor de um botão leva 0,15 s, e quem pediu menos movimento não vê nem isso. */",
+        "button { transition: background-color 0.15s; }",
+        "button:hover { background: var(--fundo); }",
+        "",
+        "@media (prefers-reduced-motion: reduce) {",
+        "    * { transition: none !important; animation: none !important; }",
+        "}",
+        "",
+        "/* TECLA H: contorno tracejado nos marcos e o nível ao lado de cada título (forma e texto, não só cor). */",
+        ".ver-estrutura [data-marco] { position: relative; outline: 3px dashed var(--foco); outline-offset: 4px; }",
+        "",
+        ".ver-estrutura [data-marco]::before {",
+        "    content: attr(data-marco);",
+        "    position: absolute;",
+        "    top: -1.5rem;",
+        "    right: 0;",
+        "    padding: 0 0.25rem;",
+        "    font: bold 0.875rem monospace;",
+        "    color: var(--foco);",
+        "    background: var(--fundo);",
+        "}",
+        "",
+        ".ver-estrutura [data-nivel]::after { content: \" [\" attr(data-nivel) \"]\"; font: bold 0.875rem monospace; color: var(--foco); }",
+        "#botao-ver { margin-top: var(--espaco); }",
+        "",
+        "/* IMPRESSÃO (Ctrl+P): A4, sem menu nem botões, fundo branco, texto preto. Só o endereço de um link externo (http) é escrito",
+        "   ao lado dele: um caminho relativo não serve no papel, e o e-mail já aparece como texto. */",
+        "@page { size: A4; margin: 1.5cm; }",
+        "",
+        "@media print {",
+        "    :root { color-scheme: light !important; }",
+        "    nav, button, iframe, details, .pular, #aviso-estrutura { display: none !important; }",
+        "    [data-marco] { outline: none !important; }",
+        "    [data-marco]::before, [data-nivel]::after { content: none !important; }",
+        "    body { max-width: none; padding: 0; font-size: 11pt; color: #000; background: #fff; }",
+        "    a { color: #000; }",
+        "    a[href^=\"http\"]::after { content: \" (\" attr(href) \")\"; font-size: 0.8em; word-break: break-all; }",
+        "    .credito a::after { content: none; }   /* o endereço do curso sai uma vez só, no rodapé */",
+        "    .projetos, .habilidades { display: block; }",
+        "    .cartao, .habilidades li { margin-bottom: var(--espaco); border-color: #000; break-inside: avoid; }",
+        "    .miniatura { max-width: 12rem; }",
+        "}",
+        ""
+    ].join("\n");
+    // ESPELHO:fim
+    </script>
+
+    <script>
+        const PASSO = "final";
+
+        function marcosEmOrdem(documento) {
+            return Array.from(documento.querySelectorAll("header, nav, main, section, footer")).map(function (marco) { return marco.localName; });
+        }
+
+        async function esperarMiniatura(imagem) {
+            imagem.loading = "eager";                              // uma imagem lazy fora da tela não carrega: o teste quer saber se o ARQUIVO carrega
+            for (let tentativa = 0; tentativa < 50 && !(imagem.complete && imagem.naturalWidth > 0); tentativa++) await esperar(100);
+            return imagem.complete && imagem.naturalWidth > 0;
+        }
+
+        // ------------------------------------------------------------
+        // Estrutura (passo 1): títulos, marcos, pular para o conteúdo, âncoras, nomes acessíveis, links
+        // ------------------------------------------------------------
+        async function casosDeEstrutura() {
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+
+            testar("títulos: um só h1 (o nome, no cabeçalho) e nenhum nível pulado", function () {
+                conferirIgual("exatamente 1 h1", documento.querySelectorAll("h1").length, 1);
+                conferir("o h1 está no header e tem texto", documento.querySelector("header > h1") !== null && documento.querySelector("h1").textContent.trim() !== "");
+                const niveis = niveisDosTitulos(documento);
+                conferir("os níveis (" + niveis.join(",") + ") nunca pulam", saltosDeTitulo(niveis).length === 0, saltosDeTitulo(niveis).join("; "));
+                conferirIgual("cada projeto (article) tem um h3 e só um", Array.from(documento.querySelectorAll("article")).every(function (cartao) { return cartao.querySelectorAll("h3").length === 1; }), true);
+                conferir("todo título tem texto", Array.from(documento.querySelectorAll("h1, h2, h3")).every(function (titulo) { return titulo.textContent.trim() !== ""; }));
+            });
+
+            testar("marcos: header, nav com nome, main, footer e section com aria-labelledby", function () {
+                conferirIgual("um header", documento.querySelectorAll("header").length, 1);
+                conferirIgual("um main", documento.querySelectorAll("main").length, 1);
+                conferirIgual("um footer", documento.querySelectorAll("footer").length, 1);
+                conferirIgual("o header é filho direto do body", documento.querySelector("header").parentElement, documento.body);
+                conferirIgual("o footer também", documento.querySelector("footer").parentElement, documento.body);
+                const menus = Array.from(documento.querySelectorAll("nav"));
+                conferir("há um nav e todo nav tem aria-label preenchido", menus.length >= 1 && menus.every(function (menu) { return (menu.getAttribute("aria-label") || "").trim() !== ""; }));
+                const secoes = Array.from(documento.querySelectorAll("section"));
+                conferir("há seções e todas ficam dentro do main", secoes.length > 0 && secoes.every(function (secao) { return secao.closest("main") !== null; }));
+                secoes.forEach(function (secao) {
+                    const rotulo = documento.getElementById(secao.getAttribute("aria-labelledby") || "");
+                    conferir("section #" + secao.id + ": aria-labelledby aponta para um título com texto", rotulo !== null && /^H[1-6]$/.test(rotulo.tagName) && rotulo.textContent.trim() !== "", String(secao.getAttribute("aria-labelledby")));
+                });
+                conferir("a ordem dos marcos é header, nav, main, seções, footer", marcosEmOrdem(documento).join(" ").indexOf("header nav main section") === 0 && marcosEmOrdem(documento).pop() === "footer", marcosEmOrdem(documento).join(" "));
+            });
+
+            testar("o link 'pular para o conteúdo' é o primeiro foco e leva ao main", function () {
+                const ordem = elementosNaOrdemDoTab(documento);
+                const principalDoPasso = documento.querySelector("main");
+                conferir("o main tem id", principalDoPasso.id !== "");
+                conferirIgual("nenhum elemento usa tabindex positivo (ele embaralha a ordem do Tab)", ordem.filter(function (e) { return e.tabIndex > 0; }).length, 0);
+                conferirIgual("o primeiro foco do Tab é um link", ordem[0].localName, "a");
+                conferirIgual("e ele aponta para o id do main", ordem[0].getAttribute("href"), "#" + principalDoPasso.id);
+                conferir("e tem texto", nomeAcessivel(ordem[0]) !== "");
+                ordem[0].focus();
+                conferir("com foco ele aparece na tela", ordem[0].getBoundingClientRect().top >= 0);
+                ordem[0].blur();
+            });
+
+            testar("âncoras: todo href=\"#x\" tem um id, e nenhum id se repete", function () {
+                conferir(documento.querySelectorAll('a[href^="#"]').length + " links de âncora", documento.querySelectorAll('a[href^="#"]').length >= 5);
+                conferirIgual("âncoras sem destino", ancorasQuebradas(documento).join(" "), "");
+                conferirIgual("ids repetidos", idsRepetidos(documento).join(" "), "");
+                const destinosDoMenu = Array.from(documento.querySelectorAll("nav a[href^='#']")).map(function (link) { return documento.getElementById(link.getAttribute("href").slice(1)); });
+                conferir("cada link do menu leva a uma section", destinosDoMenu.length > 0 && destinosDoMenu.every(function (destino) { return destino !== null && destino.localName === "section"; }));
+                const destinosDasHabilidades = Array.from(documento.querySelectorAll(".habilidades a[href^='#']")).map(function (link) { return documento.getElementById(link.getAttribute("href").slice(1)); });
+                conferir("cada prova de uma habilidade leva a um projeto (article)", destinosDasHabilidades.length > 0 && destinosDasHabilidades.every(function (destino) { return destino !== null && destino.localName === "article"; }));
+            });
+
+            testar("nome acessível: todo botão, campo e link tem nome", function () {
+                const quemPrecisaDeNome = documento.querySelectorAll("button, input, select, textarea, a[href]");
+                const semNome = Array.from(quemPrecisaDeNome).filter(function (elemento) { return nomeAcessivel(elemento) === ""; });
+                conferir(quemPrecisaDeNome.length + " controles e links, todos com nome", quemPrecisaDeNome.length > 0 && semNome.length === 0, semNome.map(function (e) { return e.outerHTML.slice(0, 50); }).join(" | "));
+            });
+
+            testar("links para os jogos: os 4 cartões apontam para ../../<jogo>/final/index.html, que existe", function () {
+                const cartoes = Array.from(documento.querySelectorAll("#lista-projetos > article"));
+                conferirIgual("4 projetos", cartoes.length, 4);
+                cartoes.forEach(function (cartao) {
+                    const links = cartao.querySelectorAll(".acoes a[href]");
+                    conferirIgual("#" + cartao.id + ": um link de jogo", links.length, 1);
+                    const href = links[0].getAttribute("href");
+                    conferir("#" + cartao.id + ": " + href + " tem a forma ../../<jogo>/final/index.html", /^\.\.\/\.\.\/[a-z-]+\/final\/index\.html$/.test(href));
+                    const destino = caminhoNoRepositorio(href, PASSO);
+                    conferir("#" + cartao.id + ": e existe no repositório (" + destino + ")", ARQUIVOS_EXISTENTES.indexOf(destino) >= 0, String(destino));
+                });
+                const locais = Array.from(documento.querySelectorAll("a[href]")).map(function (link) { return caminhoNoRepositorio(link.getAttribute("href"), PASSO); }).filter(function (caminho) { return caminho !== null; });
+                conferir(locais.length + " links de arquivo no total, todos no inventário", locais.length === cartoes.length && locais.every(function (caminho) { return ARQUIVOS_EXISTENTES.indexOf(caminho) >= 0; }));
+                const creditos = Array.from(documento.querySelectorAll("a[href^='https://github.com/']")).map(function (link) { return link.getAttribute("href"); });
+                conferir("o crédito do curso é sempre o mesmo endereço absoluto https:// (" + creditos.length + " links)", creditos.length >= 5 && creditos.every(function (href) { return href === creditos[0]; }));
+            });
+
+            quadro.remove();
+        }
+
+        // ------------------------------------------------------------
+        // Layout (passo 2): colunas que se veem, cabeçalho, alvos de toque
+        // ------------------------------------------------------------
+        async function casosDeLayout() {
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX, { largura: 390, altura: 750 });
+            const janela = quadro.contentWindow, documento = janela.document;
+            const cartoes = Array.from(documento.querySelectorAll(".cartao"));
+
+            await testarAssincrono("sem rolagem horizontal em 360, 390 e 1280 (e em 320 e 640), com todo cartão dentro da janela", async function () {
+                for (const largura of [360, 390, 1280, 320, 640]) {
+                    await mudarTamanho(quadro, largura);
+                    conferirSemRolagemHorizontal(quadro, "final");
+                    conferir(largura + ": todo cartão cabe na janela", cartoes.every(function (cartao) { const caixa = cartao.getBoundingClientRect(); return caixa.left >= -0.5 && caixa.right <= documento.documentElement.clientWidth + 0.5; }));
+                }
+            });
+
+            await testarAssincrono("cartões e habilidades: 1 coluna em 360 e 390, 2 ou mais em 1280", async function () {
+                for (const largura of [360, 390, 1280]) {
+                    await mudarTamanho(quadro, largura);
+                    const habilidades = Array.from(documento.querySelectorAll(".habilidades li"));
+                    if (largura < 768) {
+                        conferirIgual(largura + ": a grade tem 1 coluna", colunasDaGrade(documento, ".projetos"), 1);
+                        conferirIgual(largura + ": e os cartões ficam empilhados", colunasVisiveis(cartoes), 1);
+                        conferirIgual(largura + ": as habilidades também", colunasVisiveis(habilidades), 1);
+                    } else {
+                        conferir(largura + ": a grade tem 2 ou mais colunas (" + colunasDaGrade(documento, ".projetos") + ")", colunasDaGrade(documento, ".projetos") >= 2);
+                        conferir(largura + ": e os cartões aparecem lado a lado (" + colunasVisiveis(cartoes) + ")", colunasVisiveis(cartoes) >= 2);
+                        conferir(largura + ": as habilidades também (" + colunasVisiveis(habilidades) + ")", colunasVisiveis(habilidades) >= 2);
+                    }
+                    conferir(largura + ": nenhum cartão fica com altura 0", cartoes.every(function (cartao) { return cartao.getBoundingClientRect().height > 40; }));
+                }
+            });
+
+            await testarAssincrono("o cabeçalho: menu abaixo do título no celular, ao lado dele no desktop", async function () {
+                const titulo = documento.querySelector("h1"), menu = documento.querySelector("nav");
+                await mudarTamanho(quadro, 390);
+                conferir("390: o menu começa abaixo do título", menu.getBoundingClientRect().top >= titulo.getBoundingClientRect().bottom - 0.5);
+                await mudarTamanho(quadro, 1280);
+                conferir("1280: o menu fica à direita do título", menu.getBoundingClientRect().left >= titulo.getBoundingClientRect().left + 100);
+            });
+
+            await testarAssincrono("alvos de toque de pelo menos 48 px em 360 e 390 (menu, tema, cartões e contato)", async function () {
+                for (const largura of [360, 390]) {
+                    await mudarTamanho(quadro, largura);
+                    conferir(largura + ": " + alvosDeToque(documento).length + " alvos conferidos", alvosDeToque(documento).length >= 8);
+                    conferirIgual(largura + ": alvos com menos de 48 px", alvosPequenos(documento).join(" | "), "");
+                }
+                const pular = documento.querySelector(".pular");
+                pular.focus();
+                conferir("o link 'Pular' tem 48 px de altura quando aparece (" + Math.round(pular.getBoundingClientRect().height) + ")", pular.getBoundingClientRect().height >= ALTURA_MINIMA_DO_ALVO);
+                pular.blur();
+            });
+
+            quadro.remove();
+        }
+
+        // ------------------------------------------------------------
+        // Miniaturas (arquivos PNG): carregam, têm alt que nomeia o jogo; o peso é conferido por espelho.mjs --conferir
+        // ------------------------------------------------------------
+        async function casosDasMiniaturas() {
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+            const projetos = janela.eval("projetos");
+            const imagens = Array.from(documento.querySelectorAll("#lista-projetos .miniatura"));
+
+            testar("os dados apontam para as 4 miniaturas do inventário, com a caixa certa", function () {
+                conferirIgual("uma miniatura por projeto", imagens.length, projetos.length);
+                conferirIgual("o inventário tem 4 miniaturas", AMOSTRAS_DO_FINAL.length, 4);
+                projetos.forEach(function (projeto) {
+                    conferirIgual(projeto.id + ": imagem é amostras/<id>.png", projeto.imagem, "amostras/" + projeto.id + ".png");
+                    conferir(projeto.id + ": e o arquivo " + projeto.id + ".png está no inventário", AMOSTRAS_DO_FINAL.indexOf(projeto.id + ".png") >= 0);
+                });
+            });
+
+            await testarAssincrono("cada miniatura carrega de verdade (naturalWidth > 0) e o alt diz de que jogo ela é", async function () {
+                for (let posicao = 0; posicao < imagens.length; posicao++) {
+                    const imagem = imagens[posicao], projeto = projetos[posicao];
+                    conferir(projeto.id + ": a imagem carregou (" + imagem.naturalWidth + "×" + imagem.naturalHeight + ")", await esperarMiniatura(imagem), imagem.src);
+                    conferir(projeto.id + ": o endereço termina em /curriculo/final/amostras/" + projeto.id + ".png (mesmas maiúsculas do arquivo)", imagem.src.slice(-("/curriculo/final/amostras/" + projeto.id + ".png").length) === "/curriculo/final/amostras/" + projeto.id + ".png", imagem.src);
+                    conferir(projeto.id + ': o alt "' + imagem.alt.slice(0, 40) + '..." cita o nome do jogo (' + projeto.nome + ")", imagem.alt.toLowerCase().indexOf(projeto.nome.toLowerCase()) >= 0);
+                }
+            });
+
+            testar("as únicas imagens da página são as miniaturas dos cartões (nenhuma foto pessoal)", function () {
+                const todas = Array.from(documento.querySelectorAll("img"));
+                conferirIgual("4 imagens", todas.length, 4);
+                conferir("todas dentro de um cartão e vindas de amostras/", todas.every(function (imagem) { return imagem.closest(".cartao") !== null && /\/curriculo\/final\/amostras\/[a-z]+\.png$/.test(imagem.src); }));
+            });
+
+            testar("a conferência de alt do final enxerga um alt que não nomeia o jogo", function () {
+                const alt = "Uma tela colorida";
+                conferirIgual("alt sem o nome do jogo é detectado", alt.toLowerCase().indexOf(projetos[1].nome.toLowerCase()) >= 0, false);
+            });
+
+            quadro.remove();
+        }
+
+        // ------------------------------------------------------------
+        // Privacidade (GDD, seção 7): o que a página, os dados e o texto na tela dizem
+        // ------------------------------------------------------------
+        async function casosDePrivacidade() {
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+
+            testar("a conferência de privacidade não é vazia: ela enxerga CPF, RG, telefone e e-mail real, e deixa passar o fictício", function () {
+                ["123.456.789-09", "12.345.678-9", "(11) 98765-4321", "11 98765-4321", "+55 11 98765-4321", "98765-4321", "11987654321", "joao.silva@example.com", "alex@exemplo.com"].forEach(function (dado) {
+                    conferir("detecta " + dado, achadosDePrivacidade("contato: " + dado).length >= 1);
+                });
+                ["alex@exemplo.invalid", "#1f6f43", "390×750", "2026-10-28", "2024-2026", "rgb(1, 3, 5)", "Cidade Exemplo, UF"].forEach(function (inocente) {
+                    conferirIgual("deixa passar " + inocente, achadosDePrivacidade("texto: " + inocente).join(" | "), "");
+                });
+            });
+
+            testar("o index.html, os dados dos projetos e o texto na tela não têm CPF, RG, telefone nem e-mail real", function () {
+                conferirIgual("index.html (espelho)", achadosDePrivacidade(ESPELHO_DO_INDEX).join(" | "), "");
+                conferirIgual("style.css (espelho)", achadosDePrivacidade(ESPELHO_DO_CSS).join(" | "), "");
+                conferirIgual("dados de projetos.js", achadosDePrivacidade(JSON.stringify(janela.eval("projetos"))).join(" | "), "");
+                conferirIgual("texto que a pessoa lê na tela", achadosDePrivacidade(documento.body.textContent).join(" | "), "");
+            });
+
+            testar("todo e-mail é @exemplo.invalid, e o contato é só e-mail, perfil e cidade", function () {
+                const emails = Array.from(documento.querySelectorAll('a[href^="mailto:"]')).map(function (link) { return link.getAttribute("href"); });
+                conferir("há 1 mailto: e ele é @exemplo.invalid (" + emails.join(", ") + ")", emails.length === 1 && /@exemplo\.invalid$/.test(emails[0]));
+                const contato = documento.getElementById("contato");
+                conferirIgual("nenhum link tel:", documento.querySelectorAll('a[href^="tel:"], a[href^="sms:"], a[href^="whatsapp:"]').length, 0);
+                conferir("o contato tem só 3 linhas: e-mail, perfil e cidade (" + contato.querySelectorAll("p").length + ")", contato.querySelectorAll("p").length === 3);
+                conferir("o perfil é de um domínio .invalid", Array.from(contato.querySelectorAll('a[href^="http"]')).every(function (link) { return /^https:\/\/exemplo\.invalid\//.test(link.getAttribute("href")); }));
+            });
+
+            testar("og:url e og:image são marcadores SEU-USUARIO/SEU-REPOSITORIO, nunca um endereço real", function () {
+                const pagina = new DOMParser().parseFromString(ESPELHO_DO_INDEX, "text/html");
+                ["og:url", "og:image"].forEach(function (campo) {
+                    const endereco = pagina.head.querySelector('meta[property="' + campo + '"]').getAttribute("content");
+                    conferir(campo + " = " + endereco, /^https:\/\/SEU-USUARIO\.github\.io\/SEU-REPOSITORIO\//.test(endereco));
+                });
+                const hospedeiros = Array.from(pagina.querySelectorAll("[href], [src], meta[content^='http']")).map(function (elemento) { return elemento.getAttribute("href") || elemento.getAttribute("src") || elemento.getAttribute("content"); })
+                    .filter(function (endereco) { return /^https?:\/\//.test(endereco); }).map(function (endereco) { return new URL(endereco).hostname; });
+                const permitidos = ["github.com", "exemplo.invalid", "seu-usuario.github.io"];   // new URL() devolve o nome em minúsculas
+                conferir("todo endereço absoluto do index.html é o do curso, fictício ou marcador (" + Array.from(new Set(hospedeiros)).join(", ") + ")", hospedeiros.every(function (nome) { return permitidos.indexOf(nome) >= 0; }));
+            });
+
+            testar("o aviso de privacidade está no topo do index.html, antes do <head>", function () {
+                const aviso = ESPELHO_DO_INDEX.slice(0, ESPELHO_DO_INDEX.indexOf("<head>"));
+                ["NÃO PUBLIQUE", "CPF", "telefone", "PREFIRA", "TROQUE"].forEach(function (palavra) { conferir("o comentário inicial cita " + palavra, aviso.indexOf(palavra) >= 0); });
+            });
+
+            quadro.remove();
+        }
+
+        async function casosDoFinal() {
+            await casosDeEstrutura();
+            await casosDeLayout();
+            await casosDasMiniaturas();
+            await casosDePrivacidade();
+
+            const quadro = await executarCasosDeCompartilhamento(PASSO, ESPELHO_DO_INDEX);
+            quadro.remove();
+        }
+
+        vigiarOFim();
+        rodarAcabamento(PASSO, ESPELHO_DO_INDEX, ESPELHO_DO_CSS, casosDoFinal);
+    </script>
+</body>
+
+</html>

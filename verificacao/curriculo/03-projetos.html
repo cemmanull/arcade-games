@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Currículo, passo 3: projetos como dados</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Currículo, passo 3: projetos como dados</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-curriculo.js"></script>
+
+    <!-- O index.html do passo, copiado por espelho.mjs (por file:// a página não consegue lê-lo). O CSS e o JS são os de verdade. -->
+    <script>
+    // ESPELHO:inicio — gerado por node verificacao/curriculo/espelho.mjs a partir de curriculo/03-projetos/. Não edite à mão.
+    const ESPELHO_DO_INDEX = [
+        "<\!--",
+        "  CURRÍCULO — PASSO 3: PROJETOS COMO DADOS",
+        "",
+        "  Os cartões não estão mais escritos aqui: cada projeto é um objeto em projetos.js e o script.js desenha um",
+        "  cartão por objeto. Para trocar um projeto, edite os dados, não o HTML. Se os dados tiverem erro, o aviso",
+        "  aparece no lugar dos cartões. Todos os dados são fictícios.",
+        "-->",
+        "<!DOCTYPE html>",
+        "<html lang=\"pt-BR\">",
+        "",
+        "<head>",
+        "    <meta charset=\"UTF-8\">",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        "    <title>Alex Exemplo — Programação web e game design<\/title>",
+        "    <link rel=\"stylesheet\" href=\"style.css\">",
+        "    <\script src=\"projetos.js\" defer><\/script>",
+        "    <\script src=\"script.js\" defer><\/script>",
+        "<\/head>",
+        "",
+        "<body>",
+        "    <a class=\"pular\" href=\"#principal\">Pular para o conteúdo<\/a>",
+        "",
+        "    <header>",
+        "        <h1>Alex Exemplo<\/h1>",
+        "        <p>Estudante de programação web e game design. Faço jogos e páginas do zero, só com HTML, CSS e JavaScript.<\/p>",
+        "",
+        "        <nav aria-label=\"Seções do currículo\">",
+        "            <ul>",
+        "                <li><a href=\"#habilidades\">Habilidades<\/a><\/li>",
+        "                <li><a href=\"#projetos\">Projetos<\/a><\/li>",
+        "                <li><a href=\"#contato\">Contato<\/a><\/li>",
+        "            <\/ul>",
+        "        <\/nav>",
+        "    <\/header>",
+        "",
+        "    <main id=\"principal\">",
+        "        <section id=\"habilidades\" aria-labelledby=\"titulo-habilidades\">",
+        "            <h2 id=\"titulo-habilidades\">Habilidades<\/h2>",
+        "            <p>Cada habilidade vem com a prova: um projeto que a usa.<\/p>",
+        "            <ul class=\"habilidades\">",
+        "                <li><strong>HTML semântico, CSS responsivo e acessibilidade.<\/strong> Prova: esta própria página.<\/li>",
+        "                <li><strong>Canvas e laço de jogo.<\/strong> Prova: <a href=\"#projeto-cobrinha\">Jogo da Cobrinha<\/a>.<\/li>",
+        "                <li><strong>Matrizes e rotação de peças.<\/strong> Prova: <a href=\"#projeto-tetris\">Tetris<\/a>.<\/li>",
+        "                <li><strong>Regras e algoritmos de busca.<\/strong> Prova: <a href=\"#projeto-xadrez\">Xadrez<\/a>.<\/li>",
+        "                <li><strong>Dados separados do código.<\/strong> Prova: <a href=\"#projeto-xenomorph\">Xenomorph<\/a>.<\/li>",
+        "            <\/ul>",
+        "        <\/section>",
+        "",
+        "        <section id=\"projetos\" aria-labelledby=\"titulo-projetos\">",
+        "            <h2 id=\"titulo-projetos\">Projetos<\/h2>",
+        "",
+        "            <div id=\"avisos\" role=\"alert\"><\/div>",
+        "            <div id=\"lista-projetos\" class=\"projetos\"><\/div>",
+        "        <\/section>",
+        "",
+        "        <section id=\"contato\" aria-labelledby=\"titulo-contato\">",
+        "            <h2 id=\"titulo-contato\">Contato<\/h2>",
+        "            <p>E-mail: <a href=\"mailto:alex@exemplo.invalid\">alex@exemplo.invalid<\/a><\/p>",
+        "            <p>Cidade Exemplo, UF<\/p>",
+        "        <\/section>",
+        "    <\/main>",
+        "",
+        "    <footer>",
+        "        <p>Feito seguindo o curso <a href=\"https://github.com/cemmanull/arcade-games\">Do zero ao jogo<\/a>. Dados fictícios.<\/p>",
+        "    <\/footer>",
+        "<\/body>",
+        "",
+        "<\/html>",
+        ""
+    ].join("\n");
+    // ESPELHO:fim
+    </script>
+
+    <script>
+        const PASSO = "03-projetos";
+
+        async function principal() {
+            vigiarOFim();
+            const quadro = await abrirPasso(PASSO, ESPELHO_DO_INDEX);
+            const janela = quadro.contentWindow, documento = janela.document;
+
+            testar("preparação: projetos.js e script.js de verdade rodaram no iframe", function () {
+                conferirIgual("projetos é uma lista", Array.isArray(janela.eval("projetos")), true);
+                conferirIgual("com 4 projetos (o modelo do curso)", janela.eval("projetos").length, 4);
+                conferirIgual("conferirProjetos é uma função", typeof janela.conferirProjetos, "function");
+                conferirIgual("desenharProjetos é uma função", typeof janela.desenharProjetos, "function");
+                conferirIgual("a carga não deu erro nem escreveu no console.error", janela.__erros.concat(janela.__consoleErros).join(" | "), "");
+            });
+
+            testar("cartões renderizados = dados: mesmo número, mesma ordem, mesmos nomes", function () {
+                conferirCartoesIguaisAosDados(janela);
+                conferirIgual("cada cartão é um article.cartao dentro de #lista-projetos", documento.querySelectorAll("#lista-projetos > article.cartao").length, 4);
+                conferir("cada projeto tem nome, resumo e técnicas não vazios", janela.eval("projetos").every(function (p) { return p.nome.trim() && p.resumo.trim() && p.tecnicas.length > 0; }));
+            });
+
+            testar("os dados apontam para jogos que existem", function () {
+                conferirDestinosDosDados(janela, PASSO, false);
+                conferir("nenhuma miniatura é arquivo (o curso só aceita imagem no final): imagem vazia", janela.eval("projetos").every(function (p) { return p.imagem === ""; }));
+                conferir("o bloco colorido é um SVG embutido (data:) com alt do projeto", Array.from(documento.querySelectorAll(".cartao img")).every(function (imagem) { return imagem.src.indexOf("data:image/svg+xml") === 0 && imagem.alt.trim() !== ""; }));
+            });
+
+            testar("a conferência dos dados rejeita cada defeito (alt, pasta, nome repetido e o resto) e aceita os dados de verdade", function () {
+                conferirValidadorDeProjetos(janela, false);
+            });
+
+            testar("o texto entra por textContent: um nome com <b> aparece como texto", function () {
+                conferirTextoNaoViraMarcacao(janela);
+            });
+
+            testar("dados inválidos mostram a mensagem em #avisos em vez de lançar erro", function () {
+                conferirDadosInvalidosViramAviso(janela);
+            });
+
+            await testarAssincrono("a lista de cartões desenhada pelo script respeita o layout: grade, rolagem e alvos", async function () {
+                for (const largura of [360, 390, 1280]) {
+                    await mudarTamanho(quadro, largura);
+                    conferirSemRolagemHorizontal(quadro, "passo 3, cartões desenhados");
+                    const cartoes = Array.from(documento.querySelectorAll("#lista-projetos > article"));
+                    const esperado = largura < 768 ? 1 : 2;
+                    conferir(largura + ": " + colunasVisiveis(cartoes) + " coluna(s) de cartões", largura < 768 ? colunasVisiveis(cartoes) === 1 : colunasVisiveis(cartoes) >= 2, "esperado " + esperado);
+                    conferirIgual(largura + ": alvos com menos de 48 px", alvosPequenos(documento).join(" | "), "");
+                }
+            });
+
+            await testarAssincrono("se projetos.js não carregar, o passo avisa em #avisos em vez de quebrar", async function () {
+                const semDados = await abrirPasso(PASSO, ESPELHO_DO_INDEX, { transformar: function (texto) { return texto.replace('<script src="projetos.js" defer>', '<script src="projetos-que-nao-existe.js" defer>'); } });
+                try {
+                    const outraJanela = semDados.contentWindow, outroDocumento = outraJanela.document;
+                    conferirIgual("nenhum erro não tratado (nada de ReferenceError)", outraJanela.__erros.join(" | "), "");
+                    // Nesta página `projetos` também é o id de uma <section>: sem a lista, o navegador faz de `projetos` o ELEMENTO da seção
+                    // e a conferência responde "precisa ser uma lista" (o GUIA conta essa armadilha). Sem o id, seria "não existe".
+                    const aviso = outroDocumento.getElementById("avisos").textContent;
+                    conferir("#avisos explica o problema da lista: " + aviso.slice(0, 70), /não existe|precisa ser uma lista/.test(aviso), aviso);
+                    conferirIgual("nenhum cartão", outroDocumento.querySelectorAll("#lista-projetos > article").length, 0);
+                } finally {
+                    semDados.remove();
+                }
+            });
+
+            await testarAssincrono("projetos.js com erro de execução (nome: Tetris sem aspas) ou de sintaxe: #avisos explica em vez de quebrar", async function () {
+                await conferirProjetosJsQuebrado(PASSO, ESPELHO_DO_INDEX, { tema: false, teclado: false });
+            });
+
+            testar("a inicial do bloco colorido é a primeira letra inteira, mesmo fora do plano básico do Unicode", function () {
+                conferirInicialDoBlocoColorido(janela);
+            });
+
+            testar("no fim, os dados e a tela estão como no começo", function () {
+                conferirIgual("4 cartões", documento.querySelectorAll("#lista-projetos > article").length, 4);
+                conferirIgual("aviso vazio", documento.getElementById("avisos").textContent, "");
+                conferirIgual("nenhum erro não tratado", janela.__erros.join(" | "), "");
+            });
+
+            quadro.remove();
+            finalizar();
+        }
+
+        principal();
+    </script>
+</body>
+
+</html>

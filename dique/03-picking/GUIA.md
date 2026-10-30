@@ -85,6 +85,10 @@ para trás, até `x'` ou `y'` virar um número inteiro. O menor dos dois decide 
 termina quando o raio sai do mapa pelos fundos (`coluna` ou `linha` negativa) ou chega ao chão (`z < 0`) **fora**
 do mapa: aí devolve `null`, e tocar no mar aberto não marca nada.
 
+**A entrada também pode cair numa linha da grade.** Se o raio entra no alto com `y' = 7` na matemática, a inversa pode devolver
+`6,999999999999999`, e `Math.floor` o poria na coluna de **trás**, 6: o DDA pularia a casa 7, que a força bruta (polígono fechado, última pintada vence)
+acha. Por isso a entrada soma `MARGEM_DO_PONTO_FLUTUANTE` antes do `floor` e `faltaX`/`faltaY` nunca ficam negativos: o ponto sobre a linha fica na casa da frente, com zero a andar.
+
 A função devolve `{ x, y, face, z, visitadas }`: a casa do **mapa** (`casaDaTela` desfaz o giro), a face
 (`"topo"`, `"esquerda"`, `"direita"`), a altura do impacto e as colunas visitadas, para o H desenhar.
 

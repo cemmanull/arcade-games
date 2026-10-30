@@ -24,7 +24,10 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
     pois em `file://` abre uma listagem), `QUEBRADO` se não tem. Fora da conta: `verificacao/autoteste/` e `.claude/`
     (`verificacao/medicao/` é conferida); as 2 imagens de `tutorial/01-html` saem como `ESPERADO`
     (tabela `QUEBRADOS_ESPERADOS_NO_HTML` em `links.mjs`).
-  Os três precisam sair com 0 antes de qualquer merge.
+  - `node verificacao/curriculo/espelho.mjs --conferir` — as páginas do currículo testam um **espelho** do
+    `index.html` do passo (por `file://` elas não leem o arquivo); acusa espelho velho e trecho de código que não
+    bate com o jogo. Mudou um `curriculo/<passo>/index.html`: rode `espelho.mjs` sem flag e depois as páginas.
+  Os quatro precisam sair com 0 antes de qualquer merge.
 - Publicar uma etapa verificada: merge em `learning-path`, `main` em fast-forward, `git push origin
   learning-path main`. Nunca `--force`, `--all`, `--mirror`, nem `backup/*`. Prefira avançar branches com
   `git fetch . origem:destino` (só fast-forward) a trocar de branch. Antes de qualquer checkout, copie

@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 5: a enchente</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 5: a enchente</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
+
+    <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
+         Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
+    <script>
+        const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
+            + '<canvas id="jogo" width="384" height="252">Seu navegador não suporta canvas.</canvas>'
+            + '<p id="painel"></p>'
+            + '<div id="ferramentas">'
+            + '<button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true" aria-label="Ferramenta Erguer: sobe a casa um degrau e gasta um bloco (1)">Erguer</button>'
+            + '<button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false" aria-label="Ferramenta Cavar: desce a casa um degrau e devolve um bloco (2)">Cavar</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar a ferramenta na casa marcada (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="desfazer" aria-label="Desfazer a última jogada (Z)">Desfazer</button>'
+            + '<button type="button" data-acao="liberarMare" aria-label="Liberar a maré (M)">Maré</button>'
+            + '<button type="button" data-acao="reiniciar" aria-label="Recomeçar o dia (N)">Refazer</button>'
+            + '</div>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<div id="setas">'
+            + '<button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>'
+            + '<button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>'
+            + '<button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>'
+            + '<button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<pre id="leitura" aria-live="off"></pre>'
+            + '<p id="ajuda">1 Erguer · 2 Cavar · Z desfazer · M maré · N refazer · H ver a água</p>';
+        document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="252"', 'width="1" height="1"'));
+    </script>
+
+    <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/05-enchente/regras.js"></script>
+    <script src="../../dique/05-enchente/script.js"></script>
+
+    <script>
+        const errosNaCarga = errosDeConsole.slice();
+        const ALTURAS_ORIGINAIS = JSON.stringify(ALTURAS_INICIAIS);
+        const MAR = matrizDoMar(ALTURAS_EM_TEXTO);
+        const FONTES_DO_MAR = fontesDoMar(MAR);
+        const SETAS_DA_TELA = [["cursorParaEsquerda", -1, 0], ["cursorParaCima", 0, -1], ["cursorParaBaixo", 0, 1], ["cursorParaDireita", 1, 0]];
+
+        // Os números do GDD e do GUIA, escritos aqui de propósito (não lidos do jogo).
+        const NIVEL_DA_MARE_ESPERADO = 2, NIVEL_DA_BAIXA_MAR_ESPERADO = 1, VOLUME_ESPERADO = 17, BLOCOS_ESPERADOS = 1;
+
+        // O relógio falso não precisa pintar 100 casas por quadro: o desenho vira nada, e os casos que leem o que ele escreve no DOM
+        // (painel, leitura) ou espiam o canvas chamam desenharVerdadeiro().
+        const desenharVerdadeiro = desenhar;
+        desenhar = function () { };
+
+        // ------------------------------------------------------------
+        // Ajudantes de entrada e de estado
+        // ------------------------------------------------------------
+        function apertarTecla(tecla, modificadores) {
+            const evento = new KeyboardEvent("keydown", Object.assign({ key: tecla, cancelable: true, bubbles: true }, modificadores || {}));
+            document.dispatchEvent(evento);
+            return evento;
+        }
+
+        function irParaOGiro(giro) {
+            rotacao = giro;
+            listaDeDesenho = montarListaDeDesenho();
+        }
+
+        function rodarNosQuatroGiros(caso) {
+            try {
+                for (let giro = 0; giro < 4; giro++) {
+                    irParaOGiro(giro);
+                    caso(giro);
+                }
+            } finally {
+                irParaOGiro(0);
+            }
+        }
+
+        function definirCamera(zoom, desvioX, desvioY) {
+            camera.zoom = zoom;
+            camera.desvioX = desvioX;
+            camera.desvioY = desvioY;
+            limitarCamera();
+        }
+
+        function voltarAoComeco() {                 // o botão Refazer do jogo, mais o que ele não limpa (giro, câmera, cursor, H)
+            reiniciar();
+            irParaOGiro(0);
+            definirCamera(1, 0, 0);
+            cursor = { x: 4, y: 4 };
+            marcada = false;
+            ponteiro = null;
+            dedo = null;
+            giroDaRoda = 0;
+            if (depuracaoLigada) apertarTecla("h");
+            escolherFerramenta("erguer");
+            avisar("");
+        }
+
+        function fotoDoEstado() {
+            return JSON.stringify({ alturas: alturas, blocos: estadoAtual.blocos });
+        }
+
+        function terraTotal() {                      // a terra que existe: o que está empilhado mais o estoque
+            return alturas.reduce(function (soma, linha) { return soma + linha.reduce(function (parcial, altura) { return parcial + altura; }, 0); }, estadoAtual.blocos);
+        }
+
+        function casasComObjeto(simbolo) {
+            const casas = [];
+            OBJETOS_EM_TEXTO.forEach(function (linha, y) { linha.split("").forEach(function (objeto, x) { if (objeto === simbolo) casas.push({ x: x, y: y }); }); });
+            return casas;
+        }
+
+        function casasPerdidasPelaMinhaConta(alagado) {
+            return casasComObjeto("C").filter(function (casa) { return alagado[casa.y][casa.x]; }).length;
+        }
+
+        function congelarDeVez(valor) {
+            if (valor !== null && typeof valor === "object" && !Object.isFrozen(valor)) {
+                Object.freeze(valor);
+                Object.keys(valor).forEach(function (chave) { congelarDeVez(valor[chave]); });
+            }
+            return valor;
+        }
+
+        function estadoCom(blocos, jogadas) {        // parte do terreno de verdade e aplica jogadas [ferramenta, x, y]; null se alguma não vale
+            let estado = { alturas: JSON.parse(ALTURAS_ORIGINAIS), blocos: blocos };
+            for (let i = 0; i < jogadas.length; i++) {
+                estado = moldar(estado, jogadas[i][0], jogadas[i][1], jogadas[i][2]);
+                if (estado === null) return null;
+            }
+            return estado;
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("o mapa, as constantes do GUIA e o estado de partida", function () {
+            conferirIgual("o mapa de verdade é válido", MAPA_VALIDO, true);
+            conferirIgual("o mapa tem 10×10", TAMANHO, 10);
+            conferirIgual("a maré alcança o nível 2", NIVEL_DA_MARE, NIVEL_DA_MARE_ESPERADO);
+            conferirIgual("a baixa-mar cobre o nível 1", NIVEL_DA_BAIXA_MAR, NIVEL_DA_BAIXA_MAR_ESPERADO);
+            conferirIgual("o volume da maré é 17", VOLUME_DA_MARE, VOLUME_ESPERADO);
+            conferirIgual("o estoque começa com 1 bloco", BLOCOS_INICIAIS, BLOCOS_ESPERADOS);
+            conferirIgual("as fontes do jogo são as casas de mar do texto (" + FONTES_DO_MAR.length + ")", textoDasCasas(CASAS_DO_MAR), textoDasCasas(FONTES_DO_MAR));
+            conferirIgual("as três casas do mapa", textoDasCasas(CASAS_COM_CASA), textoDasCasas(casasComObjeto("C")));
+            conferirIgual("e são 3", CASAS_COM_CASA.length, 3);
+            conferirIgual("o estado de partida tem o terreno do texto", JSON.stringify(estadoInicial().alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("e o estoque de 1 bloco", estadoInicial().blocos, 1);
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+        });
+
+        testar("ENCHENTE = PONTO FIXO: sem volume, o jogo molha as mesmas casas que o preenchimento repetido sobre a grade inteira (24 terrenos × 4 níveis), com a mesma distância", function () {
+            semearSorteio(5050);
+            let comparados = 0, divergenciasDoConjunto = 0, divergenciasDaDistancia = 0, divergenciasDaFila = 0, casasAlcancadas = 0, casasBarradas = 0;
+            const exemplos = [];
+            for (let terrenoSorteado = 0; terrenoSorteado < 24; terrenoSorteado++) {
+                const terreno = terrenoSorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, terrenoSorteado % 2 === 1);
+                const fontes = terrenoSorteado % 3 === 0 ? FONTES_DO_MAR.concat(sortearFontesNaTerra(3, MAR)) : FONTES_DO_MAR;
+                for (let nivel = 1; nivel <= 4; nivel++) {
+                    const meu = alagarPorPontoFixo(terreno, nivel, fontes);
+                    const dele = buscaEmLargura(terreno, nivel, fontes);
+                    const molhadoDele = dele.distancia.map(function (linha) { return linha.map(function (distancia) { return distancia >= 0; }); });
+                    comparados++;
+                    const diferenca = primeiraDiferenca(molhadoDele, meu);
+                    if (diferenca) { divergenciasDoConjunto++; if (exemplos.length < 3) exemplos.push("terreno " + terrenoSorteado + " nível " + nivel + " " + diferenca); }
+                    if (primeiraDiferenca(dele.distancia, distanciasPorRelaxamento(meu, fontes))) divergenciasDaDistancia++;
+                    if (textoDasCasas(dele.ordem.slice().sort(function (a, b) { return a.y - b.y || a.x - b.x; })) !== textoDasCasas(casasDaMatriz(meu))) divergenciasDaFila++;
+                    casasAlcancadas += casasDaMatriz(meu).length;
+                    casasBarradas += TAMANHO * TAMANHO - casasDaMatriz(meu).length;
+                }
+            }
+            conferir(comparados + " enchentes: o conjunto molhado = o ponto fixo (nível 1 a 4, fontes do mar e, às vezes, 3 fontes em terra)", divergenciasDoConjunto === 0, divergenciasDoConjunto + " divergências; " + exemplos.join(" | "));
+            conferirIgual("a distância (passos desde a fonte) = a do relaxamento", divergenciasDaDistancia, 0);
+            conferirIgual("a fila da busca tem cada casa molhada uma vez só e nenhuma outra", divergenciasDaFila, 0);
+            conferir("a amostra tem água e barreira: " + casasAlcancadas + " casas molhadas, " + casasBarradas + " barradas", casasAlcancadas > 2500 && casasBarradas > 1500);
+        });
+
+        testar("um terreno todo mais alto que o nível não molha nada além do mar; com o nível acima de tudo molha a ilha inteira", function () {
+            const alto = matrizDeValor(TAMANHO, 4);
+            MAR.forEach(function (linha, y) { linha.forEach(function (mar, x) { if (mar) alto[y][x] = 0; }); });
+            conferirIgual("nível 4 sobre blocos de altura 4: só o mar", textoDasCasas(casasDaMatriz(buscaEmLargura(alto, 4, FONTES_DO_MAR).distancia.map(function (linha) { return linha.map(function (distancia) { return distancia >= 0; }); }))), textoDasCasas(FONTES_DO_MAR));
+            const baixo = matrizDeValor(TAMANHO, 0);
+            const tudo = buscaEmLargura(baixo, 1, FONTES_DO_MAR).distancia.map(function (linha) { return linha.map(function (distancia) { return distancia >= 0; }); });
+            conferirIgual("terreno raso (altura 0) e nível 1: a ilha inteira (100 casas)", casasDaMatriz(tudo).length, 100);
+        });
+
+        testar("COM VOLUME: a água gasta uma unidade por casa, da mais baixa para a mais alta (empate: menor distância, depois índice), igual à minha conta em 24 terrenos × 10 volumes", function () {
+            semearSorteio(6060);
+            let comparados = 0, divergenciasDoConjunto = 0, divergenciasDaOrdem = 0, divergenciasDoResto = 0, completas = 0, cortadas = 0;
+            const exemplos = [];
+            for (let terrenoSorteado = 0; terrenoSorteado < 24; terrenoSorteado++) {
+                const terreno = terrenoSorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, terrenoSorteado % 2 === 1);
+                const nivel = 2 + terrenoSorteado % 3;
+                [0, 1, 2, 5, 9, 14, 17, 25, 60, 300].forEach(function (volume) {
+                    const dele = encherComVolume(terreno, nivel, FONTES_DO_MAR, volume), meu = encherPelaMinhaConta(terreno, nivel, FONTES_DO_MAR, volume);
+                    comparados++;
+                    if (primeiraDiferenca(dele.alagado, meu.alagado)) divergenciasDoConjunto++;
+                    const ordemDele = textoDasCasas(dele.ordem.filter(function (casa) { return casa.distancia > 0; }));
+                    if (ordemDele !== textoDasCasas(meu.consumidas)) { divergenciasDaOrdem++; if (exemplos.length < 2) exemplos.push("terreno " + terrenoSorteado + " nível " + nivel + " volume " + volume + ": jogo [" + ordemDele + "] minha [" + textoDasCasas(meu.consumidas) + "]"); }
+                    if (dele.volumeRestante !== meu.restante) divergenciasDoResto++;
+                    if (meu.restante > 0) completas++; else cortadas++;
+                });
+            }
+            conferirIgual(comparados + " enchentes: o conjunto molhado = a minha conta", divergenciasDoConjunto, 0);
+            conferir("a ORDEM em que as casas são molhadas = a minha (baixa → alta; distância; índice)", divergenciasDaOrdem === 0, exemplos.join(" | "));
+            conferirIgual("o volume que sobra = o meu", divergenciasDoResto, 0);
+            conferir("a amostra tem as duas situações: " + cortadas + " cortadas pelo volume, " + completas + " em que o volume sobra", cortadas > 60 && completas > 20);
+        });
+
+        testar("a ordem à mão: a vala (mais baixa) enche antes do terraço, mesmo mais longe; no empate de altura vence a menor distância, depois o menor índice", function () {
+            function terrenoAlto() { return matrizDeValor(TAMANHO, 4); }
+            function ordemDe(terreno, nivel, fonte, volume) {
+                return textoDasCasas(encherComVolume(terreno, nivel, [fonte], volume).ordem.filter(function (casa) { return casa.distancia > 0; }));
+            }
+            let terreno = terrenoAlto();
+            terreno[5][0] = 0; terreno[5][1] = 2; terreno[4][0] = 1; terreno[6][0] = 0; terreno[3][0] = 1;
+            conferirIgual("de baixo para cima: (0,6) h0, (0,4) h1, (0,3) h1 (mais longe, mas mais baixa que (1,5)), por fim (1,5) h2", ordemDe(terreno, 3, { x: 0, y: 5 }, 4), "0,6 0,4 0,3 1,5");
+            conferirIgual("a conta do teste diz o mesmo", textoDasCasas(encherPelaMinhaConta(terreno, 3, [{ x: 0, y: 5 }], 4).consumidas), "0,6 0,4 0,3 1,5");
+
+            terreno = terrenoAlto();
+            terreno[5][5] = 0; terreno[5][4] = 0; terreno[5][6] = 1; terreno[5][3] = 1;
+            conferirIgual("mesma altura (1): (6,5) a 1 passo vence (3,5) a 2 passos, mesmo (3,5) tendo o menor índice", ordemDe(terreno, 3, { x: 5, y: 5 }, 3), "4,5 6,5 3,5");
+
+            terreno = terrenoAlto();
+            terreno[5][5] = 0; terreno[5][4] = 1; terreno[5][6] = 1; terreno[4][5] = 1; terreno[6][5] = 1;
+            conferirIgual("mesma altura e mesma distância: o menor índice (y · 10 + x) primeiro", ordemDe(terreno, 3, { x: 5, y: 5 }, 4), "5,4 4,5 6,5 5,6");
+
+            terreno = terrenoAlto();
+            terreno[5][0] = 0; terreno[5][1] = 0;
+            conferirIgual("a fronteira acaba depois de 1 casa (1,5): sobram 49 de 50 unidades e nada mais molha", encherComVolume(terreno, 2, [{ x: 0, y: 5 }], 50).volumeRestante, 49);
+            conferirIgual("volume 0: só a fonte", textoDasCasas(casasDaMatriz(encherComVolume(terreno, 2, [{ x: 0, y: 5 }], 0).alagado)), "0,5");
+        });
+
+        testar("MONOTONIA: com mais volume a água só cresce, uma casa por unidade, e a que molhou nunca seca (12 terrenos × volume 0 a 30)", function () {
+            semearSorteio(7070);
+            let secaram = 0, saltos = 0, comparadas = 0;
+            for (let terrenoSorteado = 0; terrenoSorteado < 12; terrenoSorteado++) {
+                const terreno = terrenoSorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, terrenoSorteado % 2 === 1);
+                let anterior = encherComVolume(terreno, 2, FONTES_DO_MAR, 0).alagado;
+                for (let volume = 1; volume <= 30; volume++) {
+                    const agora = encherComVolume(terreno, 2, FONTES_DO_MAR, volume).alagado;
+                    comparadas++;
+                    anterior.forEach(function (linha, y) { linha.forEach(function (molhada, x) { if (molhada && !agora[y][x]) secaram++; }); });
+                    if (casasDaMatriz(agora).length - casasDaMatriz(anterior).length > 1) saltos++;
+                    anterior = agora;
+                }
+            }
+            conferirIgual(comparadas + " passos de volume: nenhuma casa molhada secou", secaram, 0);
+            conferirIgual("e cada unidade de volume molha no máximo uma casa", saltos, 0);
+        });
+
+        testar("a maré é um filme: a água só cresce quadro a quadro, termina em 'contar' com a água do volume 17, e o aviso conta as casas", function () {
+            voltarAoComeco();
+            const prevista = encherPelaMinhaConta(alturas, NIVEL_DA_MARE_ESPERADO, FONTES_DO_MAR, VOLUME_ESPERADO);
+            const aSeco = casasDaMatriz(agua.alagado).length;
+            conferirIgual("antes da maré, a água é a da baixa-mar (nível 1 por ponto fixo)", primeiraDiferenca(agua.alagado, alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR)), "");
+            clicarNoBotao("liberarMare");
+            conferirIgual("liberar a maré tira o jogo de 'moldar'", fase, "mare");
+            let anterior = copiarMatriz(agua.alagado), contagemAnterior = casasDaMatriz(anterior).length;
+            let secaram = 0, saltos = 0, quadros = 0, aguaParada = 0;
+            while (fase === "mare" && quadros < 4000) {
+                avancarQuadro(16);
+                quadros++;
+                anterior.forEach(function (linha, y) { linha.forEach(function (molhada, x) { if (molhada && !agua.alagado[y][x]) secaram++; }); });
+                const contagem = casasDaMatriz(agua.alagado).length;
+                if (contagem - contagemAnterior > 1) saltos++;
+                if (contagem === contagemAnterior) aguaParada++;
+                anterior = copiarMatriz(agua.alagado);
+                contagemAnterior = contagem;
+            }
+            conferirIgual("nenhuma casa molhada secou durante o filme", secaram, 0);
+            conferirIgual("e no máximo uma casa a mais por quadro", saltos, 0);
+            conferir("a água parou entre um passo e outro (" + aguaParada + " quadros sem casa nova)", aguaParada > quadros / 2);
+            conferirIgual("o filme termina em 'contar'", fase, "contar");
+            const molhadasNoFim = casasDaMatriz(agua.alagado).length;
+            conferirIgual("no fim a água é a minha conta do volume 17", primeiraDiferenca(agua.alagado, prevista.alagado), "");
+            const passosDoFilme = molhadasNoFim - FONTES_DO_MAR.length;
+            conferir("o filme dura ~" + PASSO_DA_MARE + " s por casa: " + (quadros * 0.016).toFixed(2) + " s para " + passosDoFilme + " casas", quadros * 0.016 >= (passosDoFilme - 1) * PASSO_DA_MARE && quadros * 0.016 <= (passosDoFilme + 1) * PASSO_DA_MARE);
+            const perdidas = casasPerdidasPelaMinhaConta(prevista.alagado);
+            conferirIgual("o aviso conta as casas (" + perdidas + " alagadas, " + (3 - perdidas) + " salvas)", aviso.textContent.indexOf("Maré: " + perdidas + " casas alagadas, " + (3 - perdidas) + " salvas"), 0);
+            desenharVerdadeiro();
+            conferirIgual("o painel diz salvas/total", painel.textContent.indexOf("Salvas " + (3 - perdidas) + "/3"), 0);
+            conferirIgual("depois do 'contar', a água não anda mais", (avancarQuadros(120, 16), primeiraDiferenca(agua.alagado, prevista.alagado)), "");
+            conferir("a água de baixa-mar tinha menos casas que a da maré cheia (" + aSeco + " < " + molhadasNoFim + ")", aSeco < molhadasNoFim);
+            voltarAoComeco();
+        });
+
+        testar("A MARÉ NÃO SE DESFAZ: depois de liberada, aplicar e desfazer só avisam; refazer (N) volta tudo", function () {
+            voltarAoComeco();
+            cursor = { x: 4, y: 3 };
+            apertarTecla("Enter");
+            const depoisDeUmaJogada = fotoDoEstado();
+            clicarNoBotao("liberarMare");
+            apertarTecla("Enter");
+            conferirIgual("na maré, aplicar não muda o terreno", fotoDoEstado(), depoisDeUmaJogada);
+            conferir("e o aviso diz que a maré já foi liberada: " + aviso.textContent, /maré já foi liberada/i.test(aviso.textContent));
+            apertarTecla("z");
+            conferirIgual("na maré, desfazer também não", fotoDoEstado(), depoisDeUmaJogada);
+            conferir("e avisa que a maré não se desfaz: " + aviso.textContent, /maré não se desfaz/i.test(aviso.textContent));
+            apertarTecla("m");
+            conferirIgual("M de novo (com movimento) não reinicia a maré", fase, "mare");
+            apertarTecla("n");
+            conferirIgual("N recomeça o dia: o terreno é o original", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("o estoque volta a 1", estadoAtual.blocos, 1);
+            conferirIgual("a fase volta a 'moldar'", fase, "moldar");
+            apertarTecla("z");
+            conferir("e não há o que desfazer: " + aviso.textContent, /nada para desfazer/i.test(aviso.textContent));
+            voltarAoComeco();
+        });
+
+        testar("LIMITES DE MOLDAR: máximo 4, mínimo 0, nunca sob casa, cais ou mar, estoque ±1, contra a minha regra em todas as 100 casas × 2 ferramentas × 3 estoques × 6 terrenos", function () {
+            semearSorteio(8080);
+            function valeSegundoMim(estado, ferramentaDoCaso, x, y) {
+                if (ALTURAS_EM_TEXTO[y][x] === "~") return false;
+                if (OBJETOS_EM_TEXTO[y][x] !== ".") return false;
+                const altura = estado.alturas[y][x];
+                return ferramentaDoCaso === "erguer" ? altura < 4 && estado.blocos > 0 : altura > 0;
+            }
+            let casos = 0, divergencias = 0, validos = 0, recusados = 0, estadoMudou = 0, recusaSemMotivo = 0, motivoSemRecusa = 0, vizinhasMudaram = 0, estoqueErrado = 0;
+            const exemplos = [];
+            for (let terrenoSorteado = 0; terrenoSorteado < 6; terrenoSorteado++) {
+                const terreno = terrenoSorteado === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, false);
+                [0, 1, 5].forEach(function (blocos) {
+                    const estado = congelarDeVez({ alturas: JSON.parse(JSON.stringify(terreno)), blocos: blocos });
+                    const foto = JSON.stringify(estado);
+                    for (let y = 0; y < TAMANHO; y++) {
+                        for (let x = 0; x < TAMANHO; x++) {
+                            ["erguer", "cavar"].forEach(function (ferramentaDoCaso) {
+                                casos++;
+                                const novo = moldar(estado, ferramentaDoCaso, x, y), motivo = motivoDaRecusa(estado, ferramentaDoCaso, x, y);
+                                const devia = valeSegundoMim(estado, ferramentaDoCaso, x, y);
+                                if ((novo !== null) !== devia) { divergencias++; if (exemplos.length < 3) exemplos.push(ferramentaDoCaso + " em (" + x + "," + y + ") altura " + estado.alturas[y][x] + " estoque " + blocos + ": jogo " + (novo ? "vale" : "recusa") + ", eu " + (devia ? "vale" : "recusa")); }
+                                if (!novo && !motivo) recusaSemMotivo++;
+                                if (novo && motivo) motivoSemRecusa++;
+                                if (JSON.stringify(estado) !== foto) estadoMudou++;
+                                if (novo) {
+                                    validos++;
+                                    const passo = ferramentaDoCaso === "erguer" ? 1 : -1;
+                                    if (novo.blocos !== blocos - passo) estoqueErrado++;
+                                    novo.alturas.forEach(function (linha, yy) { linha.forEach(function (altura, xx) { if (altura !== estado.alturas[yy][xx] + (xx === x && yy === y ? passo : 0)) vizinhasMudaram++; }); });
+                                } else {
+                                    recusados++;
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+            conferir(casos + " jogadas: o jogo aceita e recusa exatamente como a minha regra", divergencias === 0, divergencias + " divergências; " + exemplos.join(" | "));
+            conferir("a amostra tem as duas: " + validos + " válidas, " + recusados + " recusadas", validos > 300 && recusados > 300);
+            conferirIgual("toda recusa traz um motivo em texto", recusaSemMotivo, 0);
+            conferirIgual("e jogada válida não traz motivo", motivoSemRecusa, 0);
+            conferirIgual("o estado de antes (congelado a fundo) nunca mudou", estadoMudou, 0);
+            conferirIgual("erguer gasta 1 bloco e cavar devolve 1", estoqueErrado, 0);
+            conferirIgual("só a casa jogada muda (±1); todas as outras ficam iguais", vizinhasMudaram, 0);
+        });
+
+        testar("limites à mão: erguer até 4 e a quinta recusa; cavar até 0 e a próxima recusa; casa, cais, mar e estoque vazio recusam", function () {
+            const planicie = { x: 4, y: 3 };               // altura 1, sem objeto
+            let estado = { alturas: JSON.parse(ALTURAS_ORIGINAIS), blocos: 9 };
+            const alturasVistas = [];
+            for (let i = 0; i < 3; i++) { estado = moldar(estado, "erguer", planicie.x, planicie.y); alturasVistas.push(estado.alturas[planicie.y][planicie.x]); }
+            conferirIgual("erguer 3 vezes: 2, 3, 4", alturasVistas.join(","), "2,3,4");
+            conferirIgual("a quarta recusa (já no máximo)", moldar(estado, "erguer", planicie.x, planicie.y), null);
+            conferirIgual("e diz o porquê", motivoDaRecusa(estado, "erguer", planicie.x, planicie.y), "já está na altura máxima");
+            conferirIgual("o estoque ficou em 9 − 3", estado.blocos, 6);
+            for (let i = 0; i < 4; i++) estado = moldar(estado, "cavar", planicie.x, planicie.y);
+            conferirIgual("cavar 4 vezes chega ao fundo (0)", estado.alturas[planicie.y][planicie.x], 0);
+            conferirIgual("e devolveu os 4 blocos (6 + 4)", estado.blocos, 10);
+            conferirIgual("cavar no fundo recusa", moldar(estado, "cavar", planicie.x, planicie.y), null);
+            conferirIgual("e diz o porquê", motivoDaRecusa(estado, "cavar", planicie.x, planicie.y), "já está no fundo");
+
+            const inicio = estadoInicial();
+            conferirIgual("cavar sob a casa (3,3) recusa", moldar(inicio, "cavar", 3, 3), null);
+            conferirIgual("erguer sob a casa (5,5) recusa", moldar(inicio, "erguer", 5, 5), null);
+            conferirIgual("cavar sob o cais (1,4) recusa", moldar(inicio, "cavar", 1, 4), null);
+            conferirIgual("erguer sobre o cais recusa", moldar(inicio, "erguer", 1, 4), null);
+            conferirIgual("cavar o mar (0,0) recusa", moldar(inicio, "cavar", 0, 0), null);
+            conferirIgual("erguer o mar recusa", moldar(inicio, "erguer", 0, 0), null);
+            conferirIgual("o mar não se molda (motivo)", motivoDaRecusa(inicio, "cavar", 0, 0), "o mar não se molda");
+            const semEstoque = moldar(inicio, "erguer", planicie.x, planicie.y);
+            conferirIgual("com 1 bloco, erguer vale e o estoque zera", semEstoque.blocos, 0);
+            conferirIgual("com o estoque zerado, erguer de novo recusa", moldar(semEstoque, "erguer", 4, 4), null);
+            conferirIgual("e diz o porquê", motivoDaRecusa(semEstoque, "erguer", 4, 4), "sem blocos no estoque");
+            conferirIgual("mas cavar a casa que acabou de subir vale e devolve", moldar(semEstoque, "cavar", planicie.x, planicie.y).blocos, 1);
+        });
+
+        testar("ESTADO IMUTÁVEL: moldar devolve outro estado, o de antes (congelado) fica igual, e o terreno original nunca é tocado", function () {
+            const antes = congelarDeVez({ alturas: JSON.parse(ALTURAS_ORIGINAIS), blocos: 3 });
+            const foto = JSON.stringify(antes);
+            const depois = moldar(antes, "erguer", 6, 3);
+            conferir("devolveu um estado novo (não o mesmo objeto)", depois !== antes && depois.alturas !== antes.alturas);
+            conferirIgual("o de antes ficou igual", JSON.stringify(antes), foto);
+            conferirIgual("o novo tem a casa mais alta", depois.alturas[3][6], antes.alturas[3][6] + 1);
+            conferirIgual("e o estoque menor", depois.blocos, 2);
+            conferirIgual("o terreno de partida do jogo (ALTURAS_INICIAIS) não mudou", JSON.stringify(ALTURAS_INICIAIS), ALTURAS_ORIGINAIS);
+            conferirIgual("estadoInicial() sempre devolve o terreno original", JSON.stringify(estadoInicial().alturas), ALTURAS_ORIGINAIS);
+            const segunda = moldar(antes, "erguer", 6, 3);
+            conferirIgual("a mesma jogada no mesmo estado dá o mesmo resultado", JSON.stringify(segunda), JSON.stringify(depois));
+        });
+
+        testar("DESFAZER devolve o estado de antes, exato, jogada a jogada; sem história avisa; refazer limpa a história", function () {
+            voltarAoComeco();
+            apertarTecla("z");
+            conferir("sem jogada, desfazer avisa: " + aviso.textContent, /nada para desfazer/i.test(aviso.textContent));
+            const fotos = [fotoDoEstado()];
+            const jogadas = [["1", 4, 3], ["2", 2, 3], ["2", 6, 4], ["2", 6, 3]];
+            jogadas.forEach(function (jogada) {
+                cursor = { x: jogada[1], y: jogada[2] };
+                apertarTecla(jogada[0]);
+                apertarTecla("Enter");
+                fotos.push(fotoDoEstado());
+            });
+            conferirIgual("4 jogadas valem: 5 fotos diferentes entre si", new Set(fotos).size, 5);
+            for (let i = fotos.length - 2; i >= 0; i--) {
+                apertarTecla("z");
+                conferirIgual("desfazer volta exatamente ao estado " + i, fotoDoEstado(), fotos[i]);
+                conferirIgual("e a água de baixa-mar e a previsão seguem esse terreno " + i, primeiraDiferenca(previsao.alagado, encherPelaMinhaConta(alturas, 2, FONTES_DO_MAR, 17).alagado) + primeiraDiferenca(agua.alagado, alagarPorPontoFixo(alturas, 1, FONTES_DO_MAR)), "");
+            }
+            apertarTecla("z");
+            conferirIgual("depois de desfazer tudo, o terreno é o original", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferir("e desfazer de novo avisa que não há o que desfazer", /nada para desfazer/i.test(aviso.textContent));
+            voltarAoComeco();
+        });
+
+        testar("80 jogadas sorteadas pelo teclado: a terra se conserva, a água segue o terreno, desfazer volta exato", function () {
+            voltarAoComeco();
+            semearSorteio(9090);
+            const total = terraTotal();
+            const pilha = [];
+            const problemas = [];
+            let jogadasQueValeram = 0, desfeitas = 0, recusadas = 0;
+            for (let i = 0; i < 80; i++) {
+                if (Math.random() < 0.2 && pilha.length > 0) {
+                    apertarTecla("z");
+                    desfeitas++;
+                    if (fotoDoEstado() !== pilha.pop()) problemas.push("desfazer na jogada " + i);
+                } else {
+                    cursor = { x: Math.floor(Math.random() * TAMANHO), y: Math.floor(Math.random() * TAMANHO) };
+                    apertarTecla(Math.random() < 0.5 ? "1" : "2");
+                    const antes = fotoDoEstado();
+                    apertarTecla("Enter");
+                    if (fotoDoEstado() !== antes) { pilha.push(antes); jogadasQueValeram++; }
+                    else { recusadas++; if (!/^Não dá: /.test(aviso.textContent)) problemas.push("recusa sem aviso na jogada " + i + ": " + aviso.textContent); }
+                }
+                if (terraTotal() !== total) problemas.push("a terra mudou na jogada " + i + " (" + terraTotal() + " ≠ " + total + ")");
+                if (estadoAtual.blocos < 0) problemas.push("estoque negativo na jogada " + i);
+                if (alturas.some(function (linha) { return linha.some(function (altura) { return altura < 0 || altura > 4; }); })) problemas.push("altura fora de 0 a 4 na jogada " + i);
+                if (primeiraDiferenca(agua.alagado, alagarPorPontoFixo(alturas, 1, FONTES_DO_MAR))) problemas.push("a água de baixa-mar não segue o terreno na jogada " + i);
+                const cheia = encherPelaMinhaConta(alturas, 2, FONTES_DO_MAR, 17);
+                if (primeiraDiferenca(previsao.alagado, cheia.alagado)) problemas.push("a previsão não é a minha na jogada " + i);
+            }
+            conferir("nenhum problema nas 80 jogadas: " + problemas.slice(0, 3).join(" | "), problemas.length === 0);
+            conferir("a amostra tem jogadas (" + jogadasQueValeram + "), desfazeres (" + desfeitas + ") e recusas (" + recusadas + ")", jogadasQueValeram > 10 && desfeitas > 3 && recusadas > 5);
+            voltarAoComeco();
+        });
+
+        testar("OS NÚMEROS DO GUIA (jogando pelo teclado e pela maré do jogo): sem jogar, 3 casas se perdem; com a cova (2,2) e os dois portões, nenhuma; no volume 14, cavar (2,1) salva uma", function () {
+            function jogarEMarear(jogadas) {
+                voltarAoComeco();
+                jogadas.forEach(function (jogada) {
+                    cursor = { x: jogada[1], y: jogada[2] };
+                    apertarTecla(jogada[0] === "erguer" ? "1" : "2");
+                    apertarTecla("Enter");
+                });
+                const estadoDaJogada = fotoDoEstado();
+                apertarTecla("m");
+                let quadros = 0;
+                while (fase === "mare" && quadros < 4000) { avancarQuadro(16); quadros++; }
+                return { estado: estadoDaJogada, contagem: contarCasas(agua.alagado), alagado: copiarMatriz(agua.alagado), blocos: estadoAtual.blocos };
+            }
+            const nada = jogarEMarear([]);
+            conferirIgual("sem jogar: 3 casas alagadas", nada.contagem.perdidas, 3);
+            conferirIgual("e nenhuma salva", nada.contagem.salvas, 0);
+            const solucao = jogarEMarear([["cavar", 2, 2], ["erguer", 8, 4], ["erguer", 4, 8]]);
+            conferirIgual("cavar (2,2) e erguer (8,4) e (4,8): 0 casas alagadas", solucao.contagem.perdidas, 0);
+            conferirIgual("as 3 casas salvas", solucao.contagem.salvas, 3);
+            conferirIgual("e o estoque fechou em 0 (1 + 1 − 2)", solucao.blocos, 0);
+            conferirIgual("a água do jogo é a minha conta nesse terreno", primeiraDiferenca(solucao.alagado, encherPelaMinhaConta(JSON.parse(solucao.estado).alturas, 2, FONTES_DO_MAR, 17).alagado), "");
+            const metade = jogarEMarear([["erguer", 8, 4]]);
+            conferirIgual("fechar só um portão não salva ninguém (a água entra pelo outro)", metade.contagem.perdidas, 3);
+            conferirIgual("cavar (2,1) no volume 17 salva uma", jogarEMarear([["cavar", 2, 1]]).contagem.salvas, 1);
+
+            // O volume 14 do GUIA: a maré do jogo é de 17, então a conta é feita pelas funções puras, e a minha confere.
+            const semJogar = estadoCom(1, []), comVala = estadoCom(1, [["cavar", 2, 1]]);
+            const perdidasSemJogar = contarCasas(encherComVolume(semJogar.alturas, 2, CASAS_DO_MAR, 14).alagado).perdidas;
+            const perdidasComVala = contarCasas(encherComVolume(comVala.alturas, 2, CASAS_DO_MAR, 14).alagado).perdidas;
+            conferirIgual("volume 14 sem jogar: 2 casas perdidas", perdidasSemJogar, 2);
+            conferirIgual("volume 14 e a vala (2,1): 1 casa perdida (a vala salva uma)", perdidasComVala, 1);
+            conferirIgual("a minha conta dá os mesmos números (sem jogar)", casasPerdidasPelaMinhaConta(encherPelaMinhaConta(semJogar.alturas, 2, FONTES_DO_MAR, 14).alagado), 2);
+            conferirIgual("a minha conta dá os mesmos números (com a vala)", casasPerdidasPelaMinhaConta(encherPelaMinhaConta(comVala.alturas, 2, FONTES_DO_MAR, 14).alagado), 1);
+            voltarAoComeco();
+        });
+
+        testar("cada botão [data-acao] responde a um clique de verdade: ferramentas, aplicar, desfazer, maré, refazer, giro, zoom, ver e as 4 setas (pela TELA, nos 4 giros)", function () {
+            voltarAoComeco();
+            const clicadas = new Set();
+            function clicar(acao) {                         // só a primeira vez de cada ação vira linha de resultado
+                const existe = clicarNoBotao(acao);
+                if (!clicadas.has(acao) || !existe) conferir("o botão " + acao + " existe e recebe o clique", existe);
+                clicadas.add(acao);
+            }
+            function pressionado(ferramentaDoBotao) {
+                return document.querySelector('[data-ferramenta="' + ferramentaDoBotao + '"]').getAttribute("aria-pressed");
+            }
+
+            cursor = { x: 4, y: 3 };
+            clicar("escolherCavar");
+            conferirIgual("Cavar escolhe a ferramenta", ferramenta, "cavar");
+            conferirIgual("Cavar fica aria-pressed", pressionado("cavar") + "/" + pressionado("erguer"), "true/false");
+            clicar("aplicar");
+            conferirIgual("Aplicar cava (4,3): altura 1 → 0", alturas[3][4], 0);
+            conferirIgual("e devolve o bloco (estoque 2)", estadoAtual.blocos, 2);
+            clicar("desfazer");
+            conferirIgual("Desfazer devolve a altura 1", alturas[3][4], 1);
+            conferirIgual("e o estoque 1", estadoAtual.blocos, 1);
+            clicar("escolherErguer");
+            conferirIgual("Erguer escolhe a ferramenta", ferramenta, "erguer");
+            conferirIgual("Erguer fica aria-pressed", pressionado("erguer") + "/" + pressionado("cavar"), "true/false");
+            clicar("aplicar");
+            conferirIgual("Aplicar ergue (4,3): altura 1 → 2", alturas[3][4], 2);
+            conferirIgual("e gasta o bloco (estoque 0)", estadoAtual.blocos, 0);
+            clicar("reiniciar");
+            conferirIgual("Refazer volta ao terreno original", JSON.stringify(alturas), ALTURAS_ORIGINAIS);
+            conferirIgual("e ao estoque 1", estadoAtual.blocos, 1);
+            clicar("liberarMare");
+            conferirIgual("Maré inicia a maré (fase 'mare')", fase, "mare");
+            clicar("reiniciar");
+            conferirIgual("Refazer volta de dentro da maré à fase 'moldar'", fase, "moldar");
+
+            semearSorteio(4402);
+            const partidas = [{ x: 0, y: 0 }, { x: 9, y: 9 }, { x: 0, y: 9 }, { x: 9, y: 0 }];
+            for (let i = 0; i < 16; i++) partidas.push({ x: Math.floor(Math.random() * TAMANHO), y: Math.floor(Math.random() * TAMANHO) });
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, paradas = 0, continuouMarcada = 0;
+                partidas.forEach(function (partida) {
+                    SETAS_DA_TELA.forEach(function (seta) {
+                        cursor = { x: partida.x, y: partida.y };
+                        marcada = true;
+                        clicar(seta[0]);
+                        const centro = girarComTamanho(partida.x + 0.5, partida.y + 0.5, giro, TAMANHO);
+                        const alvo = casaDoCentroGiradoNoApoio(centro[0] + seta[1], centro[1] + seta[2], giro, TAMANHO);
+                        if (!alvo) paradas++;
+                        const esperada = alvo || partida;
+                        if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                            erros++;
+                            if (primeiro === null) primeiro = seta[0] + " a partir de (" + partida.x + "," + partida.y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                        }
+                        if (marcada) continuouMarcada++;
+                    });
+                });
+                conferir("giro " + giro * 90 + "°: " + partidas.length * 4 + " cliques nas setas andam uma casa pela tela (ou ficam na borda: " + paradas + ")", erros === 0 && paradas > 0, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: mexer o cursor desmarca", continuouMarcada, 0);
+            });
+
+            clicar("girarDireita");
+            conferirIgual("⟳ gira 90°", rotacao, 1);
+            clicar("girarEsquerda");
+            clicar("girarEsquerda");
+            conferirIgual("⟲ duas vezes: 270°", rotacao, 3);
+            irParaOGiro(0);
+            clicar("aproximar");
+            conferirIgual("Perto aproxima", camera.zoom, 1.5);
+            clicar("afastar");
+            conferirIgual("Longe afasta", camera.zoom, 1);
+            clicar("alternarVer");
+            conferirIgual("Ver liga o H", depuracaoLigada, true);
+            clicar("alternarVer");
+            conferirIgual("e outro clique desliga", depuracaoLigada, false);
+
+            conferirIgual("nenhum botão ficou sem teste: as ações da página = as clicadas", acoesDosBotoes().sort().join(" "), Array.from(clicadas).sort().join(" "));
+            voltarAoComeco();
+        });
+
+        testar("segurar Enter (repeat) age uma vez só; Enter novo age de novo", function () {
+            voltarAoComeco();
+            cursor = { x: 2, y: 3 };                       // altura 3
+            apertarTecla("2");
+            apertarTecla("Enter");
+            conferirIgual("Enter cava uma vez: 3 → 2", alturas[3][2], 2);
+            let semPreventDefault = 0;
+            for (let i = 0; i < 5; i++) if (!apertarTecla("Enter", { repeat: true }).defaultPrevented) semPreventDefault++;
+            conferirIgual("Enter segurado (5 repetições) não cava mais", alturas[3][2], 2);
+            conferirIgual("e o navegador não age na repetição", semPreventDefault, 0);
+            apertarTecla(" ");
+            conferirIgual("Espaço novo cava de novo: 2 → 1", alturas[3][2], 1);
+            for (let i = 0; i < 5; i++) apertarTecla(" ", { repeat: true });
+            conferirIgual("Espaço segurado não cava mais", alturas[3][2], 1);
+            voltarAoComeco();
+        });
+
+        testar("ÁGUA COM PAREDE: onde a água se ergue sobre uma vizinha da frente mais baixa (seca ou com água mais baixa), uma parede translúcida desce; nos outros lados, nenhuma (terreno do jogo e 6 sorteados, 4 giros, vários volumes)", function () {
+            voltarAoComeco();
+            let esperadasNoTotal = 0, faltando = [], sobrando = [], curtas = [], quadros = 0;
+            function conferirEstado(rotulo, alagado, nivel, giro) {
+                const resultado = conferirParedesDaAgua(rotulo, alagado, nivel, giro, desenharVerdadeiro);
+                quadros++;
+                esperadasNoTotal += resultado.esperadas;
+                faltando = faltando.concat(resultado.faltando);
+                sobrando = sobrando.concat(resultado.sobrando);
+                curtas = curtas.concat(resultado.curtas);
+            }
+            function conferirTerrenoNosGiros(nomeDoTerreno, volumes, nivelDaMare) {
+                rodarNosQuatroGiros(function (giro) {
+                    volumes.forEach(function (volume) {
+                        const alagado = encherPelaMinhaConta(alturas, nivelDaMare, FONTES_DO_MAR, volume).alagado;
+                        definirAgua(nivelDaMare, casasDaMatriz(alagado));
+                        conferirEstado(nomeDoTerreno + " volume " + volume + " giro " + giro * 90 + "°", alagado, nivelDaMare, giro);
+                    });
+                    const baixaMar = alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR);
+                    definirAgua(NIVEL_DA_BAIXA_MAR_ESPERADO, casasDaMatriz(baixaMar));
+                    conferirEstado(nomeDoTerreno + " baixa-mar giro " + giro * 90 + "°", baixaMar, NIVEL_DA_BAIXA_MAR_ESPERADO, giro);
+                });
+            }
+            conferirTerrenoNosGiros("mapa", [0, 3, 8, 17, 40], NIVEL_DA_MARE_ESPERADO);
+            semearSorteio(1212);
+            for (let sorteado = 0; sorteado < 4; sorteado++) {
+                alturas = sortearTerrenoDaIlha(MAR, true);
+                conferirTerrenoNosGiros("terreno " + sorteado, [4, 14], 2 + sorteado % 2);
+            }
+            conferir("a amostra tem " + esperadasNoTotal + " paredes esperadas em " + quadros + " quadros", esperadasNoTotal > 200);
+            conferir("toda parede esperada foi pintada (faltam " + faltando.length + ": " + faltando.slice(0, 3).join(" | ") + ")", faltando.length === 0);
+            conferir("nenhuma parede onde a vizinha da frente é igual ou mais alta (sobram " + sobrando.length + ": " + sobrando.slice(0, 3).join(" | ") + ")", sobrando.length === 0);
+            conferir("a parede desce do nível até a vizinha ou até o terreno da própria casa, o que for mais alto", curtas.length === 0, curtas.slice(0, 3).join(" | "));
+            voltarAoComeco();
+        });
+
+        testar("H mostra a ordem em que a água enche (o número 1 vai para a casa mais baixa da fronteira) e o alcance que o volume não cobre", function () {
+            voltarAoComeco();
+            apertarTecla("h");
+            desenharVerdadeiro();
+            const minha = encherPelaMinhaConta(alturas, 2, FONTES_DO_MAR, 17);
+            conferir("a leitura diz o nível, o volume e quantas casas enchem: " + leitura.textContent.split("\n")[0], leitura.textContent.indexOf("nível 2, volume 17") !== -1 && leitura.textContent.indexOf("enchem " + minha.consumidas.length) !== -1);
+            conferir("e o alcance (as casas que a água alcançaria sem limite de volume = " + (casasDaMatriz(minha.alcance).length - FONTES_DO_MAR.length) + ")", leitura.textContent.indexOf("alcance " + (casasDaMatriz(minha.alcance).length - FONTES_DO_MAR.length)) !== -1);
+            const registro = gravarDesenho(pincel, desenharVerdadeiro);
+            const rotulos = registro.tracos.length;
+            conferir("H desenha (traços no quadro: " + rotulos + ")", rotulos > 100);
+            voltarAoComeco();
+        });
+
+        // ------------------------------------------------------------
+        // O passo inteiro em iframes (apoio-dique.js): movimento reduzido e layout
+        // ------------------------------------------------------------
+        const ANTES_DO_MOVIMENTO_REDUZIDO = "window.matchMedia = function (consulta) { return { matches: /reduce/.test(consulta), media: consulta, addEventListener: function () {}, removeEventListener: function () {} }; };";
+
+        async function conferirMovimentoReduzido() {
+            const quadro = await abrirPassoNoIframe("05-enchente", MARCACAO_DO_PASSO, ANTES_DO_MOVIMENTO_REDUZIDO, 390, 750);
+            try {
+                const janela = quadro.contentWindow;
+                pararODesenhoDaJanela(janela);
+                const molhadas = function () { return janela.eval("agua.alagado").reduce(function (soma, linha) { return soma + linha.filter(Boolean).length; }, 0); };
+                conferirIgual("o iframe vê prefers-reduced-motion", janela.eval("movimentoReduzido"), true);
+                let instante = 16;
+                darQuadro(janela, instante);
+                teclaNaJanela(janela, "m");
+                const depoisDaPrimeira = { fase: janela.eval("fase"), molhadas: molhadas() };
+                conferir("a primeira tecla M não leva a maré ao fim (fase " + depoisDaPrimeira.fase + ")", depoisDaPrimeira.fase !== "contar");
+                instante = passarTempoNaJanela(janela, instante, 10);
+                conferirIgual("10 s de quadros depois, a água não andou sozinha", janela.eval("fase") + "/" + molhadas(), depoisDaPrimeira.fase + "/" + depoisDaPrimeira.molhadas);
+                const contagens = [depoisDaPrimeira.molhadas];
+                let teclas = 1;
+                while (janela.eval("fase") !== "contar" && teclas < 80) {
+                    teclaNaJanela(janela, "m");
+                    teclas++;
+                    instante += 16;
+                    darQuadro(janela, instante);
+                    contagens.push(molhadas());
+                }
+                conferir("a maré só chega ao fim depois de várias teclas (" + teclas + ")", teclas >= 3 && janela.eval("fase") === "contar");
+                const semAvanco = contagens.slice(1).filter(function (quantas, i) { return quantas <= contagens[i]; }).length;
+                conferirIgual("cada tecla depois da primeira acrescenta água", semAvanco, 0);
+                const prevista = encherPelaMinhaConta(JSON.parse(ALTURAS_ORIGINAIS), NIVEL_DA_MARE_ESPERADO, FONTES_DO_MAR, VOLUME_ESPERADO);
+                conferirIgual("no fim a água é a mesma do filme: a minha conta do volume 17", primeiraDiferenca(janela.eval("agua.alagado"), prevista.alagado), "");
+                conferir("o aviso conta as casas", /Maré: \d casas alagadas, \d salvas/.test(janela.document.getElementById("aviso").textContent), janela.document.getElementById("aviso").textContent);
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        const CONFIGURACAO_DO_LAYOUT = {
+            pasta: "05-enchente",
+            corpo: MARCACAO_DO_PASSO,
+            quantidadeDeBotoes: 15,
+            proporcaoDoCanvas: 384 / 252,
+            mensagens: ["", "Zoom: perto", "Ferramenta: Cavar", "Vista girada para 270 graus. Casas escondidas: 2", "Maré: 3 casas alagadas, 0 salvas. N recomeça o dia",
+                "Marcada: casa 7, 7, altura 1, escondida atrás de um bloco. Toque de novo para erguer e gastar um bloco do estoque"],
+        };
+
+        async function principal() {
+            await testarNoIframe("movimento reduzido", conferirMovimentoReduzido);
+            await testarNoIframe("layout 390×750", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 390, 750); });
+            await testarNoIframe("layout 360×640", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 360, 640); });
+            testar("sem erro de console e com o estado restaurado", function () {
+                voltarAoComeco();
+                conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+                conferirIgual("o terreno de partida nunca foi mexido", JSON.stringify(ALTURAS_INICIAIS), ALTURAS_ORIGINAIS);
+                conferirIgual("o giro final é 0", rotacao, 0);
+                conferirIgual("nenhum aviso de erro sobrou", errosDeConsole.join(" | "), "");
+                conferir("o laço segue vivo", avancarQuadro(16));
+            });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>

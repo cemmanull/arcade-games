@@ -22,10 +22,17 @@
         <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
         <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
     </div>
+    <div id="setas">
+        <button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>
+        <button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>
+        <button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>
+        <button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>
+    </div>
     <p id="aviso" role="status"></p>
     <pre id="leitura" aria-live="off"></pre>
 
     <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
 
     <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
     <script>
@@ -153,7 +160,7 @@
                     });
                 });
             });
-            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade || (b.y * TAMANHO + b.x) - (a.y * TAMANHO + a.x); });      // a lista do pintor lida de trás para a frente: da mais perto à mais longe, e no empate a pintada por último (maior índice) primeiro
             return casas;
         }
 
@@ -266,8 +273,7 @@
         function fichasEsperadas(escondido) {
             const fichas = [];
             listaDeDesenho.forEach(function (casa) {
-                fichas.push("C " + casa.x + "," + casa.y);
-                if (casa.altura < NIVEL_DA_AGUA) fichas.push("A " + casa.x + "," + casa.y);
+                fichas.push((casa.altura < NIVEL_DA_AGUA ? "A " : "C ") + casa.x + "," + casa.y);      // a casa alagada pinta leito e água, não caixa
                 if (pinos.has(casa.x + "," + casa.y)) fichas.push("P " + casa.x + "," + casa.y);
                 if (casa.x === cursor.x && casa.y === cursor.y) { fichas.push("K"); if (marcada) fichas.push("K"); }
             });
@@ -655,7 +661,7 @@
                 const alagadas = casasAlagadasDoMapa();
                 const chamadas = registro.filter(function (operacao) { return operacao.tipo === "agua"; });
                 conferirIgual(nome + "uma chamada de desenharAgua por casa alagada", chamadas.map(nomeDaCasa).sort().join("|"), alagadas.map(nomeDaCasa).sort().join("|"));
-                conferirIgual(nome + "100 caixas (a água não passa por desenharCaixa)", registro.filter(function (operacao) { return operacao.tipo === "caixa"; }).length, 100);
+                conferirIgual(nome + "uma caixa por casa seca (" + (100 - alagadas.length) + "); a alagada não passa por desenharCaixa", registro.filter(function (operacao) { return operacao.tipo === "caixa"; }).length, 100 - alagadas.length);
                 const bordas = [];
                 let preenchimentos = 0, opacos = 0;
                 registro.filter(function (operacao) { return operacao.dentroDe === "agua"; }).forEach(function (operacao) {
@@ -714,6 +720,73 @@
             conferirIgual("os pinos continuam", Array.from(pinos).join("|"), "4,4");
             conferirIgual("a marca continua", marcada, true);
             zerarAEntrada();
+        });
+
+        testar("cada botão [data-acao] responde a um clique de verdade: as 4 setas movem o cursor pela TELA nos 4 giros, Aplicar põe o pino, ⟲ ⟳ giram, Ver liga o H", function () {
+            zerarAEntrada();
+            const clicadas = new Set();
+            function clicar(acao) {                         // só a primeira vez de cada ação vira linha de resultado
+                const existe = clicarNoBotao(acao);
+                if (!clicadas.has(acao) || !existe) conferir("o botão " + acao + " existe e recebe o clique", existe);
+                clicadas.add(acao);
+            }
+            const BOTOES_DE_SETA = [["cursorParaEsquerda", -1, 0], ["cursorParaCima", 0, -1], ["cursorParaBaixo", 0, 1], ["cursorParaDireita", 1, 0]];
+            semearSorteio(4400);
+            const partidas = [{ x: 0, y: 0 }, { x: 9, y: 9 }, { x: 0, y: 9 }, { x: 9, y: 0 }];
+            for (let i = 0; i < 16; i++) partidas.push({ x: Math.floor(Math.random() * TAMANHO), y: Math.floor(Math.random() * TAMANHO) });
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, paradas = 0, continuouMarcada = 0;
+                partidas.forEach(function (partida) {
+                    BOTOES_DE_SETA.forEach(function (seta) {
+                        cursor = { x: partida.x, y: partida.y };
+                        marcada = true;
+                        clicar(seta[0]);
+                        const centro = girarComTamanho(partida.x + 0.5, partida.y + 0.5, giro, TAMANHO);
+                        const alvo = casaDoCentroGiradoNoApoio(centro[0] + seta[1], centro[1] + seta[2], giro, TAMANHO);
+                        if (!alvo) paradas++;
+                        const esperada = alvo || partida;
+                        if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                            erros++;
+                            if (primeiro === null) primeiro = seta[0] + " a partir de (" + partida.x + "," + partida.y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                        }
+                        if (marcada) continuouMarcada++;
+                    });
+                });
+                conferir("giro " + giro * 90 + "°: " + partidas.length * 4 + " cliques nas setas andam uma casa pela tela (ou ficam na borda: " + paradas + ")", erros === 0 && paradas > 0, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: mexer o cursor desmarca", continuouMarcada, 0);
+            });
+            zerarAEntrada();
+            cursor = { x: 3, y: 5 };
+            clicar("aplicar");
+            conferirIgual("Aplicar põe o pino na casa do cursor", Array.from(pinos).join("|"), "3,5");
+            clicar("aplicar");
+            conferirIgual("e outro clique o retira", pinos.size, 0);
+            clicar("girarDireita");
+            conferirIgual("⟳ gira 90°", rotacao, 1);
+            clicar("girarEsquerda");
+            clicar("girarEsquerda");
+            conferirIgual("⟲ duas vezes: 270°", rotacao, 3);
+            irParaOGiro(0);
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            clicar("alternarVer");
+            conferirIgual("Ver liga o H", depuracaoLigada, true);
+            clicar("alternarVer");
+            conferirIgual("e outro clique desliga", depuracaoLigada, false);
+            conferirIgual("nenhum botão ficou sem teste: as ações da página = as clicadas", acoesDosBotoes().sort().join(" "), Array.from(clicadas).sort().join(" "));
+            zerarAEntrada();
+        });
+
+        testar("o LEITO da água também é plano (passos 2 a 4 não têm parede): um só preenchimento por casa alagada, o topo no nível da água, nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const chamadas = espiarPreenchimentosPorChamada("desenharLeito", function () { avancarQuadro(16); });
+                const alagadas = alturas.reduce(function (soma, linha) { return soma + linha.filter(function (altura) { return altura < NIVEL_DA_AGUA; }).length; }, 0);
+                conferirIgual("giro " + giro * 90 + "°: uma chamada de desenharLeito por casa alagada", chamadas.length, alagadas);
+                const erradas = chamadas.filter(function (chamada) {
+                    const esperado = meusCantos(chamada.args[0].x, chamada.args[0].y, NIVEL_DA_AGUA, giro, TAMANHO);
+                    return chamada.preenchimentos.length !== 1 || chamada.preenchimentos[0].pontos.length !== 4 || !chamada.preenchimentos[0].pontos.every(function (ponto, i) { return mesmoPonto(ponto, esperado[i]); });
+                });
+                conferirIgual("giro " + giro * 90 + "°: cada leito é um único losango no nível da água (sem laterais)", erradas.length, 0);
+            });
         });
 
         testar("o jogo roda sem se estragar e sem erro de console", function () {

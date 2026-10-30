@@ -14,20 +14,33 @@
     <h1>Teste — Dique, passo 4: a câmera</h1>
     <pre id="resultado"></pre>
 
-    <!-- O esqueleto do passo: o script dele procura estes ids. O canvas começa com 1×1: quem o dimensiona é o script. -->
-    <canvas id="jogo" width="1" height="1"></canvas>
-    <div id="botoes">
-        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
-        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
-        <button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>
-        <button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>
-        <button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>
-        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
-    </div>
-    <p id="aviso" role="status"></p>
-    <pre id="leitura" aria-live="off"></pre>
-
     <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
+
+    <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
+         Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
+    <script>
+        const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
+            + '<canvas id="jogo" width="384" height="300">Seu navegador não suporta canvas.</canvas>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<div id="setas">'
+            + '<button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>'
+            + '<button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>'
+            + '<button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>'
+            + '<button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<pre id="leitura" aria-live="off"></pre>'
+            + '<p id="ajuda">Arraste: rolar · Toque: marcar, de novo: confirmar · setas: cursor · W A S D: rolar · + −: zoom · Q R: girar · H: invisível</p>';
+        document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="300"', 'width="1" height="1"'));
+    </script>
 
     <!-- Guarda os console.error (o mapa inválido avisa por ali). -->
     <script>
@@ -66,14 +79,19 @@
             return { clientX: caixa.left + sx * caixa.width / tela.width, clientY: caixa.top + sy * caixa.height / tela.height };
         }
 
-        function criarEventoDePonteiro(tipo, id, sx, sy) {
-            return new PointerEvent(tipo, Object.assign({ pointerId: id, bubbles: true }, posicaoNaPagina(sx, sy)));
+        function criarEventoDePonteiro(tipo, id, sx, sy, extras) {
+            return new PointerEvent(tipo, Object.assign({ pointerId: id, bubbles: true }, posicaoNaPagina(sx, sy), extras || {}));
         }
 
-        function descer(id, sx, sy) { tela.dispatchEvent(criarEventoDePonteiro("pointerdown", id, sx, sy)); }
-        function mover(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointermove", id, sx, sy)); }
-        function soltar(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointerup", id, sx, sy)); }
+        // Como o navegador manda: apertar o botão principal diz button 0 e buttons 1; arrastar mantém buttons 1; soltar diz buttons 0.
+        function descer(id, sx, sy, extras) { tela.dispatchEvent(criarEventoDePonteiro("pointerdown", id, sx, sy, Object.assign({ button: 0, buttons: 1 }, extras || {}))); }
+        function mover(id, sx, sy, extras) { window.dispatchEvent(criarEventoDePonteiro("pointermove", id, sx, sy, Object.assign({ buttons: 1 }, extras || {}))); }
+        function soltar(id, sx, sy, extras) { window.dispatchEvent(criarEventoDePonteiro("pointerup", id, sx, sy, Object.assign({ button: 0, buttons: 0 }, extras || {}))); }
         function cancelar(id, sx, sy) { window.dispatchEvent(criarEventoDePonteiro("pointercancel", id, sx, sy)); }
+
+        function estadoDoToque() {                  // tudo que um toque marcaria ou mudaria
+            return JSON.stringify({ c: cursor, m: marcada, p: Array.from(pinos), a: aviso.textContent });
+        }
 
         function irParaOGiro(giro) {
             rotacao = giro;
@@ -119,6 +137,7 @@
             pinos.clear();
             marcada = false;
             dedo = null;
+            giroDaRoda = 0;
             ponteiro = null;
             cursor = { x: 4, y: 4 };
             if (depuracaoLigada) apertarTecla("h");
@@ -204,7 +223,7 @@
                     });
                 });
             });
-            casas.sort(function (a, b) { return b.proximidade - a.proximidade; });
+            casas.sort(function (a, b) { return b.proximidade - a.proximidade || (b.y * TAMANHO + b.x) - (a.y * TAMANHO + a.x); });      // a lista do pintor lida de trás para a frente: da mais perto à mais longe, e no empate a pintada por último (maior índice) primeiro
             return casas;
         }
 
@@ -220,10 +239,18 @@
             return null;
         }
 
+        // Encostar na borda da caixa não é cobrir: o ponto tem de estar DENTRO (a conta olha quatro pontos a 1e-6 dele, todos dentro de alguma face).
+        function pontoNoInteriorDaCaixa(casa, ponto) {
+            return [[1e-6, 0], [-1e-6, 0], [0, 1e-6], [0, -1e-6]].every(function (folga) {
+                const perto = { x: ponto.x + folga[0], y: ponto.y + folga[1] };
+                return FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], perto); });
+            });
+        }
+
         function escondedoresPelaMinhaConta(cenario, x, y) {
             const dela = cenario.find(function (casa) { return casa.x === x && casa.y === y; });
             return cenario.filter(function (casa) {
-                return casa.proximidade > dela.proximidade + 1e-9 && FACES.some(function (nome) { return pontoNoPoligonoConvexo(casa.faces[nome], dela.topoDoCentro); });
+                return casa.proximidade > dela.proximidade + 1e-9 && pontoNoInteriorDaCaixa(casa, dela.topoDoCentro);
             }).map(nomeDaCasa);
         }
 
@@ -907,6 +934,246 @@
             errosDeConsole.length = antes;
         });
 
+        // ------------------------------------------------------------
+        // Os botões, por clique de verdade (o evento "click" sobe pela página como o do dedo): cada [data-acao] faz o que diz
+        // ------------------------------------------------------------
+        testar("cada botão [data-acao] responde a um clique de verdade: as 4 setas movem o cursor pela TELA nos 4 giros, e os outros fazem o seu efeito", function () {
+            reiniciar();
+            const clicadas = new Set();
+            function clicar(acao) {                         // só a primeira vez de cada ação vira linha de resultado
+                const existe = clicarNoBotao(acao);
+                if (!clicadas.has(acao) || !existe) conferir("o botão " + acao + " existe e recebe o clique", existe);
+                clicadas.add(acao);
+            }
+            const BOTOES_DE_SETA = [["cursorParaEsquerda", -1, 0], ["cursorParaCima", 0, -1], ["cursorParaBaixo", 0, 1], ["cursorParaDireita", 1, 0]];
+            semearSorteio(4401);
+            const partidas = [{ x: 0, y: 0 }, { x: 9, y: 9 }, { x: 0, y: 9 }, { x: 9, y: 0 }];
+            for (let i = 0; i < 20; i++) partidas.push({ x: Math.floor(Math.random() * TAMANHO), y: Math.floor(Math.random() * TAMANHO) });
+            rodarNosQuatroGiros(function (giro) {
+                let erros = 0, primeiro = null, paradas = 0, continuouMarcada = 0, semAviso = 0;
+                partidas.forEach(function (partida) {
+                    BOTOES_DE_SETA.forEach(function (seta) {
+                        cursor = { x: partida.x, y: partida.y };
+                        marcada = true;
+                        avisar("");
+                        clicar(seta[0]);
+                        const centro = girarComTamanho(partida.x + 0.5, partida.y + 0.5, giro, TAMANHO);
+                        const alvo = casaDoCentroGiradoNoApoio(centro[0] + seta[1], centro[1] + seta[2], giro, TAMANHO);
+                        if (!alvo) paradas++;
+                        const esperada = alvo || partida;
+                        if (cursor.x !== esperada.x || cursor.y !== esperada.y) {
+                            erros++;
+                            if (primeiro === null) primeiro = seta[0] + " a partir de (" + partida.x + "," + partida.y + "): foi para (" + cursor.x + "," + cursor.y + "), esperado (" + esperada.x + "," + esperada.y + ")";
+                        }
+                        if (marcada) continuouMarcada++;
+                        if (aviso.textContent === "") semAviso++;
+                    });
+                });
+                conferir("giro " + giro * 90 + "°: " + partidas.length * 4 + " cliques nas setas andam uma casa pela tela (ou ficam na borda: " + paradas + ")", erros === 0 && paradas > 0, primeiro);
+                conferirIgual("giro " + giro * 90 + "°: mexer o cursor desmarca", continuouMarcada, 0);
+                conferirIgual("giro " + giro * 90 + "°: e anuncia no #aviso", semAviso, 0);
+            });
+
+            reiniciar();
+            clicar("girarDireita");
+            conferirIgual("⟳ gira 90°", rotacao, 1);
+            clicar("girarDireita");
+            clicar("girarEsquerda");
+            conferirIgual("⟲ volta um", rotacao, 1);
+            clicar("girarEsquerda");
+            clicar("girarEsquerda");
+            conferirIgual("⟲ passa do 0 para 270°", rotacao, 3);
+            conferir("e o aviso diz que a vista girou", /^Vista girada para 270 graus/.test(aviso.textContent), aviso.textContent);
+            irParaOGiro(0);
+
+            definirCamera(1, 0, 0);
+            clicar("aproximar");
+            conferirIgual("Perto aproxima", camera.zoom, 1.5);
+            clicar("afastar");
+            conferirIgual("Longe afasta", camera.zoom, 1);
+
+            cursor = { x: 3, y: 5 };
+            clicar("aplicar");
+            conferirIgual("Aplicar põe o pino na casa do cursor", Array.from(pinos).join("|"), "3,5");
+            clicar("aplicar");
+            conferirIgual("e outro clique o retira", pinos.size, 0);
+
+            conferirIgual("a depuração começa desligada", depuracaoLigada, false);
+            clicar("alternarVer");
+            conferirIgual("Ver liga o H", depuracaoLigada, true);
+            avancarQuadro(16);
+            conferir("e a leitura aparece", leitura.textContent.length > 20);
+            clicar("alternarVer");
+            conferirIgual("e outro clique desliga", depuracaoLigada, false);
+
+            conferirIgual("nenhum botão ficou sem teste: as ações da página = as clicadas", acoesDosBotoes().filter(function (acao, i, todas) { return todas.indexOf(acao) === i; }).sort().join(" "), Array.from(clicadas).sort().join(" "));
+            reiniciar();
+        });
+
+        testar("só o botão principal marca: botão direito e do meio não marcam nem rolam", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            const toque = acharToqueNaJanela();
+            conferir("preparação: há uma casa à vista para tocar", toque !== null);
+            [[2, 2, "direito"], [1, 4, "do meio"]].forEach(function (botao) {
+                const antes = estadoDoToque() + JSON.stringify(camera);
+                descer(1, toque.q.x, toque.q.y, { button: botao[0], buttons: botao[1] });
+                soltar(1, toque.q.x, toque.q.y, { button: botao[0], buttons: 0 });
+                conferirIgual("botão " + botao[2] + ": apertar e soltar no mesmo ponto não marca nada", estadoDoToque() + JSON.stringify(camera), antes);
+                descer(1, toque.q.x, toque.q.y, { button: botao[0], buttons: botao[1] });
+                mover(1, toque.q.x + 40, toque.q.y + 30, { buttons: botao[1] });
+                soltar(1, toque.q.x + 40, toque.q.y + 30, { button: botao[0], buttons: 0 });
+                conferirIgual("botão " + botao[2] + ": arrastar com ele não rola o mapa nem marca", estadoDoToque() + JSON.stringify(camera), antes);
+            });
+            descer(1, toque.q.x, toque.q.y);
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("e o botão principal, logo depois, marca a casa", marcada + " " + nomeDaCasa(cursor), "true " + nomeDaCasa(toque.casa));
+            reiniciar();
+        });
+
+        testar("soltar o botão no meio de um toque FORA do canvas não marca nada", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            const toque = acharToqueNaJanela();
+            const antes = estadoDoToque() + JSON.stringify(camera);
+            [[tela.width + 60, toque.q.y], [-30, toque.q.y], [toque.q.x, tela.height + 40], [toque.q.x, -25]].forEach(function (fora) {
+                descer(1, toque.q.x, toque.q.y);
+                soltar(1, fora[0], fora[1]);
+                conferirIgual("apertar dentro e soltar em (" + fora[0] + ", " + fora[1] + "), fora, não marca", estadoDoToque() + JSON.stringify(camera), antes);
+            });
+            reiniciar();
+        });
+
+        testar("o acorde de botões não deixa o arrasto preso: soltar o botão direito encerra o dedo, e um movimento sem botões não rola", function () {
+            reiniciar();
+            definirCamera(2, -100, -100);
+            descer(1, 200, 150);                                                 // botão principal
+            descer(1, 200, 150, { button: 2, buttons: 3 });                      // o direito também, no mesmo ponteiro
+            soltar(1, 200, 150, { button: 2, buttons: 1 });                      // e solta o direito
+            const antes = camera.desvioX + "," + camera.desvioY;
+            mover(1, 280, 210, { buttons: 0 });                                  // o mouse anda sem botão nenhum
+            conferirIgual("um movimento sem botões não rola o mapa", camera.desvioX + "," + camera.desvioY, antes);
+            mover(1, 300, 230, { buttons: 0 });
+            conferirIgual("nem o seguinte", camera.desvioX + "," + camera.desvioY, antes);
+            soltar(1, 300, 230);
+            const toque = acharToqueNaJanela();
+            descer(1, toque.q.x, toque.q.y);
+            soltar(1, toque.q.x, toque.q.y);
+            conferirIgual("depois do acorde, um toque normal ainda marca a casa", marcada + " " + nomeDaCasa(cursor), "true " + nomeDaCasa(toque.casa));
+            reiniciar();
+        });
+
+        testar("a roda: deltaY 0 não faz nada, deltas pequenos somam até um degrau, a inversão de sentido recomeça a conta, linhas e páginas valem mais que pixels", function () {
+            function roda(delta, extras) {
+                const evento = new WheelEvent("wheel", Object.assign({ deltaY: delta, cancelable: true, bubbles: true }, posicaoNaPagina(150, 100), extras || {}));
+                tela.dispatchEvent(evento);
+                return evento;
+            }
+            reiniciar();
+            definirCamera(1.5, -60, -40);
+            const antes = JSON.stringify(camera) + aviso.textContent;
+            [0, 0, -0].forEach(function (zero) { roda(zero); });
+            conferirIgual("deltaY 0 (deslize de lado) não muda a câmera nem o aviso", JSON.stringify(camera) + aviso.textContent, antes);
+            conferirIgual("e a roda sem delta ainda não deixa a página rolar", roda(0).defaultPrevented, true);
+
+            [-25, -25, -25].forEach(function (delta) { roda(delta); });
+            conferirIgual("três deltas de −25 (soma 75) ainda não dão um degrau", camera.zoom, 1.5);
+            roda(-25);
+            conferirIgual("o quarto (soma 100) aproxima um degrau", camera.zoom, 2);
+            [25, 25, 25].forEach(function (delta) { roda(delta); });
+            conferirIgual("depois do degrau a conta recomeça do zero: três de +25 não afastam", camera.zoom, 2);
+            roda(25);
+            conferirIgual("o quarto afasta um degrau", camera.zoom, 1.5);
+
+            reiniciar();
+            definirCamera(1.5, -60, -40);
+            roda(60);
+            conferirIgual("+60 não basta", camera.zoom, 1.5);
+            roda(-60);
+            conferirIgual("−60 logo depois (inversão) também não", camera.zoom, 1.5);
+            roda(-60);
+            conferirIgual("a inversão zerou a conta: −60 −60 somam −120 e aproximam (se a conta seguisse, 60 − 60 − 60 = −60 não bastaria)", camera.zoom, 2);
+
+            reiniciar();
+            definirCamera(1.5, -60, -40);
+            roda(-1, { deltaMode: 1 });
+            conferirIgual("1 linha (30 a 40 px, conforme o navegador) ainda não basta", camera.zoom, 1.5);
+            roda(-4, { deltaMode: 1 });
+            conferirIgual("5 linhas (mais de 100 px) aproximam um degrau, não dois", camera.zoom, 2);
+
+            reiniciar();
+            definirCamera(1, 0, 0);
+            roda(-1, { deltaMode: 2 });
+            conferirIgual("uma página de roda (deltaMode 2) vale um degrau", camera.zoom, 1.5);
+            reiniciar();
+        });
+
+        testar("segurar Enter ou Espaço (repeat) age uma vez só; soltar e apertar de novo age de novo", function () {
+            reiniciar();
+            cursor = { x: 2, y: 3 };
+            apertarTecla("Enter");
+            conferirIgual("Enter põe o pino", Array.from(pinos).join("|"), "2,3");
+            let repetidoSemPreventDefault = 0;
+            for (let i = 0; i < 6; i++) if (!apertarTecla("Enter", { repeat: true }).defaultPrevented) repetidoSemPreventDefault++;
+            conferirIgual("Enter segurado (6 repetições) não tira o pino", Array.from(pinos).join("|"), "2,3");
+            conferirIgual("e a repetição não deixa o navegador agir (preventDefault)", repetidoSemPreventDefault, 0);
+            apertarTecla("Enter");
+            conferirIgual("um Enter novo (sem repeat) age: tira o pino", pinos.size, 0);
+            apertarTecla(" ");
+            for (let i = 0; i < 6; i++) apertarTecla(" ", { repeat: true });
+            conferirIgual("Espaço põe o pino uma vez só, mesmo segurado", Array.from(pinos).join("|"), "2,3");
+            reiniciar();
+        });
+
+        testar("o #aviso anuncia o zoom e a rolagem, inclusive o limite", function () {
+            reiniciar();
+            definirCamera(1, 0, 0);
+            apertarTecla("+");
+            conferir("+ anuncia o zoom: " + aviso.textContent, /zoom/i.test(aviso.textContent) && /no meio/i.test(aviso.textContent) && !/limite/i.test(aviso.textContent));
+            apertarTecla("+");
+            conferir("+ de novo: perto, " + aviso.textContent, /perto/i.test(aviso.textContent) && !/limite/i.test(aviso.textContent));
+            apertarTecla("+");
+            conferir("+ no Perto diz que é o limite: " + aviso.textContent, /perto/i.test(aviso.textContent) && /limite/i.test(aviso.textContent));
+            apertarTecla("-"); apertarTecla("-");
+            conferir("− duas vezes: longe, " + aviso.textContent, /longe/i.test(aviso.textContent) && !/limite/i.test(aviso.textContent));
+            apertarTecla("-");
+            conferir("− no Longe diz o limite: " + aviso.textContent, /longe/i.test(aviso.textContent) && /limite/i.test(aviso.textContent));
+            tela.dispatchEvent(new WheelEvent("wheel", Object.assign({ deltaY: -100, cancelable: true, bubbles: true }, posicaoNaPagina(100, 100))));
+            conferir("a roda também anuncia: " + aviso.textContent, /zoom/i.test(aviso.textContent) && /no meio/i.test(aviso.textContent));
+            clicarNoBotao("aproximar");
+            conferir("e o botão Perto: " + aviso.textContent, /zoom/i.test(aviso.textContent) && /perto/i.test(aviso.textContent));
+
+            definirCamera(2, -100, -100);
+            [["w", /cima/i], ["a", /esquerda/i], ["s", /baixo/i], ["d", /direita/i]].forEach(function (tecla) {
+                avisar("");
+                apertarTecla(tecla[0]);
+                conferir(tecla[0].toUpperCase() + " rolou: o aviso diz para onde (" + aviso.textContent + ")", tecla[1].test(aviso.textContent) && /rolado/i.test(aviso.textContent));
+            });
+            definirCamera(2, 0, 0);
+            apertarTecla("w");
+            conferir("W no começo do mapa: o aviso diz que acabou (" + aviso.textContent + ")", /sem mais mapa/i.test(aviso.textContent) && /cima/i.test(aviso.textContent));
+            definirCamera(2, -384, -204);
+            apertarTecla("d");
+            conferir("D no fim do mapa: " + aviso.textContent, /sem mais mapa/i.test(aviso.textContent) && /direita/i.test(aviso.textContent));
+            definirCamera(1, 0, 0);
+            apertarTecla("a");
+            conferir("com o mapa inteiro à vista, nada rola: " + aviso.textContent, /sem mais mapa/i.test(aviso.textContent) && /esquerda/i.test(aviso.textContent));
+            reiniciar();
+        });
+
+        testar("o LEITO da água também é plano (passos 2 a 4 não têm parede): um só preenchimento por casa alagada, o topo no nível da água, nos 4 giros", function () {
+            rodarNosQuatroGiros(function (giro) {
+                const chamadas = espiarPreenchimentosPorChamada("desenharLeito", function () { avancarQuadro(16); });
+                const alagadas = alturas.reduce(function (soma, linha) { return soma + linha.filter(function (altura) { return altura < NIVEL_DA_AGUA; }).length; }, 0);
+                conferirIgual("giro " + giro * 90 + "°: uma chamada de desenharLeito por casa alagada", chamadas.length, alagadas);
+                const erradas = chamadas.filter(function (chamada) {
+                    const esperado = meusCantos(chamada.args[0].x, chamada.args[0].y, NIVEL_DA_AGUA, giro, TAMANHO);
+                    return chamada.preenchimentos.length !== 1 || chamada.preenchimentos[0].pontos.length !== 4 || !chamada.preenchimentos[0].pontos.every(function (ponto, i) { return mesmoPonto(ponto, esperado[i]); });
+                });
+                conferirIgual("giro " + giro * 90 + "°: cada leito é um único losango no nível da água (sem laterais)", erradas.length, 0);
+            });
+        });
+
         testar("sem erro de console e com o estado restaurado", function () {
             reiniciar();
             conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
@@ -917,105 +1184,25 @@
         });
 
         // ------------------------------------------------------------
-        // O passo inteiro com o style.css de verdade, num tamanho de tela conhecido: sem rolar a página, alvos ≥ 48 px, touch-action
+        // O passo inteiro com o style.css de verdade, em dois tamanhos de tela (apoio-dique.js): sem rolar a página em 390×750,
+        // sem rolagem horizontal e alvos ≥ 48 px em 360, #aviso com a mesma altura em qualquer mensagem
         // ------------------------------------------------------------
-        const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
-            + '<canvas id="jogo" width="384" height="300">Seu navegador não suporta canvas.</canvas>'
-            + '<div id="botoes">'
-            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
-            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
-            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
-            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
-            + '<button type="button" data-acao="aplicar" aria-label="Aplicar na casa marcada (Enter ou Espaço)">Aplicar</button>'
-            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
-            + '</div>'
-            + '<p id="aviso" role="status"></p>'
-            + '<pre id="leitura" aria-live="off"></pre>'
-            + '<p id="ajuda">Arraste: rolar · Toque: marcar, de novo: confirmar · setas: cursor · W A S D: rolar · + −: zoom · Q R: girar · H: invisível</p>';
-
-        function montarDocumentoDoIframe() {
-            const fecharScript = "<" + "/script>";
-            return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
-                + '<link rel="stylesheet" href="../../dique/04-camera/style.css"></head><body>'
-                + MARCACAO_DO_PASSO
-                + "<script>window.requestAnimationFrame = function (funcao) { window.__proximoQuadro = funcao; return 1; };" + fecharScript
-                + '<script src="../../dique/04-camera/regras.js">' + fecharScript
-                + '<script src="../../dique/04-camera/script.js">' + fecharScript
-                + "</body></html>";
-        }
-
-        function abrirNumIframe(largura, altura) {
-            return new Promise(function (resolver) {
-                const quadro = document.createElement("iframe");
-                quadro.style.cssText = "display:block;border:0;width:" + largura + "px;height:" + altura + "px";
-                quadro.addEventListener("load", function () { resolver(quadro); });
-                quadro.srcdoc = montarDocumentoDoIframe();
-                document.body.appendChild(quadro);
-            });
-        }
-
-        function darQuadro(janela, instante) {
-            const funcao = janela.__proximoQuadro;
-            janela.__proximoQuadro = null;
-            funcao(instante);
-        }
-
-        async function testarNoIframe(nome, funcao) {
-            try {
-                await funcao();
-            } catch (erro) {
-                quantidadeDeFalhas++;
-                escreverLinha("FALHA " + nome + "  -> exceção: " + erro);
-            }
-        }
-
-        async function conferirLayout(largura, altura) {
-            const quadro = await abrirNumIframe(largura, altura);
-            try {
-                const janela = quadro.contentWindow, documento = janela.document, nome = largura + "×" + altura;
-                conferirIgual(nome + ": o iframe tem o tamanho pedido", janela.innerWidth + "×" + janela.innerHeight, nome);
-                conferirIgual(nome + ": o passo carregou no iframe com o laço de quadros", typeof janela.__proximoQuadro, "function");
-                darQuadro(janela, 16);
-                const textoLongo = "Marcada a casa 7, 7, altura 1, escondida atrás de um bloco. Toque de novo na mesma casa para confirmar";
-                [false, true].forEach(function (comH) {
-                    if (comH) {
-                        documento.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "h", bubbles: true }));
-                        janela.dispatchEvent(new janela.PointerEvent("pointermove", { clientX: 120, clientY: 120, pointerId: 1, bubbles: true }));
-                    }
-                    janela.avisar(textoLongo);       // o pior aviso que o jogo escreve
-                    darQuadro(janela, comH ? 32 : 24);
-                    const estado = nome + (comH ? " com H" : " sem H");
-                    const raiz = documento.documentElement;
-                    conferir(estado + ": não rola na vertical (conteúdo " + raiz.scrollHeight + " ≤ " + janela.innerHeight + ")", raiz.scrollHeight <= janela.innerHeight);
-                    conferir(estado + ": nem na horizontal (" + raiz.scrollWidth + " ≤ " + janela.innerWidth + ")", raiz.scrollWidth <= janela.innerWidth);
-                    const corpo = documento.body.getBoundingClientRect();
-                    conferir(estado + ": o corpo termina dentro da janela (" + Math.round(corpo.bottom) + " ≤ " + janela.innerHeight + ")", corpo.bottom <= janela.innerHeight);
-                    if (comH) conferir(estado + ": a leitura ligada tem texto (" + documento.getElementById("leitura").textContent.split("\n").length + " linhas)", documento.getElementById("leitura").textContent.length > 20);
-                });
-                const botoes = Array.from(documento.querySelectorAll("#botoes button"));
-                const pequenos = botoes.filter(function (botao) {
-                    const caixa = botao.getBoundingClientRect();
-                    return caixa.width < 48 - 0.01 || caixa.height < 48 - 0.01;
-                }).map(function (botao) { return botao.dataset.acao + " " + botao.getBoundingClientRect().width.toFixed(1) + "×" + botao.getBoundingClientRect().height.toFixed(1); });
-                conferirIgual(nome + ": são 6 botões", botoes.length, 6);
-                conferir(nome + ": todo botão tem pelo menos 48×48 px (GDD 7)", pequenos.length === 0, pequenos.join(", "));
-                const dentroDaTela = botoes.every(function (botao) { const caixa = botao.getBoundingClientRect(); return caixa.left >= 0 && caixa.right <= janela.innerWidth && caixa.bottom <= janela.innerHeight; });
-                conferir(nome + ": todos os botões cabem na tela, sem rolar para alcançar", dentroDaTela);
-                const canvas = documento.getElementById("jogo"), caixaDoCanvas = canvas.getBoundingClientRect();
-                conferir(nome + ": o canvas cabe na largura (" + Math.round(caixaDoCanvas.width) + " px) mantendo a proporção 384:300", caixaDoCanvas.right <= janela.innerWidth && Math.abs(caixaDoCanvas.width / caixaDoCanvas.height - 384 / 300) < 0.01);
-                conferirIgual(nome + ": o canvas tem touch-action: none (o dedo rola o mapa, não a página)", janela.getComputedStyle(canvas).touchAction, "none");
-                conferirIgual(nome + ": o #aviso é uma região role=status", documento.getElementById("aviso").getAttribute("role"), "status");
-            } finally {
-                quadro.remove();
-            }
-        }
+        const CONFIGURACAO_DO_LAYOUT = {
+            pasta: "04-camera",
+            corpo: MARCACAO_DO_PASSO,
+            quantidadeDeBotoes: 10,
+            proporcaoDoCanvas: 384 / 300,
+            mensagens: ["", "Zoom: perto", "Mapa rolado para a esquerda", "Vista girada para 270 graus. Casas escondidas: 2",
+                "Marcada: casa 7, 7, altura 1, escondida atrás de um bloco. Toque de novo na mesma casa para confirmar e ver o pino"],
+        };
 
         async function principal() {
-            await testarNoIframe("layout 390×750", function () { return conferirLayout(390, 750); });
-            await testarNoIframe("layout 360×640", function () { return conferirLayout(360, 640); });
+            await testarNoIframe("layout 390×750", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 390, 750); });
+            await testarNoIframe("layout 360×640", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 360, 640); });
         }
 
         principal().finally(finalizar);
+
     </script>
 </body>
 

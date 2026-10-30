@@ -41,6 +41,8 @@ O modo normal **não** entra em `verificacao/medicao/` (páginas de medição pa
 nem em `verificacao/autoteste/` (o autoteste do executor): essas pastas só rodam por caminho
 explícito (`node verificacao/rodar.mjs verificacao/medicao/<pagina>.html`).
 
+Uma opção desconhecida (como `--help` ou um erro de digitação) para com saída 2, sem rodar nada.
+
 ## Fumaça: todas as páginas do curso
 
 ```
@@ -145,6 +147,10 @@ Copie `tetris/03-queda.html`. Três truques fazem tudo funcionar por `file://`:
    visíveis para os scripts seguintes da mesma página (`poco`, `pecaAtual`, `cabe(...)`).
 
 O Proa Acesa reparte as verificações dos passos 5 a 8 em `proa-acesa/apoio-proa.js` (nascimento do comboio, trava e modo dos clarões, enquadramento da câmera, Espaço depois do clique, chuva, mar e névoa): funções com prefixo `verif…` que usam o `conferir` do `apoio.js`; carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo.
+
+O Dique reparte o que as páginas dos passos 1 a 6 têm em comum em `dique/apoio-dique.js` (a conta de enchente do teste por ponto fixo e por relaxamento, o gravador de polígonos do canvas, o clique de verdade em cada botão `[data-acao]`, o passo inteiro num `iframe` com `srcdoc` para tamanhos de tela e movimento reduzido, e a linha `TEMPO` com o tempo de execução da própria página, sem a abertura do navegador, que só vale aberta por duplo clique: no executor o Chrome roda em tempo virtual e o tempo real é o da linha `PASS`): carregue-o **depois** de `../apoio.js` e antes dos scripts do jogo; as páginas dos passos 4 a 6 guardam o miolo do `<body>` do `index.html` numa constante e o inserem na página e no `iframe`.
+
+O currículo testa um **espelho**: por `file://` uma página não lê o `index.html` de outra pasta, então cada `curriculo/NN-passo.html` guarda uma cópia dele entre as linhas `ESPELHO:inicio` e `ESPELHO:fim` e a abre num `iframe` com `srcdoc` e `<base href>` na pasta do passo (o CSS e o JS carregados são os de verdade). A cópia nunca é feita à mão: mudou um `curriculo/<passo>/index.html`, rode `node verificacao/curriculo/espelho.mjs`; `--conferir` não escreve e sai com 1 se um espelho ficou velho, se um arquivo do inventário ou um trecho de código não bate com a árvore, se uma miniatura do `final` falta, sobra ou passa de 60 KB, ou se aparece dado pessoal fora de `@exemplo.invalid`. As páginas repartem `curriculo/apoio-curriculo.js` (inventário, trechos, padrões de dado pessoal, abrir o passo), `apoio-acabamento.js` (passo 5, impressão do 6 e `final`: contraste, tema, `localStorage`, H, movimento reduzido) e `apoio-compartilhar.js` (o `<head>` do 6 e do `final`), nessa ordem, depois de `../apoio.js`.
 
 Se o jogo desenha num `<canvas>`, o teste de `tetris/03-queda.html` troca `getContext` por um
 contexto que ignora o desenho (o teste confere regras, não pixels): o robô de 30.000 quadros caiu
