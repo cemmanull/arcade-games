@@ -25,8 +25,11 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
     (`verificacao/medicao/` é conferida); as 2 imagens de `tutorial/01-html` saem como `ESPERADO`
     (tabela `QUEBRADOS_ESPERADOS_NO_HTML` em `links.mjs`).
   - `node verificacao/curriculo/espelho.mjs --conferir` — as páginas do currículo testam um **espelho** do
-    `index.html` do passo (por `file://` elas não leem o arquivo); acusa espelho velho e trecho de código que não
-    bate com o jogo. Mudou um `curriculo/<passo>/index.html`: rode `espelho.mjs` sem flag e depois as páginas.
+    `index.html` do passo (por `file://` elas não leem o arquivo); acusa espelho velho, trecho de código que não
+    bate com o jogo e cópia à mão de marcação do Dique
+    (`verificacao/dique/*.html`, entre `ESPELHO:inicio`/`fim`) que difere do `index.html` do passo. Mudou um
+    `curriculo/<passo>/index.html`: rode `espelho.mjs` sem flag e depois as páginas; mudou um `dique/<passo>/index.html`:
+    o `--conferir` aponta a cópia velha e ela se acerta à mão (para o Dique ele só confere).
   Os quatro precisam sair com 0 antes de qualquer merge.
 - Publicar uma etapa verificada: merge em `learning-path`, `main` em fast-forward, `git push origin
   learning-path main`. Nunca `--force`, `--all`, `--mirror`, nem `backup/*`. Prefira avançar branches com

@@ -7,6 +7,7 @@
 
   1. A conta de enchente do teste, escrita de outro jeito que a do jogo (ponto fixo sobre a grade inteira, e distância por relaxamento).
   2. A projeção do teste (fórmula escrita à mão: o mapa tem 10×10 casas de 36 px) e o gravador de polígonos do canvas.
+     Mais o pintor de trás para a frente do teste e o caso ARESTAS COMPARTILHADAS dos passos 5 e 6.
   3. Os botões [data-acao]: clicar de verdade e conferir o efeito.
   4. O passo inteiro num iframe (srcdoc, com o style.css de verdade): tamanhos de tela, movimento reduzido.
 */
@@ -191,6 +192,139 @@ function casaDoCentroGiradoNoApoio(u, v, giros, tamanho) {
         }
     }
     return null;
+}
+
+/* O pintor de trás para a frente, escrito aqui sem nenhuma função do jogo: a referência das arestas comuns dos passos 5 e 6.
+   `superficie(x, y)` devolve a altura visível da casa pela conta de quem chama; casa de altura 0 só tem topo (laterais sem área
+   conteriam todo pixel de uma reta). O cenário vem da casa mais perto à mais longe e, no empate, a pintada por último (maior índice) primeiro. */
+const FACES_DO_PINTOR = ["topo", "esquerda", "direita"];
+
+function pontoNoPoligonoInclusivo(poligono, ponto) {       // encostar na aresta conta
+    let positivo = false, negativo = false;
+    for (let i = 0; i < poligono.length; i++) {
+        const canto = poligono[i], proximo = poligono[(i + 1) % poligono.length];
+        const lado = (proximo.x - canto.x) * (ponto.y - canto.y) - (proximo.y - canto.y) * (ponto.x - canto.x);
+        if (lado > 1e-9) positivo = true;
+        if (lado < -1e-9) negativo = true;
+    }
+    return !(positivo && negativo);
+}
+
+function montarCenarioDoPintor(superficie, giros, tamanho) {
+    const casas = [];
+    for (let y = 0; y < tamanho; y++) {
+        for (let x = 0; x < tamanho; x++) {
+            const altura = superficie(x, y);
+            const centro = girarComTamanho(x + 0.5, y + 0.5, giros, tamanho);
+            const topo = meusCantos(x, y, altura, giros, tamanho), base = meusCantos(x, y, 0, giros, tamanho);
+            const faces = { topo: topo };
+            if (altura > 0) {
+                faces.esquerda = [topo[3], topo[2], base[2], base[3]];
+                faces.direita = [topo[2], topo[1], base[1], base[2]];
+            }
+            casas.push({ x: x, y: y, altura: altura, proximidade: centro[0] + centro[1], faces: faces });
+        }
+    }
+    return casas.sort(function (a, b) { return b.proximidade - a.proximidade || (b.y * tamanho + b.x) - (a.y * tamanho + a.x); });
+}
+
+function casasQueContemOPonto(cenario, ponto) {
+    return cenario.filter(function (casa) {
+        return FACES_DO_PINTOR.some(function (nome) { return casa.faces[nome] && pontoNoPoligonoInclusivo(casa.faces[nome], ponto); });
+    });
+}
+
+function acharPeloPintorDeTrasParaAFrente(cenario, sx, sy) {
+    const ponto = { x: sx, y: sy };
+    for (let i = 0; i < cenario.length; i++) {
+        const nome = FACES_DO_PINTOR.find(function (candidata) { return cenario[i].faces[candidata] && pontoNoPoligonoInclusivo(cenario[i].faces[candidata], ponto); });
+        if (nome) return { x: cenario[i].x, y: cenario[i].y, face: nome };
+    }
+    return null;
+}
+
+/* Todo ponto de coordenada inteira sobre uma aresta de uma face (as arestas são 2:1 ou verticais, com vértices inteiros). */
+function pontosInteirosSobreArestas(cenario) {
+    const maiorDivisor = function (a, b) { return b === 0 ? a : maiorDivisor(b, a % b); };
+    const pontos = new Map();
+    cenario.forEach(function (casa) {
+        FACES_DO_PINTOR.filter(function (nome) { return casa.faces[nome]; }).forEach(function (nome) {
+            const poligono = casa.faces[nome];
+            poligono.forEach(function (canto, i) {
+                const proximo = poligono[(i + 1) % poligono.length];
+                const dx = Math.round(proximo.x - canto.x), dy = Math.round(proximo.y - canto.y);
+                const passos = maiorDivisor(Math.abs(dx), Math.abs(dy));
+                for (let passo = 0; passo <= passos; passo++) {
+                    const ponto = [Math.round(canto.x) + dx * passo / passos, Math.round(canto.y) + dy * passo / passos];
+                    pontos.set(ponto.join(","), ponto);
+                }
+            });
+        });
+    });
+    return Array.from(pontos.values());
+}
+
+/* O caso ARESTAS COMPARTILHADAS dos passos 5 e 6 (o do 4 tem a sua força bruta, na página): num ponto de coordenada inteira sobre a aresta
+   de duas casas ou mais, o raio do jogo tem de dar a casa e a face do pintor de trás para a frente. O defeito que isto pega é de ponto
+   flutuante (6,999… no lugar de 7), então o pixel da janela é montado com a câmera (zoom e rolagem que não são exatos) e o jogo a desfaz.
+   config = {
+     tamanho, mapa: {x, y}, vista: {x, y}, zooms, estados, semente,
+     sortearEstado(i): põe no jogo o terreno e a água do estado i e devolve superficie(x, y), a altura visível pela conta da PÁGINA,
+     alturaVisivelDoJogo(x, y), irParaOGiro(giro), definirCamera(zoom, desvioX, desvioY), cameraDoJogo() → {zoom, desvioX, desvioY},
+     raio(x, y), casaSobOPixel({x, y}) } */
+function conferirArestasComunsComCamera(config) {
+    semearSorteio(config.semente);
+    let empates = 0, divergenciasDoRaio = 0, divergenciasDaCamera = 0, superficiesDiferentes = 0, comCovaSeca = 0, comAlturaAlta = 0;
+    const exemplosDoRaio = [], exemplosDaCamera = [], zoomsVistos = new Set(), rolagensVistas = new Set();
+    const nomeDoAcerto = function (acerto) { return acerto ? acerto.x + "," + acerto.y + " " + acerto.face : "nada"; };
+
+    for (let estado = 0; estado < config.estados; estado++) {
+        const superficie = config.sortearEstado(estado);
+        for (let y = 0; y < config.tamanho; y++) {
+            for (let x = 0; x < config.tamanho; x++) if (config.alturaVisivelDoJogo(x, y) !== superficie(x, y)) superficiesDiferentes++;
+        }
+        for (let giro = 0; giro < 4; giro++) {
+            config.irParaOGiro(giro);
+            const cenario = montarCenarioDoPintor(superficie, giro, config.tamanho);
+            const todos = pontosInteirosSobreArestas(cenario);
+            config.zooms.forEach(function (zoom) {
+                const minimoX = Math.min(0, config.vista.x - config.mapa.x * zoom), minimoY = Math.min(0, config.vista.y - config.mapa.y * zoom);
+                const rolagens = [[minimoX, minimoY], [minimoX * Math.random(), minimoY * Math.random()], [Math.round(minimoX / 2), Math.round(minimoY / 2)], [0, 0]];
+                rolagens.forEach(function (rolagem) {
+                    config.definirCamera(zoom, rolagem[0], rolagem[1]);
+                    const camera = config.cameraDoJogo();
+                    zoomsVistos.add(camera.zoom);
+                    rolagensVistas.add(camera.desvioX + "," + camera.desvioY);
+                    for (let i = 0; i < 120; i++) {
+                        const ponto = todos[Math.floor(Math.random() * todos.length)];
+                        const pixel = { x: ponto[0] * camera.zoom + camera.desvioX, y: ponto[1] * camera.zoom + camera.desvioY };
+                        if (pixel.x < 0 || pixel.y < 0 || pixel.x >= config.vista.x || pixel.y >= config.vista.y) continue;
+                        const donas = casasQueContemOPonto(cenario, { x: ponto[0], y: ponto[1] });
+                        if (donas.length < 2) continue;      // só o empate de verdade: o contorno da ilha com o vazio não é empate
+                        empates++;
+                        if (donas.some(function (casa) { return casa.altura === 0; })) comCovaSeca++;
+                        if (donas.some(function (casa) { return casa.altura >= 3; })) comAlturaAlta++;
+                        const referencia = nomeDoAcerto(acharPeloPintorDeTrasParaAFrente(cenario, ponto[0], ponto[1]));
+                        const doRaio = nomeDoAcerto(config.raio(ponto[0], ponto[1])), daCamera = nomeDoAcerto(config.casaSobOPixel(pixel));
+                        const onde = "estado " + estado + " giro " + giro * 90 + "° zoom " + zoom + " desvio (" + camera.desvioX + "," + camera.desvioY + ") ponto " + ponto;
+                        if (doRaio !== referencia) {
+                            divergenciasDoRaio++;
+                            if (exemplosDoRaio.length < 3) exemplosDoRaio.push(onde + ": raio " + doRaio + ", pintor " + referencia + "; donas " + donas.map(function (casa) { return casa.x + "," + casa.y + " h" + casa.altura; }).join(" / "));
+                        }
+                        if (daCamera !== referencia) {
+                            divergenciasDaCamera++;
+                            if (exemplosDaCamera.length < 3) exemplosDaCamera.push(onde + ": pelo pixel " + daCamera + ", pintor " + referencia);
+                        }
+                    }
+                });
+            });
+        }
+    }
+    conferirIgual("a altura visível do jogo = a da página em todas as casas de " + config.estados + " estados", superficiesDiferentes, 0);
+    conferir(empates + " empates de aresta: o raio no ponto do mundo = o pintor de trás para a frente (a última pintada vence)", divergenciasDoRaio === 0 && empates > 3000, divergenciasDoRaio + " divergências; " + exemplosDoRaio.join(" | ") + " (empates = " + empates + ")");
+    conferir("e pelo pixel da janela (zoom e rolagem desfeitos em ponto flutuante): casaSobOPixel = o pintor", divergenciasDaCamera === 0, divergenciasDaCamera + " divergências; " + exemplosDaCamera.join(" | "));
+    conferir("a amostra usou os " + config.zooms.length + " zooms e " + rolagensVistas.size + " rolagens, com cova seca em " + comCovaSeca + " empates e bloco alto (≥ 3) em " + comAlturaAlta,
+        zoomsVistos.size === config.zooms.length && rolagensVistas.size >= 20 && comCovaSeca > 200 && comAlturaAlta > 200);
 }
 
 function alfaDoEstilo(estilo) {                   // "rgba(42, 111, 219, 0.55)" → 0.55; cor sem alfa → 1

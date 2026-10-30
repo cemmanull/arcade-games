@@ -20,6 +20,7 @@
     <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
          Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
     <script>
+        // ESPELHO:inicio dique/06-fichas/index.html corpo
         const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
             + '<canvas id="jogo" width="384" height="252">Seu navegador não suporta canvas.</canvas>'
             + '<p id="painel"></p>'
@@ -47,6 +48,7 @@
             + '</div>'
             + '<p id="aviso" role="status"></p>'
             + '<pre id="leitura" aria-live="off"></pre>';
+        // ESPELHO:fim
         document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="252"', 'width="1" height="1"'));
     </script>
 
@@ -819,6 +821,33 @@
             conferir("toda parede esperada foi pintada (faltam " + faltando.length + ": " + faltando.slice(0, 3).join(" | ") + ")", faltando.length === 0);
             conferir("nenhuma parede onde a vizinha da frente é igual ou mais alta (sobram " + sobrando.length + ": " + sobrando.slice(0, 3).join(" | ") + ")", sobrando.length === 0);
             conferir("a parede desce do nível até a vizinha ou até o terreno da própria casa, o que for mais alto", curtas.length === 0, curtas.slice(0, 3).join(" | "));
+            voltarAoComeco();
+        });
+
+        testar("ARESTAS COMPARTILHADAS (picking com câmera e duas águas): num ponto de coordenada inteira sobre a aresta de duas casas ou mais, o raio dá a mesma casa e face que o pintor de trás para a frente, com a superfície de cada casa em um nível, cova seca, 3 zooms e rolagens inexatas", function () {
+            voltarAoComeco();
+            conferirArestasComunsComCamera({
+                semente: 6363, tamanho: TAMANHO, mapa: { x: 384, y: 252 }, vista: { x: 384, y: 252 }, zooms: [1, 1.5, 2], estados: 8,
+                sortearEstado: function (indice) {
+                    alturas = indice === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, indice % 2 === 0);
+                    const niveis = matrizDeValor(TAMANHO, 0);                  // 0 = seca; senão, o nível da superfície naquela casa (mar e nascente diferem)
+                    if (indice === 0) {
+                        casasDaMatriz(alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR)).forEach(function (casa) { niveis[casa.y][casa.x] = NIVEL_DA_BAIXA_MAR_ESPERADO; });
+                    } else {
+                        niveis.forEach(function (linha, y) { linha.forEach(function (_, x) { if (Math.random() < 0.4) niveis[y][x] = 1 + Math.floor(Math.random() * 3); }); });
+                    }
+                    const molhadas = [];
+                    niveis.forEach(function (linha, y) { linha.forEach(function (nivel, x) { if (nivel > 0) molhadas.push({ x: x, y: y, nivel: nivel }); }); });
+                    definirAgua(1, molhadas);
+                    return function (x, y) { return Math.max(alturas[y][x], niveis[y][x]); };
+                },
+                alturaVisivelDoJogo: alturaVisivel,
+                irParaOGiro: irParaOGiro,
+                definirCamera: definirCamera,
+                cameraDoJogo: function () { return camera; },
+                raio: acharCasaPeloRaio,
+                casaSobOPixel: casaSobOPixel,
+            });
             voltarAoComeco();
         });
 

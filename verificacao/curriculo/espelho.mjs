@@ -7,12 +7,22 @@
 //                                                      código não está, tal e qual, no arquivo que ele cita, se uma
 //                                                      miniatura do final falta, sobra, não é PNG ou pesa mais de 60 KB,
 //                                                      ou se curriculo/final/** e curriculo/README.md trazem CPF, RG,
-//                                                      telefone ou e-mail que não seja @exemplo.invalid
+//                                                      telefone ou e-mail que não seja @exemplo.invalid; e confere também as
+//                                                      cópias de marcação do Dique (ver abaixo), que este script NUNCA reescreve
 //   --raiz <pasta>                                     trabalha numa cópia da árvore (é como os defeitos plantados rodam)
 //
 // Por que existe: uma página de teste aberta por file:// não consegue ler o index.html do passo (ver o começo de
 // apoio-curriculo.js). O espelho é a cópia dele DENTRO da página; este script mantém a cópia fiel.
 // Não faz parte do curso (que não instala nada): é só do harness, e o harness já exige o Node.
+//
+// O Dique (verificacao/dique/*.html) também guarda cópias à mão do miolo do <body> do index.html de um passo. Cada cópia é marcada na
+// página com duas linhas (comentário HTML, ou `//` dentro de um <script>):
+//     ESPELHO:inicio dique/04-camera/index.html corpo      ... a cópia ...      ESPELHO:fim
+//   corpo  = a cópia é o <body> inteiro do index.html; trecho = é um pedaço contíguo dele (as páginas 1 a 3 deixam de fora o canvas,
+//            que nasce 1×1 de propósito, o <h1> e a ajuda). Se o pedaço começa por `const NOME = ...;`, vale o texto que a constante guarda.
+// A comparação ignora <script>, comentários e espaços; a falha cita a página, a linha da marca e a peça que difere. Aqui só se CONFERE,
+// nunca se reescreve: as cópias 1 a 3 são recortes feitos à mão e as 4 a 6 são código de teste que várias mãos editam em paralelo.
+// Toda página de verificacao/dique com `id="jogo"` precisa de pelo menos uma marca, para uma cópia nova não nascer sem conferência.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -21,6 +31,8 @@ import vm from "node:vm";
 
 const MARCA_DE_INICIO = "ESPELHO:inicio";
 const MARCA_DE_FIM = "ESPELHO:fim";
+const PASTA_DAS_PAGINAS_DO_DIQUE = ["verificacao", "dique"];
+const PADRAO_DA_MARCA_DE_INICIO = /ESPELHO:inicio\s+(\S+)\s+(corpo|trecho)\s*(?:-->)?\s*$/;
 const ASSINATURA_DO_PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const PAGINAS = [
@@ -45,10 +57,10 @@ const raiz = lerRaiz();
 process.exit(principal());
 
 function principal() {
-    const problemas = [...conferirEspelhos(), ...(soConferir ? conferirInventarioETrechos() : [])];
+    const problemas = [...conferirEspelhos(), ...(soConferir ? [...conferirInventarioETrechos(), ...conferirCopiasDoDique()] : [])];
 
     problemas.forEach((problema) => console.error("FALHA " + problema));
-    if (problemas.length === 0) console.log(soConferir ? "Espelhos, inventário e trechos em dia." : "Espelhos atualizados.");
+    if (problemas.length === 0) console.log(soConferir ? "Espelhos, inventário, trechos e cópias do Dique em dia." : "Espelhos atualizados.");
     return problemas.length === 0 ? 0 : 1;
 }
 
@@ -143,6 +155,101 @@ function conferirInventarioETrechos() {
 
     problemas.push(...conferirAmostrasDoFinal(tabelas), ...conferirPrivacidadeDosArquivos(tabelas));
     return problemas;
+}
+
+// ============================================================
+// Cópias de marcação do Dique: a cópia à mão contra o index.html do passo
+// ============================================================
+
+function conferirCopiasDoDique() {
+    const pasta = join(raiz, ...PASTA_DAS_PAGINAS_DO_DIQUE);
+    if (!existsSync(pasta)) return [`cópias do Dique: ${PASTA_DAS_PAGINAS_DO_DIQUE.join("/")} não existe`];
+
+    const problemas = [];
+    for (const nome of readdirSync(pasta).filter((nome) => nome.endsWith(".html")).sort()) {
+        const nomeParaMostrar = [...PASTA_DAS_PAGINAS_DO_DIQUE, nome].join("/");
+        const linhas = lerTexto(join(pasta, nome)).split("\n");
+        const copias = acharAsCopiasMarcadas(linhas, nomeParaMostrar, problemas);
+
+        if (copias.length === 0 && linhas.some((linha) => linha.includes('id="jogo"'))) {
+            problemas.push(`${nomeParaMostrar}: tem marcação do passo (id="jogo") e nenhuma cópia marcada com ${MARCA_DE_INICIO}; marque a cópia à mão para o --conferir olhá-la`);
+        }
+        for (const copia of copias) problemas.push(...compararACopiaComOIndex(copia));
+    }
+    return problemas;
+}
+
+/* Cada par de marcas vira { onde, indexDoPasso, modo, texto }; marca ilegível, sem fim ou com a região vazia vai para `problemas`. */
+function acharAsCopiasMarcadas(linhas, nomeParaMostrar, problemas) {
+    const copias = [];
+    for (let posicao = 0; posicao < linhas.length; posicao++) {
+        if (!linhas[posicao].includes(MARCA_DE_INICIO)) continue;
+
+        const onde = `${nomeParaMostrar}:${posicao + 1}`;
+        const marca = PADRAO_DA_MARCA_DE_INICIO.exec(linhas[posicao]);
+        const fim = linhas.findIndex((linha, i) => i > posicao && linha.includes(MARCA_DE_FIM));
+        if (!marca) { problemas.push(`${onde}: marca ${MARCA_DE_INICIO} ilegível; o jeito é "${MARCA_DE_INICIO} dique/NN-passo/index.html corpo|trecho"`); continue; }
+        if (fim < 0) { problemas.push(`${onde}: falta a linha ${MARCA_DE_FIM} depois desta marca`); continue; }
+
+        const texto = linhas.slice(posicao + 1, fim).join("\n");
+        if (texto.trim() === "") problemas.push(`${onde}: a região entre as marcas está vazia`);
+        else copias.push({ onde, indexDoPasso: marca[1], modo: marca[2], texto });
+        posicao = fim;
+    }
+    return copias;
+}
+
+function compararACopiaComOIndex(copia) {
+    if (!existeComCaixaExata(copia.indexDoPasso)) return [`${copia.onde}: ${copia.indexDoPasso} não existe (ou a caixa das letras não bate)`];
+
+    const pecasDaCopia = pecasDaMarcacao(valorDaCopia(copia.texto));
+    const pecasDoIndex = pecasDaMarcacao(corpoDoIndex(lerTexto(join(raiz, ...copia.indexDoPasso.split("/")))));
+    if (pecasDaCopia.length === 0) return [`${copia.onde}: a cópia de ${copia.indexDoPasso} não tem marcação nenhuma`];
+
+    const divergencia = copia.modo === "corpo" ? primeiraDivergencia(pecasDaCopia, pecasDoIndex) : primeiraDivergenciaDoTrecho(pecasDaCopia, pecasDoIndex);
+    if (divergencia === null) return [];
+    return [`${copia.onde}: a cópia (${copia.modo}) de ${copia.indexDoPasso} está velha: ${divergencia}; acerte a cópia na página (o --conferir nunca a reescreve)`];
+}
+
+/* Região em HTML vale como está; região que começa por `const NOME = ...;` vale pelo texto que a constante guarda. */
+function valorDaCopia(texto) {
+    const declaracao = /^\s*(?:const|let)\s+(\w+)\s*=/.exec(texto);
+    if (!declaracao) return texto;
+    return String(vm.runInNewContext(texto + "\n;" + declaracao[1], {}, { timeout: 1000 }));
+}
+
+function corpoDoIndex(html) {
+    const corpo = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(semScriptsNemComentarios(html));
+    return corpo ? corpo[1] : "";
+}
+
+function semScriptsNemComentarios(html) {
+    return html.replace(/<!--[\s\S]*?-->/g, "").replace(/<script\b[\s\S]*?<\/script>/gi, "");
+}
+
+/* Espaços não contam (nem em volta dos < e >); a marcação vira uma lista de peças, cada uma terminando num ">". */
+function pecasDaMarcacao(html) {
+    const normalizada = semScriptsNemComentarios(html).replace(/\s+/g, " ").replace(/ ?([<>]) ?/g, "$1").trim();
+    return normalizada.split(/(?<=>)/).filter((peca) => peca !== "");
+}
+
+function primeiraDivergencia(pecasDaCopia, pecasDoIndex) {
+    for (let i = 0; i < Math.max(pecasDaCopia.length, pecasDoIndex.length); i++) {
+        if (pecasDaCopia[i] === pecasDoIndex[i]) continue;
+        if (pecasDaCopia[i] === undefined) return `falta na cópia, na peça ${i + 1}, «${pecasDoIndex[i]}»`;
+        if (pecasDoIndex[i] === undefined) return `sobra na cópia, na peça ${i + 1}, «${pecasDaCopia[i]}»`;
+        return `na peça ${i + 1} a cópia tem «${pecasDaCopia[i]}» e o index.html tem «${pecasDoIndex[i]}»`;
+    }
+    return null;
+}
+
+/* O trecho tem de aparecer inteiro e contíguo no index; se a primeira peça aparece mais de uma vez, basta um começo bater. */
+function primeiraDivergenciaDoTrecho(pecasDaCopia, pecasDoIndex) {
+    const comecos = pecasDoIndex.flatMap((peca, posicao) => (peca === pecasDaCopia[0] ? [posicao] : []));
+    if (comecos.length === 0) return `a primeira peça da cópia, «${pecasDaCopia[0]}», não existe no index.html`;
+
+    const divergencias = comecos.map((comeco) => primeiraDivergencia(pecasDaCopia, pecasDoIndex.slice(comeco, comeco + pecasDaCopia.length)));
+    return divergencias.includes(null) ? null : divergencias[0];
 }
 
 // ============================================================

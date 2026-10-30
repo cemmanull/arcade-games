@@ -20,6 +20,7 @@
     <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
          Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
     <script>
+        // ESPELHO:inicio dique/05-enchente/index.html corpo
         const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
             + '<canvas id="jogo" width="384" height="252">Seu navegador não suporta canvas.</canvas>'
             + '<p id="painel"></p>'
@@ -47,6 +48,7 @@
             + '<p id="aviso" role="status"></p>'
             + '<pre id="leitura" aria-live="off"></pre>'
             + '<p id="ajuda">1 Erguer · 2 Cavar · Z desfazer · M maré · N refazer · H ver a água</p>';
+        // ESPELHO:fim
         document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="252"', 'width="1" height="1"'));
     </script>
 
@@ -660,6 +662,28 @@
             const registro = gravarDesenho(pincel, desenharVerdadeiro);
             const rotulos = registro.tracos.length;
             conferir("H desenha (traços no quadro: " + rotulos + ")", rotulos > 100);
+            voltarAoComeco();
+        });
+
+        testar("ARESTAS COMPARTILHADAS (picking com câmera e água): num ponto de coordenada inteira sobre a aresta de duas casas ou mais, o raio dá a mesma casa e face que o pintor de trás para a frente, com cova seca, laterais só onde há altura, 3 zooms e rolagens inexatas", function () {
+            voltarAoComeco();
+            conferirArestasComunsComCamera({
+                semente: 5353, tamanho: TAMANHO, mapa: { x: 384, y: 252 }, vista: { x: 384, y: 252 }, zooms: [1, 1.5, 2], estados: 8,
+                sortearEstado: function (indice) {
+                    alturas = indice === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, indice % 2 === 0);
+                    const nivel = 1 + indice % 3;
+                    const molhadas = indice === 0 ? alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR) : matrizDeValor(TAMANHO, false).map(function (linha) { return linha.map(function () { return Math.random() < 0.4; }); });
+                    definirAgua(indice === 0 ? NIVEL_DA_BAIXA_MAR_ESPERADO : nivel, casasDaMatriz(molhadas));
+                    const nivelDaAgua = indice === 0 ? NIVEL_DA_BAIXA_MAR_ESPERADO : nivel;
+                    return function (x, y) { return molhadas[y][x] ? Math.max(alturas[y][x], nivelDaAgua) : alturas[y][x]; };
+                },
+                alturaVisivelDoJogo: alturaVisivel,
+                irParaOGiro: irParaOGiro,
+                definirCamera: definirCamera,
+                cameraDoJogo: function () { return camera; },
+                raio: acharCasaPeloRaio,
+                casaSobOPixel: casaSobOPixel,
+            });
             voltarAoComeco();
         });
 
