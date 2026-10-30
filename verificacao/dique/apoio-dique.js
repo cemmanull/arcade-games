@@ -264,17 +264,21 @@ function pontosInteirosSobreArestas(cenario) {
     return Array.from(pontos.values());
 }
 
-/* O caso ARESTAS COMPARTILHADAS dos passos 5 e 6 (o do 4 tem a sua força bruta, na página): num ponto de coordenada inteira sobre a aresta
+/* O caso ARESTAS COMPARTILHADAS dos passos 4, 5 e 6: num ponto de coordenada inteira sobre a aresta
    de duas casas ou mais, o raio do jogo tem de dar a casa e a face do pintor de trás para a frente. O defeito que isto pega é de ponto
    flutuante (6,999… no lugar de 7), então o pixel da janela é montado com a câmera (zoom e rolagem que não são exatos) e o jogo a desfaz.
    config = {
      tamanho, mapa: {x, y}, vista: {x, y}, zooms, estados, semente,
      sortearEstado(i): põe no jogo o terreno e a água do estado i e devolve superficie(x, y), a altura visível pela conta da PÁGINA,
      alturaVisivelDoJogo(x, y), irParaOGiro(giro), definirCamera(zoom, desvioX, desvioY), cameraDoJogo() → {zoom, desvioX, desvioY},
-     raio(x, y), casaSobOPixel({x, y}) } */
+     raio(x, y), casaSobOPixel({x, y}),
+     opcionais: amostrasPorRolagem (120), exigirCovaSeca (true: o 4 não tem cova seca, a água cobre tudo abaixo do nível 1),
+     referenciaDoGiro(giro) → function (x, y) → {x, y, face} ou null (a força bruta da própria página; sem ela vale o pintor daqui) } */
 function conferirArestasComunsComCamera(config) {
     semearSorteio(config.semente);
     let empates = 0, divergenciasDoRaio = 0, divergenciasDaCamera = 0, superficiesDiferentes = 0, comCovaSeca = 0, comAlturaAlta = 0;
+    const amostrasPorRolagem = config.amostrasPorRolagem || 120, exigirCovaSeca = config.exigirCovaSeca !== false;
+    const nomeDaReferencia = config.referenciaDoGiro ? "a força bruta da página" : "o pintor de trás para a frente (a última pintada vence)";
     const exemplosDoRaio = [], exemplosDaCamera = [], zoomsVistos = new Set(), rolagensVistas = new Set();
     const nomeDoAcerto = function (acerto) { return acerto ? acerto.x + "," + acerto.y + " " + acerto.face : "nada"; };
 
@@ -287,6 +291,7 @@ function conferirArestasComunsComCamera(config) {
             config.irParaOGiro(giro);
             const cenario = montarCenarioDoPintor(superficie, giro, config.tamanho);
             const todos = pontosInteirosSobreArestas(cenario);
+            const referenciaDoGiro = config.referenciaDoGiro ? config.referenciaDoGiro(giro) : function (x, y) { return acharPeloPintorDeTrasParaAFrente(cenario, x, y); };
             config.zooms.forEach(function (zoom) {
                 const minimoX = Math.min(0, config.vista.x - config.mapa.x * zoom), minimoY = Math.min(0, config.vista.y - config.mapa.y * zoom);
                 const rolagens = [[minimoX, minimoY], [minimoX * Math.random(), minimoY * Math.random()], [Math.round(minimoX / 2), Math.round(minimoY / 2)], [0, 0]];
@@ -295,7 +300,7 @@ function conferirArestasComunsComCamera(config) {
                     const camera = config.cameraDoJogo();
                     zoomsVistos.add(camera.zoom);
                     rolagensVistas.add(camera.desvioX + "," + camera.desvioY);
-                    for (let i = 0; i < 120; i++) {
+                    for (let i = 0; i < amostrasPorRolagem; i++) {
                         const ponto = todos[Math.floor(Math.random() * todos.length)];
                         const pixel = { x: ponto[0] * camera.zoom + camera.desvioX, y: ponto[1] * camera.zoom + camera.desvioY };
                         if (pixel.x < 0 || pixel.y < 0 || pixel.x >= config.vista.x || pixel.y >= config.vista.y) continue;
@@ -304,7 +309,7 @@ function conferirArestasComunsComCamera(config) {
                         empates++;
                         if (donas.some(function (casa) { return casa.altura === 0; })) comCovaSeca++;
                         if (donas.some(function (casa) { return casa.altura >= 3; })) comAlturaAlta++;
-                        const referencia = nomeDoAcerto(acharPeloPintorDeTrasParaAFrente(cenario, ponto[0], ponto[1]));
+                        const referencia = nomeDoAcerto(referenciaDoGiro(ponto[0], ponto[1]));
                         const doRaio = nomeDoAcerto(config.raio(ponto[0], ponto[1])), daCamera = nomeDoAcerto(config.casaSobOPixel(pixel));
                         const onde = "estado " + estado + " giro " + giro * 90 + "° zoom " + zoom + " desvio (" + camera.desvioX + "," + camera.desvioY + ") ponto " + ponto;
                         if (doRaio !== referencia) {
@@ -321,10 +326,10 @@ function conferirArestasComunsComCamera(config) {
         }
     }
     conferirIgual("a altura visível do jogo = a da página em todas as casas de " + config.estados + " estados", superficiesDiferentes, 0);
-    conferir(empates + " empates de aresta: o raio no ponto do mundo = o pintor de trás para a frente (a última pintada vence)", divergenciasDoRaio === 0 && empates > 3000, divergenciasDoRaio + " divergências; " + exemplosDoRaio.join(" | ") + " (empates = " + empates + ")");
-    conferir("e pelo pixel da janela (zoom e rolagem desfeitos em ponto flutuante): casaSobOPixel = o pintor", divergenciasDaCamera === 0, divergenciasDaCamera + " divergências; " + exemplosDaCamera.join(" | "));
+    conferir(empates + " empates de aresta: o raio no ponto do mundo = " + nomeDaReferencia, divergenciasDoRaio === 0 && empates > 3000, divergenciasDoRaio + " divergências; " + exemplosDoRaio.join(" | ") + " (empates = " + empates + ")");
+    conferir("e pelo pixel da janela (zoom e rolagem desfeitos em ponto flutuante): casaSobOPixel = " + nomeDaReferencia, divergenciasDaCamera === 0, divergenciasDaCamera + " divergências; " + exemplosDaCamera.join(" | "));
     conferir("a amostra usou os " + config.zooms.length + " zooms e " + rolagensVistas.size + " rolagens, com cova seca em " + comCovaSeca + " empates e bloco alto (≥ 3) em " + comAlturaAlta,
-        zoomsVistos.size === config.zooms.length && rolagensVistas.size >= 20 && comCovaSeca > 200 && comAlturaAlta > 200);
+        zoomsVistos.size === config.zooms.length && rolagensVistas.size >= 20 && (!exigirCovaSeca || comCovaSeca > 200) && comAlturaAlta > 200);
 }
 
 function alfaDoEstilo(estilo) {                   // "rgba(42, 111, 219, 0.55)" → 0.55; cor sem alfa → 1

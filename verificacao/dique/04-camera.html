@@ -521,49 +521,25 @@
         });
 
         testar("ARESTAS COMPARTILHADAS com câmera: num ponto de coordenada inteira sobre a aresta de duas casas ou mais, o raio dá a casa e a face da minha força bruta (a última pintada vence), em 3 zooms e rolagens que não são exatas", function () {
-            semearSorteio(4343);
-            let empates = 0, divergenciasDoRaio = 0, divergenciasDaCamera = 0;
-            const exemplosDoRaio = [], exemplosDaCamera = [];
-            const zoomsVistos = new Set(), rolagensVistas = new Set();
-            for (let terreno = 0; terreno < 3; terreno++) {
-                if (terreno > 0) sortearTerreno();
-                for (let giro = 0; giro < 4; giro++) {
-                    irParaOGiro(giro);
+            conferirArestasComunsComCamera({
+                semente: 4343, tamanho: TAMANHO, mapa: MAPA_EM_PIXELS, vista: VISTA_EM_PIXELS, zooms: NIVEIS_DE_ZOOM, estados: 3, amostrasPorRolagem: 300, exigirCovaSeca: false,
+                sortearEstado: function (indice) {
+                    if (indice === 0) restaurarTerreno(); else sortearTerreno();
+                    return function (x, y) { return Math.max(alturas[y][x], 1); };       // minha conta: a água do nível 1 cobre o que é mais baixo
+                },
+                alturaVisivelDoJogo: function (x, y) { return alturaVisivel(alturas[y][x]); },
+                irParaOGiro: irParaOGiro,
+                definirCamera: definirCamera,
+                cameraDoJogo: function () { return camera; },
+                raio: acharCasaPeloRaio,
+                casaSobOPixel: casaSobOPixel,
+                referenciaDoGiro: function () {
                     const cenario = construirCenario();
-                    const todos = pontosInteirosSobreArestas(cenario);
-                    NIVEIS_DE_ZOOM.forEach(function (zoom) {
-                        const limites = limitesAtuais(zoom);
-                        [limites.x.minimo, null, null, limites.x.maximo].forEach(function (desvioDeX, rolagem) {
-                            definirCamera(zoom, desvioDeX === null ? desvioSorteado(limites.x) : desvioDeX, rolagem === 3 ? limites.y.maximo : desvioSorteado(limites.y));
-                            zoomsVistos.add(zoom);
-                            rolagensVistas.add(camera.desvioX + "," + camera.desvioY);
-                            for (let i = 0; i < 300; i++) {
-                                const p = todos[Math.floor(Math.random() * todos.length)];
-                                const q = paraAJanela({ x: p[0], y: p[1] }, camera.zoom, camera.desvioX, camera.desvioY);
-                                if (!dentroDaJanela(q, 0)) continue;
-                                const donas = casasQueContemOPonto(cenario, { x: p[0], y: p[1] });
-                                if (donas.length < 2) continue;      // só o empate de verdade: o contorno da ilha com o vazio não é empate
-                                empates++;
-                                const referencia = nomeDoAcerto(acharPelaMinhaForcaBruta(cenario, p[0], p[1]));
-                                const doRaio = nomeDoAcerto(acharCasaPeloRaio(p[0], p[1])), daCamera = nomeDoAcerto(casaSobOPixel(q));
-                                if (doRaio !== referencia) {
-                                    divergenciasDoRaio++;
-                                    if (exemplosDoRaio.length < 3) exemplosDoRaio.push("terreno " + terreno + " giro " + giro * 90 + "° ponto " + p + ": raio " + doRaio + ", minha " + referencia);
-                                }
-                                if (daCamera !== referencia) {
-                                    divergenciasDaCamera++;
-                                    if (exemplosDaCamera.length < 3) exemplosDaCamera.push("terreno " + terreno + " giro " + giro * 90 + "° zoom " + zoom + " desvio (" + camera.desvioX + "," + camera.desvioY + ") ponto " + p + ": pelo pixel " + daCamera + ", minha " + referencia);
-                                }
-                            }
-                        });
-                    });
-                }
-            }
+                    return function (x, y) { return acharPelaMinhaForcaBruta(cenario, x, y); };
+                },
+            });
             restaurarTerreno();
             definirCamera(1, 0, 0);
-            conferir(empates + " empates de aresta: acharCasaPeloRaio no ponto do mundo = a minha força bruta", divergenciasDoRaio === 0 && empates > 3000, divergenciasDoRaio + " divergências; " + exemplosDoRaio.join(" | "));
-            conferir("e pelo pixel da janela (zoom e rolagem desfeitos em ponto flutuante): casaSobOPixel = a minha força bruta", divergenciasDaCamera === 0, divergenciasDaCamera + " divergências; " + exemplosDaCamera.join(" | "));
-            conferir("a amostra usou os 3 zooms e " + rolagensVistas.size + " rolagens diferentes", zoomsVistos.size === 3 && rolagensVistas.size >= 20);
         });
 
         testar("o canvas de verdade segue a câmera: a cor sob o centro do pico (4, 4) está onde a câmera diz, em cada zoom", function () {

@@ -673,8 +673,8 @@
                     alturas = indice === 0 ? JSON.parse(ALTURAS_ORIGINAIS) : sortearTerrenoDaIlha(MAR, indice % 2 === 0);
                     const nivel = 1 + indice % 3;
                     const molhadas = indice === 0 ? alagarPorPontoFixo(alturas, NIVEL_DA_BAIXA_MAR_ESPERADO, FONTES_DO_MAR) : matrizDeValor(TAMANHO, false).map(function (linha) { return linha.map(function () { return Math.random() < 0.4; }); });
-                    definirAgua(indice === 0 ? NIVEL_DA_BAIXA_MAR_ESPERADO : nivel, casasDaMatriz(molhadas));
                     const nivelDaAgua = indice === 0 ? NIVEL_DA_BAIXA_MAR_ESPERADO : nivel;
+                    definirAgua(nivelDaAgua, casasDaMatriz(molhadas));
                     return function (x, y) { return molhadas[y][x] ? Math.max(alturas[y][x], nivelDaAgua) : alturas[y][x]; };
                 },
                 alturaVisivelDoJogo: alturaVisivel,
