@@ -1,0 +1,63 @@
+<!--
+  DIQUE — PASSO 7: OS DIAS
+
+  Dez dias, cada um com mapa, tábua de marés, meta de casas, par de jogadas e uma dica: tudo dados, em regras.js. Vencido o dia, M abre o seguinte.
+  Você lê a ficha, molda o terreno com os blocos (o que sobrou da maré anterior vale na seguinte), libera a água com M e conta as casas.
+  Z desfaz uma jogada da maré, N recomeça o dia, H mostra a ordem em que a água enche.
+  O robô que prova que cada dia tem solução (certificarDia, em regras.js) não roda aqui: roda na página de teste.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dique — passo 7</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="regras.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <h1>Dique <small id="dia"></small></h1>
+
+    <canvas id="jogo" width="384" height="252">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="painel"></p>
+
+    <p id="objetivo"></p>
+
+    <p id="tabua" title="Tábua de marés: n = nível da água, passos × casas por passo (com chuva, já somadas as 2 da chuva), + blocos que chegam, ☂ chuva; [colchetes] marcam a maré de agora"></p>
+
+    <div id="ferramentas">
+        <button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true" aria-label="Ferramenta Erguer: sobe a casa um degrau e gasta um bloco (1)">Erguer</button>
+        <button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false" aria-label="Ferramenta Cavar: desce a casa um degrau e devolve um bloco (2)">Cavar</button>
+        <button type="button" data-acao="aplicar" aria-label="Aplicar a ferramenta na casa marcada (Enter ou Espaço)">Aplicar</button>
+        <button type="button" data-acao="desfazer" aria-label="Desfazer a última jogada (Z)">Desfazer</button>
+        <button type="button" data-acao="avancar" aria-label="Liberar a maré; depois que ela passa, chamar a próxima ficha; no fim de um dia vencido, abrir o próximo dia (M)">Maré</button>
+        <button type="button" data-acao="reiniciar" aria-label="Recomeçar o dia (N)">Refazer</button>
+    </div>
+
+    <div id="botoes">
+        <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
+        <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
+        <button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>
+        <button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>
+        <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
+    </div>
+
+    <div id="setas">
+        <button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>
+        <button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>
+        <button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>
+        <button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>
+    </div>
+
+    <p id="aviso" role="status"></p>
+
+    <pre id="leitura" aria-live="off"></pre>
+
+</body>
+</html>

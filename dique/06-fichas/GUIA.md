@@ -181,4 +181,4 @@ Jogue sem jogar: aperte **M** três vezes sem mexer. A maré 1 (10 casas) não a
 
 ---
 
-**Anterior:** [`05-enchente`](../05-enchente/) · **Próximo:** `07-dias` — o dia deixa de ser um só: vários dias como **dados**, dificuldade por eixo, e um **robô** que prova, por busca, que cada dia tem solução e acha o `par`.
+**Anterior:** [`05-enchente`](../05-enchente/) · **Próximo:** [`07-dias`](../07-dias/) — o dia deixa de ser um só: vários dias como **dados**, dificuldade por eixo, e um **robô** que prova, por busca, que cada dia tem solução e acha o `par`.

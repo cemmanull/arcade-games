@@ -198,7 +198,9 @@ function criarElemento(tag, texto, atributos) {
 }
 
 function lerNumeroDoEndereco(nome, padrao, minimo, maximo) {
-    const valor = Number(new URLSearchParams(window.location.search).get(nome));
+    const texto = new URLSearchParams(window.location.search).get(nome);
+    if (texto === null || texto.trim() === "") return padrao;   // Number(null) e Number("") dão 0, que passaria por número válido
+    const valor = Number(texto);
     return Number.isInteger(valor) && valor >= minimo && valor <= maximo ? valor : padrao;
 }
 

@@ -1,0 +1,155 @@
+<!--
+  MEDIÇÃO DO PASSO 8 do Dique, para abrir NO CELULAR (veja LEIAME.md). Não é página de teste: o executor não a roda no modo normal.
+
+  Esqueleto copiado do index.html do passo (os `id` e os `data-acao` que o script procura), depois o regras.js, o script.js do passo e o medir.js.
+  A página só dirige o jogo pelos nomes que o passo já expõe (iniciarDia, comecarMare, liberarMare, moverAgua, camera, depuracaoLigada); não muda nada nele.
+
+  O que se mede é o que o passo guarda a cada quadro: ultimoTempoDeAtualizacao, ultimoTempoDeDesenho e ultimoTempoDeQuadro (ms, CPU), e o intervalo
+  entre quadros (fps). O desenho refaz o mapa inteiro (~100 casas) em cada quadro: é isto que o GDD pede para medir antes de pensar em cache de camadas.
+  A resolução interna é a do jogo (384×252, o CSS a encolhe). Meça com o celular EM PÉ, que é como se joga.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dique — medição do passo 8</title>
+    <link rel="stylesheet" href="../../dique/08-celular/style.css">
+    <script src="../../dique/08-celular/regras.js" defer></script>
+    <script src="../../dique/08-celular/script.js" defer></script>
+    <script src="medir.js" defer></script>
+</head>
+
+<body>
+    <h1>Dique <small id="dia"></small></h1>
+
+    <canvas id="jogo" width="384" height="252" role="img" aria-label="Mapa da ilha em isométrico">
+        Seu navegador não suporta canvas.
+    </canvas>
+
+    <p id="painel"></p>
+    <p id="objetivo"></p>
+    <p id="tabua"></p>
+
+    <div id="ferramentas">
+        <button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true">Erguer</button>
+        <button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false">Cavar</button>
+        <button type="button" data-acao="aplicar">Aplicar</button>
+        <button type="button" data-acao="desfazer">Desfazer</button>
+        <button type="button" data-acao="avancar">Maré</button>
+        <button type="button" data-acao="reiniciar">Refazer</button>
+        <button type="button" data-acao="alternarMovimento" aria-pressed="false">Calmo</button>
+    </div>
+
+    <p id="aviso" role="status"></p>
+    <ol id="resumo" class="so-leitor"></ol>
+    <pre id="leitura" aria-live="off"></pre>
+
+    <script>
+        /* `load` vem depois dos scripts `defer`: aqui o jogo e o medir.js já existem. */
+        const DIA_LEVE = 0;                     // o dia 1: uma ficha, sem chuva
+        const DIA_PESADO = 9;                   // o dia 10: segunda ficha, sizígia com chuva
+        const FICHA_PESADA = 1;
+        const PONTEIRO_DO_H = { x: 192, y: 126 };   // o meio do canvas: o raio do H desenha as colunas que ele atravessa
+
+        window.addEventListener("load", function () {
+            montarPainelDeMedicao({
+                titulo: "Dique passo 8",
+                cenarios: [criarCenarioLeve(), criarCenarioPesado()],
+                verificarRequisitos: descreverImpedimento,
+                lerAparelho: lerAparelhoDoJogo
+            });
+        });
+
+        function descreverImpedimento() {
+            if (typeof MAPA_VALIDO === "undefined" || !MAPA_VALIDO) {
+                return "O jogo não começou (um dia está inválido). Abra o console do navegador para ver o motivo.";
+            }
+            return "";
+        }
+
+        function lerAmostraDoJogo() {
+            return { atualizacao: ultimoTempoDeAtualizacao, desenho: ultimoTempoDeDesenho, quadro: ultimoTempoDeQuadro };
+        }
+
+        /* "Longe" é o primeiro zoom de ZOOMS e "Perto" o último. A câmera vai até ele pelo mesmo caminho do botão. */
+        function porACameraEm(zoom) {
+            while (camera.zoom !== zoom) {
+                aproximar(camera.zoom < zoom ? 1 : -1, CENTRO_DA_VISTA);
+            }
+        }
+
+        // ---- CENÁRIO 1: o quadro de quem só olha a ilha, baixa-mar, sem H ----
+        function criarCenarioLeve() {
+            return {
+                nome: "Dia 1 parado: baixa-mar, zoom longe, sem H",
+                preparar: function () {
+                    definirMovimento(false);
+                    depuracaoLigada = false;
+                    iniciarDia(DIA_LEVE);
+                    porACameraEm(ZOOMS[0]);
+                },
+                lerAmostra: lerAmostraDoJogo,
+                aoTerminar: function () {
+                    return "dia " + (indiceDoDia + 1) + ", fase " + fase + ", maré " + faseDaMare + ", casas com água " + contarAguaNoMapa();
+                }
+            };
+        }
+
+        // ---- CENÁRIO 2: o pior quadro, maré cheia com chuva, H ligado, zoom perto ----
+        function criarCenarioPesado() {
+            return {
+                nome: "Dia 10 na preamar com chuva: água cheia, H ligado, zoom perto",
+                preparar: function () {
+                    definirMovimento(false);
+                    iniciarDia(DIA_PESADO);
+                    comecarMare(FICHA_PESADA);
+                    irPara("dia", "moldar");
+                    liberarMare();
+                    passoDaMare = fichaDeAgora().passos - 1;
+                    moverAgua(1);               // o último passo da enchente: faseDaMare vira "preamar" e a água fica cheia
+                    depuracaoLigada = true;
+                    ponteiro = PONTEIRO_DO_H;
+                    porACameraEm(ZOOMS[ZOOMS.length - 1]);
+                },
+                /* O jogo conta 1 s de preamar e desce a maré sozinho: o robô zera o relógio a cada quadro para a água ficar no alto. */
+                aoQuadro: function () {
+                    relogioDaFase = 0;
+                },
+                lerAmostra: lerAmostraDoJogo,
+                aoTerminar: function () {
+                    const observacao = "dia " + (indiceDoDia + 1) + ", maré " + faseDaMare + ", casas com água " + contarAguaNoMapa() + ", chuva " + fichaDeAgora().chuva + ", H ligado";
+                    depuracaoLigada = false;
+                    ponteiro = null;
+                    return observacao;
+                }
+            };
+        }
+
+        function contarAguaNoMapa() {           // as casas de terra cobertas pela água (o mar não conta)
+            return agua.alagado.reduce(function (soma, linha) { return soma + linha.filter(Boolean).length; }, 0) - casasDoMar.length;
+        }
+
+        // ---- O APARELHO ----
+        function lerAparelhoDoJogo() {
+            return {
+                pixelRatioDoJogo: 1,            // canvas 2D sem escala: o navegador amplia a imagem pronta
+                tamanhoDoCanvas: tela.width + "x" + tela.height + " (interno)",
+                placaDeVideo: lerNomeDaPlacaDeVideo()
+            };
+        }
+
+        function lerNomeDaPlacaDeVideo() {
+            try {
+                const contexto = document.createElement("canvas").getContext("webgl");
+                const extensao = contexto && contexto.getExtension("WEBGL_debug_renderer_info");
+                return extensao ? contexto.getParameter(extensao.UNMASKED_RENDERER_WEBGL) : "?";
+            } catch (erro) {
+                return "?";
+            }
+        }
+    </script>
+</body>
+
+</html>

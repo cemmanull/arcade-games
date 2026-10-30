@@ -16,12 +16,14 @@
 
     <!-- O esqueleto do passo: o script dele procura estes ids. O canvas começa com 1×1: quem o dimensiona é o script, a partir do mapa. -->
     <canvas id="jogo" width="1" height="1"></canvas>
+    <!-- ESPELHO:inicio dique/02-alturas/index.html trecho -->
     <div id="botoes">
         <button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>
         <button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>
         <button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>
     </div>
     <pre id="leitura" aria-live="off"></pre>
+    <!-- ESPELHO:fim -->
 
     <script src="../apoio.js"></script>
     <script src="apoio-dique.js"></script>

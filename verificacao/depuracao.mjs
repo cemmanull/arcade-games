@@ -84,7 +84,7 @@ async function encerrarNavegador(conexao, processo, terminou) {
 // Página
 // ============================================================
 /*
-  Abre `caminho` numa aba nova, espera o evento `load` (teto de 15 s) e mais 1 s de assentamento
+  Abre `caminho` (um arquivo, ou uma URL pronta, como `new URL("file:///…?auto=1")`) numa aba nova, espera o evento `load` (teto de 15 s) e mais 1 s de assentamento
   (erros tardios, animações de entrada), e então chama `usar({ sessionId, erros, carregou })` com
   a aba ainda aberta. `erros` são as linhas de erro até aquele momento; `carregou` é falso se a
   navegação falhou ou o teto estourou (o motivo também entra em `erros`).
@@ -113,7 +113,8 @@ export async function comPaginaCarregada(conexao, caminho, metricas, usar) {
         }
         if (metricas) await aplicarMetricas(conexao, sessionId, metricas);
 
-        const navegacao = await conexao.enviar("Page.navigate", { url: pathToFileURL(caminho).href }, sessionId);
+        const endereco = caminho instanceof URL ? caminho.href : pathToFileURL(caminho).href;
+        const navegacao = await conexao.enviar("Page.navigate", { url: endereco }, sessionId);
         if (navegacao.errorText) {
             erros.push(`navegação: ${navegacao.errorText}`);
             return await usar({ sessionId, erros, carregou: false });

@@ -25,8 +25,11 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
     (`verificacao/medicao/` é conferida); as 2 imagens de `tutorial/01-html` saem como `ESPERADO`
     (tabela `QUEBRADOS_ESPERADOS_NO_HTML` em `links.mjs`).
   - `node verificacao/curriculo/espelho.mjs --conferir` — as páginas do currículo testam um **espelho** do
-    `index.html` do passo (por `file://` elas não leem o arquivo); acusa espelho velho e trecho de código que não
-    bate com o jogo. Mudou um `curriculo/<passo>/index.html`: rode `espelho.mjs` sem flag e depois as páginas.
+    `index.html` do passo (por `file://` elas não leem o arquivo); acusa espelho velho, trecho de código que não
+    bate com o jogo e cópia à mão de marcação do Dique
+    (`verificacao/dique/*.html`, entre `ESPELHO:inicio`/`fim`) que difere do `index.html` do passo. Mudou um
+    `curriculo/<passo>/index.html`: rode `espelho.mjs` sem flag e depois as páginas; mudou um `dique/<passo>/index.html`:
+    o `--conferir` aponta a cópia velha e ela se acerta à mão (para o Dique ele só confere).
   Os quatro precisam sair com 0 antes de qualquer merge.
 - Publicar uma etapa verificada: merge em `learning-path`, `main` em fast-forward, `git push origin
   learning-path main`. Nunca `--force`, `--all`, `--mirror`, nem `backup/*`. Prefira avançar branches com
@@ -107,6 +110,9 @@ cópia principal; agentes em worktree recebem o contexto no prompt).
   Chrome de teste deve ser `--headless=new` com `--user-data-dir` temporário.
 - `Emulation.setCPUThrottlingRate` do Chrome não serve para simular celular nesta máquina: 4× e 8×
   deixaram o JS só 1,2–1,5× mais lento. Desempenho em celular só vale medido num aparelho real.
+- O executor abre cada página de teste com `--virtual-time-budget=60000`: um `setTimeout` de mais de 60 s nunca dispara
+  (vigia de página fica abaixo disso), e depois da carga o `Date.now` fica parado dentro de cada tarefa. Tempo medido dentro
+  da página só vale aberta por duplo clique; no executor, o tempo real é o da linha `PASS` (medido em 2026-10-29).
 - Com vários agentes rodando o Chrome do harness ao mesmo tempo, o tempo de cada página é dominado pela
   carga da máquina, não pelo trabalho dela. Em 2026-10-28, com quatro agentes, uma página de 10 asserções
   levou 58 s e `tetris/03-queda.html` levou 63 s; sozinha, essa página leva uns 3 s. Uma execução de gate

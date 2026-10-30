@@ -20,6 +20,7 @@
     <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para o iframe do layout.
          Na página o canvas começa com 1×1: quem o dimensiona é o script. -->
     <script>
+        // ESPELHO:inicio dique/04-camera/index.html corpo
         const MARCACAO_DO_PASSO = '<h1>Dique</h1>'
             + '<canvas id="jogo" width="384" height="300">Seu navegador não suporta canvas.</canvas>'
             + '<div id="botoes">'
@@ -39,6 +40,7 @@
             + '<p id="aviso" role="status"></p>'
             + '<pre id="leitura" aria-live="off"></pre>'
             + '<p id="ajuda">Arraste: rolar · Toque: marcar, de novo: confirmar · setas: cursor · W A S D: rolar · + −: zoom · Q R: girar · H: invisível</p>';
+        // ESPELHO:fim
         document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO.replace('width="384" height="300"', 'width="1" height="1"'));
     </script>
 
@@ -516,6 +518,28 @@
             conferir(comparados + " toques (casa e face, ou nada) = a força bruta no ponto do mundo", divergencias === 0 && comparados > 20000, divergencias + " divergências; " + exemplos.join(" | ") + " (comparados = " + comparados + ")");
             conferir(cruzados + " pares do MESMO ponto do mundo em câmeras diferentes deram o mesmo resultado", divergenciasCruzadas === 0 && cruzados > 10000, divergenciasCruzadas + " divergências");
             conferir("a amostra pega as três faces e o vazio: topo " + porFace.topo + ", esquerda " + porFace.esquerda + ", direita " + porFace.direita + ", nada " + nada, porFace.topo > 500 && porFace.esquerda > 500 && porFace.direita > 500 && nada > 300);
+        });
+
+        testar("ARESTAS COMPARTILHADAS com câmera: num ponto de coordenada inteira sobre a aresta de duas casas ou mais, o raio dá a casa e a face da minha força bruta (a última pintada vence), em 3 zooms e rolagens que não são exatas", function () {
+            conferirArestasComunsComCamera({
+                semente: 4343, tamanho: TAMANHO, mapa: MAPA_EM_PIXELS, vista: VISTA_EM_PIXELS, zooms: NIVEIS_DE_ZOOM, estados: 3, amostrasPorRolagem: 300, exigirCovaSeca: false,
+                sortearEstado: function (indice) {
+                    if (indice === 0) restaurarTerreno(); else sortearTerreno();
+                    return function (x, y) { return Math.max(alturas[y][x], 1); };       // minha conta: a água do nível 1 cobre o que é mais baixo
+                },
+                alturaVisivelDoJogo: function (x, y) { return alturaVisivel(alturas[y][x]); },
+                irParaOGiro: irParaOGiro,
+                definirCamera: definirCamera,
+                cameraDoJogo: function () { return camera; },
+                raio: acharCasaPeloRaio,
+                casaSobOPixel: casaSobOPixel,
+                referenciaDoGiro: function () {
+                    const cenario = construirCenario();
+                    return function (x, y) { return acharPelaMinhaForcaBruta(cenario, x, y); };
+                },
+            });
+            restaurarTerreno();
+            definirCamera(1, 0, 0);
         });
 
         testar("o canvas de verdade segue a câmera: a cor sob o centro do pico (4, 4) está onde a câmera diz, em cada zoom", function () {

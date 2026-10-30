@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Teste — Dique, passo 8: para a mão</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ddd; padding: 1rem; }
+        #resultado { font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <h1>Teste — Dique, passo 8: para a mão</h1>
+    <pre id="resultado"></pre>
+
+    <script src="../apoio.js"></script>
+    <script src="apoio-dique.js"></script>
+
+    <!-- O esqueleto do passo (o miolo do <body> do index.html): o script dele procura estes ids. A mesma marcação vai para os iframes
+         (tamanho de tela, teclado, movimento reduzido). Os casos de toque e de resumo rodam na própria página, com o relógio falso. -->
+    <script>
+        // ESPELHO:inicio dique/08-celular/index.html corpo
+        const MARCACAO_DO_PASSO = '<h1>Dique <small id="dia"></small></h1>'
+            + '<canvas id="jogo" width="384" height="252" role="img" aria-label="Mapa da ilha em isométrico. O resumo em texto das alturas está no fim da página, e a tecla L o abre.">Seu navegador não suporta canvas.</canvas>'
+            + '<p id="painel"></p>'
+            + '<p id="objetivo"></p>'
+            + '<p id="tabua" title="Tábua de marés: n = nível da água, passos × casas por passo (com chuva, já somadas as 2 da chuva), + blocos que chegam, ☂ chuva; [colchetes] marcam a maré de agora"></p>'
+            + '<div id="ferramentas">'
+            + '<button type="button" data-acao="escolherErguer" data-ferramenta="erguer" aria-pressed="true" aria-label="Ferramenta Erguer: sobe o bloco marcado um degrau e gasta um do estoque (1)">Erguer</button>'
+            + '<button type="button" data-acao="escolherCavar" data-ferramenta="cavar" aria-pressed="false" aria-label="Ferramenta Cavar: desce o bloco marcado um degrau e devolve um ao estoque (2)">Cavar</button>'
+            + '<button type="button" data-acao="aplicar" aria-label="Aplicar a ferramenta no bloco marcado (Enter ou Espaço)">Aplicar</button>'
+            + '<button type="button" data-acao="desfazer" aria-label="Desfazer a última jogada (Z)">Desfazer</button>'
+            + '<button type="button" data-acao="avancar" aria-label="Liberar a maré; depois que ela passa, chamar a próxima ficha; no fim de um dia vencido, abrir o próximo dia (M)">Maré</button>'
+            + '<button type="button" data-acao="reiniciar" aria-label="Recomeçar o dia (N)">Refazer</button>'
+            + '<button type="button" data-acao="alternarMovimento" aria-pressed="false" aria-label="Reduzir movimento: sem ondas, e a maré anda um passo por toque em Maré (O)">Calmo</button>'
+            + '</div>'
+            + '<div id="botoes">'
+            + '<button type="button" data-acao="girarEsquerda" aria-label="Girar a vista para a esquerda (Q)">⟲</button>'
+            + '<button type="button" data-acao="girarDireita" aria-label="Girar a vista para a direita (R)">⟳</button>'
+            + '<button type="button" data-acao="afastar" aria-label="Longe: afastar o mapa (−)">Longe</button>'
+            + '<button type="button" data-acao="aproximar" aria-label="Perto: aproximar o mapa (+)">Perto</button>'
+            + '<button type="button" data-acao="alternarVer" aria-label="Ver o invisível (H)">Ver</button>'
+            + '</div>'
+            + '<div id="setas">'
+            + '<button type="button" data-acao="cursorParaEsquerda" aria-label="Mover o cursor para a esquerda (seta)">←</button>'
+            + '<button type="button" data-acao="cursorParaCima" aria-label="Mover o cursor para cima (seta)">↑</button>'
+            + '<button type="button" data-acao="cursorParaBaixo" aria-label="Mover o cursor para baixo (seta)">↓</button>'
+            + '<button type="button" data-acao="cursorParaDireita" aria-label="Mover o cursor para a direita (seta)">→</button>'
+            + '</div>'
+            + '<p id="aviso" role="status"></p>'
+            + '<ol id="resumo" class="so-leitor" tabindex="0" aria-label="Resumo do mapa em texto, uma linha por fileira da ilha (Esc sai)"></ol>'
+            + '<pre id="leitura" aria-live="off"></pre>';
+        // ESPELHO:fim
+        document.body.insertAdjacentHTML("beforeend", MARCACAO_DO_PASSO);
+    </script>
+
+    <!-- Guarda os console.error (um dia inválido avisa por ali). -->
+    <script>
+        const errosDeConsole = [];
+        console.error = function () {
+            errosDeConsole.push(Array.prototype.join.call(arguments, " "));
+        };
+    </script>
+    <script src="../../dique/08-celular/regras.js"></script>
+    <script src="../../dique/08-celular/script.js"></script>
+
+    <script>
+        const errosNaCarga = errosDeConsole.slice();
+
+        // Os números do GDD e do GUIA, escritos aqui de propósito (não lidos do jogo).
+        const ORDEM_DO_TAB = [                            // GUIA 8 §4: Tab percorre os 16 botões na ordem da página, e o resumo é o último
+            "escolherErguer", "escolherCavar", "aplicar", "desfazer", "avancar", "reiniciar", "alternarMovimento",
+            "girarEsquerda", "girarDireita", "afastar", "aproximar", "alternarVer",
+            "cursorParaEsquerda", "cursorParaCima", "cursorParaBaixo", "cursorParaDireita",
+        ];
+        const LADO_MINIMO_DO_ALVO = 48;                   // GDD 7
+        const LIMITE_DO_TOQUE_ESPERADO = 8;               // GDD 3: um arrasto maior que 8 px rola; menor é toque
+        const DIAS_DA_AMOSTRA = [0, 4, 8, 9];             // dia 1 (uma ficha), 5 (duas fichas), 9 (chuva e nascente), 10 (duas fichas, sizígia e chuva)
+        const NOME_ESPERADO_DO_OBJETO = { C: "casa", P: "cais", N: "nascente", ".": "" };
+
+        const desenharVerdadeiro = desenhar;              // os casos longos não pintam 100 casas por quadro: pintam quando vão ler o painel
+        desenhar = function () { };
+
+        // ------------------------------------------------------------
+        // Ajudantes de estado
+        // ------------------------------------------------------------
+        function recolocarACamera() {
+            camera.zoom = 1;
+            camera.desvioX = 0;
+            camera.desvioY = 0;
+            limitarCamera();
+        }
+
+        function prepararODia(indice, calmo) {            // a partida começa do zero, com tudo o que o Refazer não limpa
+            if (depuracaoLigada) clicarNoBotao("alternarVer");
+            if (movimentoReduzido !== Boolean(calmo)) definirMovimento(Boolean(calmo));
+            rotacao = 0;
+            listaDeDesenho = montarListaDeDesenho();
+            recolocarACamera();
+            escolherFerramenta("erguer");
+            cursor = { x: 4, y: 4 };
+            marcada = false;
+            ponteiro = null;
+            dedo = null;
+            giroDaRoda = 0;
+            iniciarDia(indice);
+        }
+
+        function acharCasaQuePermite(nomeDaFerramenta, fora) {   // uma casa onde a jogada vale (a regra do passo é quem diz); `fora` = casa a evitar
+            for (let y = 0; y < TAMANHO; y++) {
+                for (let x = 0; x < TAMANHO; x++) {
+                    if (fora && fora.x === x && fora.y === y) continue;
+                    if (moldar(estadoAtual, nomeDaFerramenta, x, y) !== null) return { x: x, y: y };
+                }
+            }
+            return null;
+        }
+
+        function fotoDasAlturas() {
+            return JSON.stringify(alturas);
+        }
+
+        // ------------------------------------------------------------
+        // O resumo contra o texto vivo
+        // ------------------------------------------------------------
+        function cedulaEsperadaDoResumo(mapa, x, y) {     // GUIA 8 §5: "x3 altura 1 com água casa ✗ Alagada"
+            if (mapa[y][0][x] === "~") return "x" + x + " mar";
+            const objeto = mapa[y][1][x];
+            const partes = ["x" + x, "altura " + alturas[y][x]];
+            if (agua.alagado[y][x]) partes.push("com água");
+            if (NOME_ESPERADO_DO_OBJETO[objeto]) partes.push(NOME_ESPERADO_DO_OBJETO[objeto]);
+            if (objeto === "C") {
+                if (agua.alagado[y][x] || perdidas[y][x]) partes.push("✗ Alagada");
+                else if (fase === "contar" || fase === "fim") partes.push("✓ Salva");
+            }
+            return partes.join(" ");
+        }
+
+        /* Depois de uma ação, pinta o quadro (o painel e a meta só mudam no desenho) e compara o resumo com o texto vivo e com a minha leitura do mapa. */
+        function problemasDoResumo(indiceEsperado, jogadasEsperadas) {
+            desenharVerdadeiro();
+            const problemas = [];
+            const mapa = DIAS[indiceEsperado].mapa;
+            const itens = Array.from(resumo.children).map(function (item) { return item.textContent; });
+            if (itens.length !== TAMANHO + 1) return ["o resumo tem " + itens.length + " itens, esperado " + (TAMANHO + 1)];
+            const cabecalho = "Dia " + (indiceEsperado + 1) + " de " + DIAS.length + ". " + painel.textContent + ". " + objetivo.textContent;
+            if (itens[0] !== cabecalho) problemas.push("o cabeçalho do resumo '" + itens[0] + "' não bate com o texto vivo '" + cabecalho + "'");
+            if (objetivo.textContent !== "Meta: " + metaDoDia + " casas · jogadas " + jogadasEsperadas + " (par " + DIAS[indiceEsperado].par + ")") problemas.push("a meta viva '" + objetivo.textContent + "' não diz " + jogadasEsperadas + " jogadas");
+            if (titulo.textContent !== "dia " + (indiceEsperado + 1) + "/" + DIAS.length) problemas.push("o título vivo é '" + titulo.textContent + "'");
+            let casasNoMapa = 0, casasMolhadas = 0;
+            for (let y = 0; y < TAMANHO; y++) {
+                const esperadas = [];
+                for (let x = 0; x < TAMANHO; x++) {
+                    esperadas.push(cedulaEsperadaDoResumo(mapa, x, y));
+                    if (mapa[y][1][x] === "C") { casasNoMapa++; if (agua.alagado[y][x] || perdidas[y][x]) casasMolhadas++; }
+                }
+                const linhaEsperada = "Linha " + y + ": " + esperadas.join(", ");
+                if (itens[y + 1] !== linhaEsperada) problemas.push("a linha " + y + " do resumo é '" + itens[y + 1] + "', esperado '" + linhaEsperada + "'");
+            }
+            if (painel.textContent.indexOf("Casas " + (casasNoMapa - casasMolhadas) + "/" + casasNoMapa) === -1) problemas.push("o painel '" + painel.textContent + "' não diz Casas " + (casasNoMapa - casasMolhadas) + "/" + casasNoMapa);
+            return problemas.slice(0, 3);
+        }
+
+        /*
+          Joga um dia pelos botões de verdade e confere o resumo depois de TODA ação: aplicar, desfazer (logo depois da jogada, que é a
+          regressão da revisão), liberar a maré, cada passo da água, seguir para a próxima ficha, o fim do dia e o Refazer.
+          Cada ação também tem de escrever no #aviso (a voz do jogo).
+        */
+        function jogarUmDiaConferindoOResumo(indice, calmo) {
+            const relato = { problemas: [], semAviso: [], conferencias: 0, fasesVistas: {}, fim: false, quadros: 0 };
+            const rotulo = "dia " + (indice + 1) + (calmo ? " calmo" : "");
+            let indiceEsperado = indice, jogadasEsperadas = 0, naHistoria = 0;     // naHistoria: as jogadas que o desfazer ainda alcança (a história recomeça a cada ficha)
+            prepararODia(indice, false);                  // o Calmo, se pedido, é ligado pelo botão, mais abaixo
+
+            const conferirAgora = function (momento) {
+                relato.conferencias++;
+                relato.fasesVistas[fase + "/" + faseDaMare] = true;
+                problemasDoResumo(indiceEsperado, jogadasEsperadas).forEach(function (problema) { relato.problemas.push(rotulo + " depois de " + momento + ": " + problema); });
+            };
+            const agir = function (acao, momento, mudancaNasJogadas) {
+                aviso.textContent = "";
+                clicarNoBotao(acao);
+                jogadasEsperadas += mudancaNasJogadas || 0;
+                if (aviso.textContent === "") relato.semAviso.push(rotulo + ": " + momento);
+                conferirAgora(momento);
+            };
+            const jogar = function (nomeDaFerramenta, casaAEvitar) {   // escolhe a ferramenta, põe o cursor numa casa que vale e aplica; devolve a casa, ou null
+                const casa = acharCasaQuePermite(nomeDaFerramenta, casaAEvitar);
+                if (!casa) return null;
+                agir(nomeDaFerramenta === "erguer" ? "escolherErguer" : "escolherCavar", "escolher " + nomeDaFerramenta);
+                cursor = casa;
+                const antes = fotoDasAlturas();
+                agir("aplicar", nomeDaFerramenta + " " + casa.x + "," + casa.y, +1);
+                naHistoria++;
+                if (fotoDasAlturas() === antes) relato.problemas.push(rotulo + ": " + nomeDaFerramenta + " em " + casa.x + "," + casa.y + " não mudou o terreno");
+                return casa;
+            };
+            const desfazerAgora = function (momento) {
+                agir("desfazer", momento, naHistoria > 0 ? -1 : 0);
+                if (naHistoria > 0) naHistoria--;
+            };
+            const tentarEDesfazer = function () {         // a jogada e logo o desfazer: a contagem da meta volta junto com o estado
+                if (estadoAtual.blocos > 0) {
+                    const casa = jogar("erguer");
+                    if (casa) desfazerAgora("desfazer logo depois de erguer " + casa.x + "," + casa.y);
+                }
+            };
+
+            conferirAgora("começar o dia");
+            if (calmo) agir("alternarMovimento", "ligar o Calmo");
+            tentarEDesfazer();
+            if (estadoAtual.blocos > 0) {
+                const primeira = jogar("erguer");
+                if (estadoAtual.blocos > 0) jogar("erguer", primeira);
+            }
+            const cavada = jogar("cavar");
+            if (cavada) desfazerAgora("desfazer a cova");
+            desfazerAgora("desfazer");
+            desfazerAgora("desfazer até esvaziar a história");
+            desfazerAgora("desfazer sem nada para desfazer");
+            if (estadoAtual.blocos > 0) jogar("erguer");
+
+            let fichaVista = indiceDaMare, assinaturaVista = "";
+            let voltas = 0;
+            while (fase !== "fim" && relato.quadros < 8000 && ++voltas < 3000) {
+                if (indiceDaMare !== fichaVista) {        // chegou a ficha seguinte
+                    fichaVista = indiceDaMare;
+                    naHistoria = 0;
+                    tentarEDesfazer();
+                }
+                if (fase === "contar" && faseDaMare === "baixa") agir("avancar", "seguir para a próxima ficha");
+                else if (fase === "moldar" || fase === "ler" && relato.quadros === 0) agir("avancar", "liberar a maré");
+                else if (calmo && faseDaMare !== "baixa") agir("avancar", "um passo da água (" + faseDaMare + " " + passoDaMare + ")");
+                else {
+                    avancarQuadro(16);
+                    relato.quadros++;
+                    const assinatura = [fase, faseDaMare, passoDaMare, indiceDaMare].join("/");
+                    if (assinatura !== assinaturaVista || relato.quadros % 60 === 0) { assinaturaVista = assinatura; conferirAgora("o quadro " + relato.quadros + " (" + assinatura + ")"); }
+                }
+            }
+            relato.fim = fase === "fim";
+            conferirAgora("o fim do dia");
+            if (diaVencido()) {
+                agir("avancar", "abrir o próximo dia");
+                indiceEsperado = (indice + 1) % DIAS.length;
+                jogadasEsperadas = 0;
+                conferirAgora("o próximo dia");
+            }
+            jogadasEsperadas = 0;
+            agir("reiniciar", "Refazer");
+            return relato;
+        }
+
+        // ------------------------------------------------------------
+        // Toque: PointerEvent sintético no canvas
+        // ------------------------------------------------------------
+        function pixelDaCasa(x, y) {                      // o centro do topo da casa, em pixel da janela do jogo
+            return paraATela(mundoParaTela(x + 0.5, y + 0.5, alturaVisivel(x, y)));
+        }
+
+        function eventoDeDedo(tipo, pixel, extras) {      // o pixel da janela vira clientX/clientY pela caixa do canvas (o CSS pode encolhê-lo)
+            const caixa = tela.getBoundingClientRect();
+            return new PointerEvent(tipo, Object.assign({
+                pointerId: 1, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true,
+                button: tipo === "pointermove" ? -1 : 0,
+                clientX: caixa.left + pixel.x * caixa.width / tela.width,
+                clientY: caixa.top + pixel.y * caixa.height / tela.height,
+            }, extras || {}));
+        }
+
+        function dedoNoCanvas(tipo, pixel, extras) {
+            tela.dispatchEvent(eventoDeDedo(tipo, pixel, extras));
+        }
+
+        function toqueNoPixel(pixel) {
+            dedoNoCanvas("pointerdown", pixel);
+            dedoNoCanvas("pointerup", pixel);
+        }
+
+        function casasQueOPickingAcha() {                 // casas visíveis cujo centro, tocado, dá a própria casa: o toque de teste tem destino certo
+            const casas = [];
+            for (let y = 0; y < TAMANHO; y++) {
+                for (let x = 0; x < TAMANHO; x++) {
+                    if (alturasEmTexto[y][x] === "~" || quemEsconde(x, y)) continue;
+                    const acerto = casaSobOPixel(pixelDaCasa(x, y));
+                    if (acerto && acerto.x === x && acerto.y === y) casas.push({ x: x, y: y });
+                }
+            }
+            return casas;
+        }
+
+        function situacaoDoToque() {
+            return { alturas: fotoDasAlturas(), cursor: cursor.x + "," + cursor.y, marcada: marcada, jogadas: jogadas, blocos: estadoAtual.blocos, zoom: camera.zoom, desvio: camera.desvioX + "," + camera.desvioY };
+        }
+
+        // ------------------------------------------------------------
+        // Os casos
+        // ------------------------------------------------------------
+        testar("o passo carrega: dia válido, sem console.error, e a lista de ações do index é a esperada", function () {
+            conferirIgual("o mapa do dia 1 é válido", MAPA_VALIDO, true);
+            conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+            conferirIgual("são " + ORDEM_DO_TAB.length + " ações [data-acao] na ordem da página", acoesDosBotoes().join(" "), ORDEM_DO_TAB.join(" "));
+            conferirIgual("os dez dias existem", DIAS.length, 10);
+            const semOuvinte = acoesDosBotoes().filter(function (acao) { return typeof intencoes[acao] !== "function"; });
+            conferirIgual("toda ação do index tem uma intenção no script (" + semOuvinte.join(", ") + ")", semOuvinte.length, 0);
+        });
+
+        testar("aria-live: só o #aviso (role=status) e o #leitura (aria-live=off) são regiões; o canvas tem rótulo e o resumo é uma lista focável", function () {
+            const regioes = Array.from(document.querySelectorAll("[aria-live], [role=status], [role=alert], [role=log]")).map(function (elemento) {
+                return elemento.id + ":" + (elemento.getAttribute("role") || "") + "/" + (elemento.getAttribute("aria-live") || "");
+            }).sort();
+            conferirIgual("as regiões vivas da página", regioes.join(" "), ["aviso:status/", "leitura:/off"].sort().join(" "));
+            conferirIgual("o #leitura é um aria-live=off (a depuração não fala sozinha)", document.getElementById("leitura").getAttribute("aria-live"), "off");
+            conferirIgual("o #aviso é um role=status", document.getElementById("aviso").getAttribute("role"), "status");
+            conferirIgual("o canvas é role=img", document.getElementById("jogo").getAttribute("role"), "img");
+            conferir("o canvas diz onde está o resumo (a tecla L)", /resumo/i.test(document.getElementById("jogo").getAttribute("aria-label")) && /\bL\b/.test(document.getElementById("jogo").getAttribute("aria-label")));
+            conferirIgual("o resumo é uma <ol>", resumo.tagName, "OL");
+            conferirIgual("o resumo recebe foco (tabindex 0)", resumo.getAttribute("tabindex"), "0");
+            conferir("o resumo tem rótulo que cita o Esc", /Esc/.test(resumo.getAttribute("aria-label")));
+            conferirIgual("o resumo cobre o mapa inteiro: 1 linha de cabeçalho + 10 fileiras", resumo.children.length, 11);
+            conferir("o Calmo é um botão aria-pressed", ["true", "false"].indexOf(botaoDoMovimento.getAttribute("aria-pressed")) !== -1);
+        });
+
+        testar("o aviso e o resumo só mudam nos eventos: 300 quadros parados não escrevem em nenhum dos dois", function () {
+            prepararODia(0, false);
+            desenharVerdadeiro();
+            const avisoAntes = aviso.textContent, primeiroItem = resumo.firstChild, textoAntes = resumo.textContent;
+            conferir("há aviso depois de começar o dia: " + avisoAntes, avisoAntes.length > 0);
+            for (let quadros = 0; quadros < 60; quadros++) avancarQuadro(16);        // 0,96 s: a leitura de 1,5 s ainda não acabou
+            conferirIgual("o aviso é o mesmo", aviso.textContent, avisoAntes);
+            conferir("o resumo não foi reescrito (os mesmos itens)", resumo.firstChild === primeiroItem && resumo.textContent === textoAntes);
+        });
+
+        DIAS_DA_AMOSTRA.forEach(function (indice) {
+            testar("RESUMO = TEXTO VIVO depois de toda ação, no dia " + (indice + 1) + ": aplicar, desfazer logo depois, liberar a maré, cada passo, seguir, fim, Refazer; e cada ação escreve no aviso", function () {
+                const relato = jogarUmDiaConferindoOResumo(indice, false);
+                conferir("nenhuma divergência entre o resumo e o texto vivo em " + relato.conferencias + " conferências: " + relato.problemas.slice(0, 2).join(" | "), relato.problemas.length === 0);
+                conferir("toda ação escreveu no #aviso (sem aviso: " + relato.semAviso.slice(0, 3).join(" | ") + ")", relato.semAviso.length === 0);
+                conferir("o dia chegou ao fim em " + relato.quadros + " quadros", relato.fim);
+                conferir("passou por " + Object.keys(relato.fasesVistas).sort().join(", "), ["mare/enchente", "mare/preamar", "contar/vazante", "fim/baixa"].every(function (estado) { return relato.fasesVistas[estado]; }));
+                conferir("e foram muitas conferências (" + relato.conferencias + ")", relato.conferencias >= 20);
+            });
+        });
+
+        testar("RESUMO = TEXTO VIVO no modo Calmo (um passo da água por toque em Maré), nos dias 5 e 10", function () {
+            [4, 9].forEach(function (indice) {
+                const relato = jogarUmDiaConferindoOResumo(indice, true);
+                conferir("dia " + (indice + 1) + " calmo: nenhuma divergência em " + relato.conferencias + " conferências: " + relato.problemas.slice(0, 2).join(" | "), relato.problemas.length === 0);
+                conferir("dia " + (indice + 1) + " calmo: toda ação escreveu no #aviso (" + relato.semAviso.slice(0, 3).join(" | ") + ")", relato.semAviso.length === 0);
+                conferir("dia " + (indice + 1) + " calmo: chegou ao fim só com toques em Maré (" + relato.quadros + " quadros de relógio)", relato.fim && relato.fasesVistas["mare/preamar"] === true);
+            });
+        });
+
+        testar("REGRESSÃO DA REVISÃO: desfazer logo depois de uma jogada devolve a contagem de jogadas ao resumo e à meta viva", function () {
+            prepararODia(0, false);
+            const casa = acharCasaQuePermite("erguer");
+            cursor = casa;
+            desenharVerdadeiro();
+            conferir("antes: o resumo diz jogadas 0 (" + resumo.firstChild.textContent + ")", /jogadas 0 \(par/.test(resumo.firstChild.textContent));
+            clicarNoBotao("aplicar");
+            desenharVerdadeiro();
+            conferir("depois de aplicar: o resumo diz jogadas 1 (" + resumo.firstChild.textContent + ")", /jogadas 1 \(par/.test(resumo.firstChild.textContent));
+            conferirIgual("a meta viva também", objetivo.textContent.indexOf("jogadas 1 (par") !== -1, true);
+            clicarNoBotao("desfazer");
+            desenharVerdadeiro();
+            conferir("depois de desfazer: o resumo volta a jogadas 0 (" + resumo.firstChild.textContent + ")", /jogadas 0 \(par/.test(resumo.firstChild.textContent));
+            conferir("e a meta viva diz o mesmo (" + objetivo.textContent + ")", objetivo.textContent.indexOf("jogadas 0 (par") !== -1);
+            conferirIgual("o terreno voltou", fotoDasAlturas(), JSON.stringify(estadoInicial().alturas));
+        });
+
+        testar("cada [data-acao] do index faz alguma coisa: o clique de verdade muda o que cada botão promete (botão sem ouvinte não passa)", function () {
+            const lerAria = function (acao) { return botaoDaAcao(acao).getAttribute("aria-pressed"); };
+            const jogadaPronta = function () { cursor = acharCasaQuePermite("erguer"); };
+            const provas = {
+                escolherErguer: { antes: function () { clicarNoBotao("escolherCavar"); }, ler: function () { return ferramenta + " " + lerAria("escolherErguer") + " " + lerAria("escolherCavar"); } },
+                escolherCavar: { antes: function () { }, ler: function () { return ferramenta + " " + lerAria("escolherErguer") + " " + lerAria("escolherCavar"); } },
+                aplicar: { antes: jogadaPronta, ler: fotoDasAlturas },
+                desfazer: { antes: function () { jogadaPronta(); clicarNoBotao("aplicar"); }, ler: fotoDasAlturas },
+                avancar: { antes: function () { }, ler: function () { return fase + "/" + faseDaMare; } },
+                reiniciar: { antes: function () { jogadaPronta(); clicarNoBotao("aplicar"); }, ler: fotoDasAlturas },
+                alternarMovimento: { antes: function () { }, ler: function () { return movimentoReduzido + " " + lerAria("alternarMovimento"); } },
+                girarEsquerda: { antes: function () { }, ler: function () { return rotacao; } },
+                girarDireita: { antes: function () { }, ler: function () { return rotacao; } },
+                afastar: { antes: function () { clicarNoBotao("aproximar"); }, ler: function () { return camera.zoom; } },
+                aproximar: { antes: function () { }, ler: function () { return camera.zoom; } },
+                alternarVer: { antes: function () { }, ler: function () { return depuracaoLigada; } },
+                cursorParaEsquerda: { antes: function () { }, ler: function () { return cursor.x + "," + cursor.y; } },
+                cursorParaCima: { antes: function () { }, ler: function () { return cursor.x + "," + cursor.y; } },
+                cursorParaBaixo: { antes: function () { }, ler: function () { return cursor.x + "," + cursor.y; } },
+                cursorParaDireita: { antes: function () { }, ler: function () { return cursor.x + "," + cursor.y; } },
+            };
+            conferirIgual("a tabela de provas cobre exatamente as ações do index", Object.keys(provas).sort().join(" "), acoesDosBotoes().sort().join(" "));
+            const semEfeito = [], semAviso = [];
+            acoesDosBotoes().forEach(function (acao) {
+                prepararODia(0, false);
+                provas[acao].antes();
+                const antes = String(provas[acao].ler());
+                aviso.textContent = "";
+                clicarNoBotao(acao);
+                const depois = String(provas[acao].ler());
+                if (antes === depois) semEfeito.push(acao + " (" + antes + ")");
+                if (aviso.textContent === "" && acao !== "alternarVer") semAviso.push(acao);
+            });
+            conferir("todo botão muda o que promete (sem efeito: " + semEfeito.join(", ") + ")", semEfeito.length === 0);
+            conferir("e todo botão, menos Ver, escreve no aviso (sem aviso: " + semAviso.join(", ") + ")", semAviso.length === 0);
+            prepararODia(0, false);
+        });
+
+        testar("TOQUE EM DOIS PASSOS: o 1º toque marca e não aplica; o 2º, na mesma casa, aplica; um toque em outra casa troca a marca", function () {
+            prepararODia(0, false);
+            const casas = casasQueOPickingAcha().filter(function (casa) { return moldar(estadoAtual, "erguer", casa.x, casa.y) !== null; });
+            conferir("há casas para tocar (" + casas.length + ")", casas.length >= 3);
+            const casaA = casas[0], casaB = casas[casas.length - 1];
+            conferir("as duas casas são diferentes", casaA.x !== casaB.x || casaA.y !== casaB.y);
+
+            const antesDoPrimeiro = situacaoDoToque();
+            toqueNoPixel(pixelDaCasa(casaA.x, casaA.y));
+            conferirIgual("1º toque: o cursor vai para a casa tocada", cursor.x + "," + cursor.y, casaA.x + "," + casaA.y);
+            conferirIgual("1º toque: a casa fica marcada", marcada, true);
+            conferirIgual("1º toque: o terreno não muda", fotoDasAlturas(), antesDoPrimeiro.alturas);
+            conferirIgual("1º toque: nenhuma jogada, nenhum bloco gasto", jogadas + "/" + estadoAtual.blocos, antesDoPrimeiro.jogadas + "/" + antesDoPrimeiro.blocos);
+            conferir("1º toque: o aviso diz que a casa foi marcada e pede o 2º toque (" + aviso.textContent + ")", /^Marcada: /.test(aviso.textContent) && /Toque de novo/.test(aviso.textContent));
+
+            toqueNoPixel(pixelDaCasa(casaB.x, casaB.y));
+            conferirIgual("toque em outra casa: a marca troca de casa", cursor.x + "," + cursor.y, casaB.x + "," + casaB.y);
+            conferirIgual("toque em outra casa: segue marcada, sem aplicar", marcada + " " + fotoDasAlturas(), true + " " + antesDoPrimeiro.alturas);
+
+            toqueNoPixel(pixelDaCasa(casaA.x, casaA.y));
+            conferirIgual("voltar para a 1ª casa só a marca de novo (a marca era da outra)", cursor.x + "," + cursor.y + " " + marcada + " " + fotoDasAlturas(), casaA.x + "," + casaA.y + " true " + antesDoPrimeiro.alturas);
+
+            const alturaAntes = alturas[casaA.y][casaA.x];
+            toqueNoPixel(pixelDaCasa(casaA.x, casaA.y));
+            conferirIgual("2º toque na mesma casa: o bloco sobe um degrau", alturas[casaA.y][casaA.x], alturaAntes + 1);
+            conferirIgual("2º toque: gastou um bloco do estoque", estadoAtual.blocos, antesDoPrimeiro.blocos - 1);
+            conferirIgual("2º toque: conta uma jogada", jogadas, antesDoPrimeiro.jogadas + 1);
+            conferirIgual("2º toque: a marca some", marcada, false);
+            conferir("2º toque: o aviso diz que o bloco subiu (" + aviso.textContent + ")", new RegExp("^Bloco " + casaA.x + "," + casaA.y + " subiu para " + (alturaAntes + 1)).test(aviso.textContent));
+            prepararODia(0, false);
+        });
+
+        testar("TOQUE: mexer no cursor desmarca (setas e botões), então o toque na casa do cursor só marca; a ferramenta Cavar também vale no 2º toque", function () {
+            prepararODia(0, false);
+            const casas = casasQueOPickingAcha().filter(function (casa) { return moldar(estadoAtual, "erguer", casa.x, casa.y) !== null; });
+            const casa = casas[0], fotoDoTerreno = fotoDasAlturas();
+            toqueNoPixel(pixelDaCasa(casa.x, casa.y));
+            conferirIgual("marcou", marcada, true);
+            clicarNoBotao("cursorParaDireita");
+            clicarNoBotao("cursorParaEsquerda");
+            conferirIgual("a seta desmarcou", marcada, false);
+            if (cursor.x !== casa.x || cursor.y !== casa.y) cursor = { x: casa.x, y: casa.y };
+            toqueNoPixel(pixelDaCasa(casa.x, casa.y));
+            conferirIgual("o toque na casa do cursor, depois de desmarcar, só marca (não aplica)", marcada + " " + fotoDasAlturas(), true + " " + fotoDoTerreno);
+
+            prepararODia(0, false);
+            clicarNoBotao("escolherCavar");
+            const cavaveis = casasQueOPickingAcha().filter(function (outra) { return moldar(estadoAtual, "cavar", outra.x, outra.y) !== null; });
+            const cova = cavaveis[0], alturaAntes = alturas[cova.y][cova.x];
+            toqueNoPixel(pixelDaCasa(cova.x, cova.y));
+            toqueNoPixel(pixelDaCasa(cova.x, cova.y));
+            conferirIgual("com Cavar, o 2º toque desce o bloco", alturas[cova.y][cova.x], alturaAntes - 1);
+            prepararODia(0, false);
+        });
+
+        testar("TOQUE × ARRASTO: mais de 8 px de caminho é arrasto (rola o mapa, não marca nem aplica, mesmo voltando ao ponto); até 8 px é toque", function () {
+            prepararODia(0, false);
+            conferirIgual("a regra do GDD: o limite do toque é de 8 px", LIMITE_DO_TOQUE, LIMITE_DO_TOQUE_ESPERADO);
+            clicarNoBotao("aproximar");
+            conferirIgual("o zoom foi para o degrau seguinte (o mapa maior que a janela rola)", camera.zoom, 1.5);
+            const casas = casasQueOPickingAcha().filter(function (casa) { return moldar(estadoAtual, "erguer", casa.x, casa.y) !== null; });
+            const inicio = { x: 192, y: 126 };
+            const antes = situacaoDoToque();
+
+            dedoNoCanvas("pointerdown", inicio);
+            dedoNoCanvas("pointermove", { x: inicio.x - 5, y: inicio.y });
+            dedoNoCanvas("pointermove", { x: inicio.x - 12, y: inicio.y });
+            dedoNoCanvas("pointermove", { x: inicio.x - 40, y: inicio.y - 30 });
+            dedoNoCanvas("pointerup", { x: inicio.x - 40, y: inicio.y - 30 });
+            const depois = situacaoDoToque();
+            conferir("o arrasto rola a câmera (" + antes.desvio + " → " + depois.desvio + ")", antes.desvio !== depois.desvio);
+            const andouEmX = camera.desvioX - Number(antes.desvio.split(",")[0]), andouEmY = camera.desvioY - Number(antes.desvio.split(",")[1]);
+            conferir("e rolou na direção do dedo, quase o que ele andou (a folga do toque, até 8 px, não rola): x " + andouEmX + " de -40, y " + andouEmY + " de -30", andouEmX <= -32 && andouEmX >= -40 && andouEmY <= -22 && andouEmY >= -30);
+            conferirIgual("o arrasto não marca, não mexe no cursor e não aplica", [depois.marcada, depois.cursor, depois.alturas, depois.jogadas].join(" "), [antes.marcada, antes.cursor, antes.alturas, antes.jogadas].join(" "));
+
+            const meio = situacaoDoToque();
+            dedoNoCanvas("pointerdown", inicio);
+            dedoNoCanvas("pointermove", { x: inicio.x + 20, y: inicio.y });
+            dedoNoCanvas("pointermove", inicio);
+            dedoNoCanvas("pointerup", inicio);
+            const volta = situacaoDoToque();
+            conferirIgual("passar de 8 px e voltar ao ponto ainda é arrasto: não marca nem aplica", [volta.marcada, volta.cursor, volta.alturas, volta.jogadas].join(" "), [meio.marcada, meio.cursor, meio.alturas, meio.jogadas].join(" "));
+
+            const casa = casas[0], centro = pixelDaCasa(casa.x, casa.y);
+            [[8, "exatamente 8 px"], [5, "5 px"]].forEach(function (par) {
+                marcada = false;
+                const antesDoTremor = situacaoDoToque();
+                dedoNoCanvas("pointerdown", centro);
+                dedoNoCanvas("pointermove", { x: centro.x + par[0], y: centro.y });
+                dedoNoCanvas("pointermove", centro);
+                dedoNoCanvas("pointerup", centro);
+                conferirIgual("um tremor de " + par[1] + " e voltar é um toque: marca a casa e a câmera não se mexe", marcada + " " + cursor.x + "," + cursor.y + " " + camera.desvioX + "," + camera.desvioY, "true " + casa.x + "," + casa.y + " " + antesDoTremor.desvio);
+            });
+            marcada = false;
+            const antesDos9 = situacaoDoToque();
+            dedoNoCanvas("pointerdown", centro);
+            dedoNoCanvas("pointermove", { x: centro.x + 9, y: centro.y });
+            dedoNoCanvas("pointermove", centro);
+            dedoNoCanvas("pointerup", centro);
+            conferirIgual("9 px já é arrasto: não marca", marcada + " " + antesDos9.alturas, false + " " + fotoDasAlturas());
+            prepararODia(0, false);
+        });
+
+        testar("TOQUE: outro dedo é ignorado, pointercancel e soltar fora do mapa não marcam, e o botão do meio ou o direito não tocam", function () {
+            prepararODia(0, false);
+            const casas = casasQueOPickingAcha();
+            const casa = casas[0], outra = casas[casas.length - 1];
+            const antes = situacaoDoToque();
+
+            dedoNoCanvas("pointerdown", pixelDaCasa(casa.x, casa.y));
+            dedoNoCanvas("pointerdown", pixelDaCasa(outra.x, outra.y), { pointerId: 2 });
+            dedoNoCanvas("pointerup", pixelDaCasa(outra.x, outra.y), { pointerId: 2 });
+            conferirIgual("o 2º dedo, solto, não toca nada", marcada, false);
+            dedoNoCanvas("pointerup", pixelDaCasa(casa.x, casa.y));
+            conferirIgual("o 1º dedo, solto, marca a casa dele e só ela", marcada + " " + cursor.x + "," + cursor.y, "true " + casa.x + "," + casa.y);
+
+            marcada = false;
+            cursor = { x: antes.cursor.split(",")[0] * 1, y: antes.cursor.split(",")[1] * 1 };
+            dedoNoCanvas("pointerdown", pixelDaCasa(casa.x, casa.y));
+            window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true }));
+            dedoNoCanvas("pointerup", pixelDaCasa(casa.x, casa.y));
+            conferirIgual("pointercancel (o navegador roubou o gesto) cancela o toque", marcada + " " + cursor.x + "," + cursor.y, "false " + antes.cursor);
+
+            dedoNoCanvas("pointerdown", pixelDaCasa(casa.x, casa.y));
+            dedoNoCanvas("pointerup", { x: -30, y: -30 });
+            conferirIgual("soltar fora da janela não marca nada", marcada + " " + cursor.x + "," + cursor.y, "false " + antes.cursor);
+
+            dedoNoCanvas("pointerdown", pixelDaCasa(casa.x, casa.y), { button: 2 });
+            dedoNoCanvas("pointerup", pixelDaCasa(casa.x, casa.y), { button: 2 });
+            conferirIgual("o botão direito não marca", marcada + " " + cursor.x + "," + cursor.y, "false " + antes.cursor);
+            prepararODia(0, false);
+        });
+
+        testar("TOQUE durante a maré: o 2º toque não aplica (a maré não se molda) e avisa; o terreno fica como estava", function () {
+            prepararODia(0, false);
+            clicarNoBotao("avancar");
+            conferirIgual("a maré está em curso", fase, "mare");
+            const casas = casasQueOPickingAcha();
+            const casa = casas[0], antes = fotoDasAlturas();
+            toqueNoPixel(pixelDaCasa(casa.x, casa.y));
+            toqueNoPixel(pixelDaCasa(casa.x, casa.y));
+            conferirIgual("o terreno não mudou", fotoDasAlturas(), antes);
+            conferir("e o aviso diz que agora não (" + aviso.textContent + ")", /agora não/i.test(aviso.textContent));
+            prepararODia(0, false);
+        });
+
+        testar("REGRAS (cópia do passo 7): certificarDia(DIAS[9]) certifica e, no meio de uma partida, não mexe nas alturas, no estado do jogo nem no picking", function () {
+            prepararODia(1, false);
+            cursor = acharCasaQuePermite("erguer");
+            clicarNoBotao("aplicar");
+            clicarNoBotao("avancar");
+            for (let quadros = 0; quadros < 40; quadros++) avancarQuadro(16);
+            const alturasDeAgora = alturas, estadoDeAgora = estadoAtual, dia = diaCarregado, tabuaDeAgora = tabuaDeMares, textoDeAlturas = alturasEmTexto, lista = listaDeDesenho;
+            const fotoDoJogo = JSON.stringify({ alturas: alturas, estado: estadoAtual, meta: metaDoDia, mar: casasDoMar, casas: casasComCasa, nascentes: casasDeNascente, fase: fase, mare: faseDaMare, passo: passoDaMare, agua: agua.alagado });
+            const grade = function () {
+                const achados = [];
+                for (let pixelY = 0; pixelY < 252; pixelY += 14) for (let pixelX = 0; pixelX < 384; pixelX += 12) { const acerto = casaSobOPixel({ x: pixelX, y: pixelY }); achados.push(acerto ? acerto.x + "," + acerto.y + acerto.face : "-"); }
+                return achados.join(" ");
+            };
+            const pickingAntes = grade();
+            const relatorio = certificarDia(DIAS[9]);
+            conferir("o dia 10 é certificado (par " + relatorio.parAchado + ", " + relatorio.estados + " estados, problemas: " + relatorio.problemas.join("; ") + ")", relatorio.certificado === true);
+            conferirIgual("o par achado é o do dado (5)", relatorio.parAchado, DIAS[9].par);
+            conferirIgual("o robô não estourou o teto", relatorio.estourou, false);
+            conferir("as alturas são o mesmo objeto de antes (nenhuma troca)", alturas === alturasDeAgora && estadoAtual === estadoDeAgora && diaCarregado === dia && tabuaDeMares === tabuaDeAgora && alturasEmTexto === textoDeAlturas && listaDeDesenho === lista);
+            conferirIgual("o estado do jogo é idêntico (alturas, estoque, meta, mar, casas, nascentes, fase, passo, água)", JSON.stringify({ alturas: alturas, estado: estadoAtual, meta: metaDoDia, mar: casasDoMar, casas: casasComCasa, nascentes: casasDeNascente, fase: fase, mare: faseDaMare, passo: passoDaMare, agua: agua.alagado }), fotoDoJogo);
+            conferirIgual("o picking de 576 pixels dá as mesmas casas e faces", grade(), pickingAntes);
+            prepararODia(0, false);
+        });
+
+        // ------------------------------------------------------------
+        // O passo inteiro em iframes (apoio-dique.js): teclado, movimento reduzido e layout
+        // ------------------------------------------------------------
+        function sistemaFalso(pedeMenosMovimento, comoSafariAntigo) {       // troca o matchMedia ANTES do script do passo: `matches` e o disparo do evento `change` à mão; o Safari antes do 14 só tem addListener
+            return "(function () {"
+                + " var ouvintes = [], sistema = { reduz: " + pedeMenosMovimento + " };"
+                + " window.matchMedia = function (consulta) {"
+                + "   var ehMovimento = /reduce/.test(consulta);"
+                + "   var lista = { media: consulta, onchange: null, addEventListener: function (tipo, funcao) { if (ehMovimento && tipo === 'change') ouvintes.push(funcao); }, removeEventListener: function () {}, addListener: function (funcao) { if (ehMovimento) ouvintes.push(funcao); }, removeListener: function () {} };"
+                + (comoSafariAntigo ? "   delete lista.addEventListener; delete lista.removeEventListener;" : "")
+                + "   Object.defineProperty(lista, 'matches', { get: function () { return ehMovimento && sistema.reduz; } });"
+                + "   return lista;"
+                + " };"
+                + " window.__sistemaMudou = function (valor) {"
+                + "   sistema.reduz = valor;"
+                + "   var evento = { type: 'change', matches: valor, media: '(prefers-reduced-motion: reduce)' };"
+                + "   ouvintes.slice().forEach(function (funcao) { funcao(evento); });"
+                + "   return ouvintes.length;"
+                + " };"
+                + "})();";
+        }
+
+        async function conferirMovimentoSegueOSistema() {
+            const quadroA = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, sistemaFalso(false), 390, 750);
+            try {
+                const janela = quadroA.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const calmo = function () { return ler("movimentoReduzido") + " " + documento.querySelector('[data-acao="alternarMovimento"]').getAttribute("aria-pressed"); };
+                const avisoDoIframe = function () { return documento.getElementById("aviso").textContent; };
+                pararODesenhoDaJanela(janela);
+                conferirIgual("sistema sem pedido: o jogo abre com movimento normal e o botão desligado", calmo(), "false false");
+                conferirIgual("o jogo ouviu o 'change' do sistema (ouvintes registrados)", janela.__sistemaMudou(false) >= 1, true);
+
+                janela.__sistemaMudou(true);
+                conferirIgual("o sistema passou a pedir menos movimento: o jogo reduz e o botão liga", calmo(), "true true");
+                conferir("e o aviso diz (" + avisoDoIframe() + ")", /^Movimento reduzido/.test(avisoDoIframe()));
+                let instante = 16;
+                darQuadro(janela, instante);
+                teclaNaJanela(janela, "m");
+                const estado = function () { return ler("fase") + "/" + ler("faseDaMare") + "/" + ler("passoDaMare"); };
+                const depoisDoM = estado();
+                instante = passarTempoNaJanela(janela, instante, 4);
+                conferirIgual("movimento reduzido pelo sistema: 4 s depois a água não andou sozinha", estado(), depoisDoM);
+                teclaNaJanela(janela, "m");
+                conferir("e um toque em Maré dá um passo (" + depoisDoM + " → " + estado() + ")", estado() !== depoisDoM);
+
+                janela.__sistemaMudou(false);
+                conferirIgual("o sistema voltou a no-preference: o jogo volta ao normal e o botão desliga", calmo(), "false false");
+                conferir("e o aviso diz (" + avisoDoIframe() + ")", /^Movimento normal/.test(avisoDoIframe()));
+                const antesDoRelogio = estado();
+                instante = passarTempoNaJanela(janela, instante, 2);
+                conferir("sem pedido, a maré corre sozinha de novo (" + antesDoRelogio + " → " + estado() + ")", estado() !== antesDoRelogio);
+
+                janela.__sistemaMudou(true);
+                documento.querySelector('[data-acao="alternarMovimento"]').click();
+                conferirIgual("o jogador toca no Calmo com o sistema pedindo menos: desliga (a escolha dele)", calmo(), "false false");
+                const avisoDoJogador = avisoDoIframe();
+                janela.__sistemaMudou(true);
+                janela.__sistemaMudou(false);
+                janela.__sistemaMudou(true);
+                conferirIgual("depois do toque, o sistema não muda mais nada", calmo(), "false false");
+                conferirIgual("nem o aviso", avisoDoIframe(), avisoDoJogador);
+            } finally {
+                quadroA.remove();
+            }
+
+            const quadroB = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, sistemaFalso(true), 390, 750);
+            try {
+                const janela = quadroB.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const calmo = function () { return ler("movimentoReduzido") + " " + documento.querySelector('[data-acao="alternarMovimento"]').getAttribute("aria-pressed"); };
+                conferirIgual("sistema que pede menos movimento já na carga: o jogo abre reduzido e o botão ligado", calmo(), "true true");
+                janela.__sistemaMudou(false);
+                conferirIgual("antes de o jogador mexer, o sistema manda: desliga", calmo(), "false false");
+                teclaNaJanela(janela, "o");
+                conferirIgual("a tecla O é escolha do jogador: liga", calmo(), "true true");
+                janela.__sistemaMudou(false);
+                janela.__sistemaMudou(true);
+                janela.__sistemaMudou(false);
+                conferirIgual("depois da tecla O, o sistema não muda mais nada", calmo(), "true true");
+                documento.querySelector('[data-acao="alternarMovimento"]').click();
+                janela.__sistemaMudou(true);
+                conferirIgual("e o jogador pode desligar de novo; o sistema segue sem mandar", calmo(), "false false");
+            } finally {
+                quadroB.remove();
+            }
+
+            const quadroC = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, sistemaFalso(false), 390, 750);
+            try {
+                const janela = quadroC.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const botao = documento.querySelector('[data-acao="alternarMovimento"]');
+                botao.click();
+                conferirIgual("um toque em Calmo liga: movimento reduzido e aria-pressed=true", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "true true");
+                janela.__sistemaMudou(true);
+                janela.__sistemaMudou(false);
+                conferirIgual("o sistema pedir ou deixar de pedir não desliga o que o jogador ligou", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "true true");
+                botao.click();
+                conferirIgual("outro toque desliga: movimento normal e aria-pressed=false", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "false false");
+                janela.__sistemaMudou(true);
+                conferirIgual("e o sistema segue sem mandar", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "false false");
+            } finally {
+                quadroC.remove();
+            }
+
+            const quadroD = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, sistemaFalso(true, true), 390, 750);
+            try {
+                const janela = quadroD.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const botao = documento.querySelector('[data-acao="alternarMovimento"]');
+                conferirIgual("Safari antes do 14 (matchMedia sem addEventListener): o jogo abre mesmo assim, com o movimento reduzido do sistema e o botão ligado",
+                    ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "true true");
+                documento.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "o", bubbles: true }));
+                conferirIgual("e o teclado, registrado depois do ouvinte do sistema, também: O desliga o movimento reduzido", ler("movimentoReduzido") + " " + botao.getAttribute("aria-pressed"), "false false");
+            } finally {
+                quadroD.remove();
+            }
+        }
+
+        function rotuloDoFocavel(elemento) {
+            return elemento.dataset.acao || elemento.id;
+        }
+
+        async function conferirTecladoNoIframe() {
+            const quadro = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, "", 390, 750);
+            try {
+                const janela = quadro.contentWindow, documento = janela.document, ler = function (expressao) { return janela.eval(expressao); };
+                const focaveis = Array.from(documento.querySelectorAll("a[href], button, input, select, textarea, [tabindex]")).filter(function (elemento) { return !elemento.disabled && elemento.tabIndex >= 0; });
+                conferir("nenhum tabindex positivo desarruma a ordem do Tab", Array.from(documento.querySelectorAll("[tabindex]")).every(function (elemento) { return Number(elemento.getAttribute("tabindex")) <= 0; }));
+                conferirIgual("o Tab visita os 16 botões na ordem da página e termina no resumo", focaveis.map(rotuloDoFocavel).join(" "), ORDEM_DO_TAB.join(" ") + " resumo");
+                conferir("o canvas não rouba um Tab (o teclado é do documento)", !focaveis.some(function (elemento) { return elemento.id === "jogo"; }));
+                const semFoco = [], semContorno = [], escondidos = [];
+                focaveis.forEach(function (elemento) {
+                    const caixa = elemento.getBoundingClientRect();
+                    if (elemento.id !== "resumo" && (caixa.width === 0 || caixa.height === 0 || janela.getComputedStyle(elemento).visibility === "hidden")) escondidos.push(rotuloDoFocavel(elemento));
+                    elemento.focus();
+                    if (documento.activeElement !== elemento) { semFoco.push(rotuloDoFocavel(elemento)); return; }
+                    const estilo = janela.getComputedStyle(elemento);
+                    if (!(elemento.matches(":focus-visible") && estilo.outlineStyle !== "none" && parseFloat(estilo.outlineWidth) >= 2)) semContorno.push(rotuloDoFocavel(elemento) + " (" + estilo.outlineStyle + " " + estilo.outlineWidth + ")");
+                    elemento.blur();
+                });
+                conferir("todo controle da ordem recebe foco (" + semFoco.join(", ") + ")", semFoco.length === 0);
+                conferir("nenhum controle está escondido ou sem tamanho (" + escondidos.join(", ") + ")", escondidos.length === 0);
+                conferir("o foco aparece em todos: contorno de pelo menos 2 px em :focus-visible (sem contorno: " + semContorno.slice(0, 3).join(", ") + ")", semContorno.length === 0);
+
+                darQuadro(janela, 16);
+                teclaNaJanela(janela, "l");
+                const resumoDoIframe = documento.getElementById("resumo");
+                conferirIgual("a tecla L leva o foco para o resumo", documento.activeElement, resumoDoIframe);
+                const caixa = resumoDoIframe.getBoundingClientRect(), estilo = janela.getComputedStyle(resumoDoIframe);
+                conferir("com o foco, o resumo aparece e cobre a tela (" + Math.round(caixa.width) + "×" + Math.round(caixa.height) + ")", caixa.width >= janela.innerWidth - 1 && caixa.height >= janela.innerHeight - 1 && estilo.clipPath === "none");
+                conferir("e tem contorno de foco", parseFloat(estilo.outlineWidth) >= 2 && estilo.outlineStyle !== "none");
+                const estadoAntes = ler("fase") + "/" + ler("faseDaMare") + "/" + ler("jogadas") + "/" + ler("rotacao");
+                ["m", "n", "q", "z", "Enter", "1"].forEach(function (tecla) { resumoDoIframe.dispatchEvent(new janela.KeyboardEvent("keydown", { key: tecla, bubbles: true, cancelable: true })); });
+                conferirIgual("no resumo as teclas são do leitor: M, N, Q, Z, Enter e 1 não jogam", ler("fase") + "/" + ler("faseDaMare") + "/" + ler("jogadas") + "/" + ler("rotacao"), estadoAntes);
+                resumoDoIframe.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+                conferir("Esc sai do resumo (o foco volta para a página)", documento.activeElement !== resumoDoIframe);
+                conferir("e o resumo some de novo (fora da vista, mas no leitor de tela)", janela.getComputedStyle(resumoDoIframe).clipPath !== "none" && janela.getComputedStyle(resumoDoIframe).display !== "none");
+
+                const botaoAplicar = documento.querySelector('[data-acao="aplicar"]');
+                const alturasAntes = ler("JSON.stringify(alturas)");
+                ler("cursor = (function () { for (var y = 0; y < TAMANHO; y++) for (var x = 0; x < TAMANHO; x++) if (moldar(estadoAtual, 'erguer', x, y)) return { x: x, y: y }; })()");
+                botaoAplicar.focus();
+                botaoAplicar.dispatchEvent(new janela.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+                conferirIgual("Enter num botão focado é do botão: o jogo não aplica por cima", ler("JSON.stringify(alturas)"), alturasAntes);
+                botaoAplicar.blur();
+                teclaNaJanela(janela, "Enter");
+                conferir("Enter fora de botão aplica no cursor", ler("JSON.stringify(alturas)") !== alturasAntes);
+                const evento = teclaNaJanela(janela, "ArrowRight");
+                conferir("as setas movem o cursor e não rolam a página (preventDefault)", evento.defaultPrevented === true);
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        const CONFIGURACAO_DO_LAYOUT = {
+            pasta: "08-celular",
+            corpo: MARCACAO_DO_PASSO,
+            quantidadeDeBotoes: 16,
+            proporcaoDoCanvas: 384 / 252,
+            mensagens: ["", "Zoom: perto", "Maré 1 passou, 3 casas a salvo. M chama a próxima ficha", "Vista girada para 270 graus. Casas escondidas: 2",
+                "Maré 2 de 2: nível 3, 3 passos de 6 casas, com chuva, chegam 1 blocos",
+                "Dia perdido: 2 de 4 casas salvas, meta 3, jogadas 5 (par 5). N recomeça. Marcada: bloco 7,7, altura 1, escondido atrás de outro bloco"],
+        };
+
+        function seCruzam(a, b) {
+            return a.left < b.right - 0.01 && a.right > b.left + 0.01 && a.top < b.bottom - 0.01 && a.bottom > b.top + 0.01;
+        }
+
+        function textoDaCaixa(elemento) {
+            const caixa = elemento.getBoundingClientRect();
+            return [caixa.top, caixa.height, caixa.width].map(function (valor) { return Math.round(valor * 100) / 100; }).join("/");
+        }
+
+        /* Em cada dia × giro: ligar o H põe a leitura no fim da página. Ela não cobre o #aviso nem as setas, e nada acima dela se mexe. */
+        async function conferirALeituraDoHNoIframe(largura, altura) {
+            const quadro = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, "", largura, altura);
+            try {
+                const janela = quadro.contentWindow, documento = janela.document, nome = largura + "×" + altura;
+                const leituraDoIframe = documento.getElementById("leitura"), avisoDoIframe = documento.getElementById("aviso");
+                /* O celular tem barra de rolagem que flutua; o Chrome do teste tem uma de 15 px que, ao aparecer em 360×640, encolhe o canvas e empurra tudo. Escondê-la mede o que o dedo vê. */
+                const semBarra = documento.createElement("style");
+                semBarra.textContent = "html { scrollbar-width: none; }";
+                documento.head.appendChild(semBarra);
+                const acimaDela = Array.from(documento.body.children).filter(function (elemento) { return elemento.tagName !== "SCRIPT" && elemento.id !== "leitura" && elemento.id !== "resumo"; });
+                const setas = Array.from(documento.querySelectorAll("#setas button"));
+                const cobriuOAviso = [], cobriuAsSetas = [], mexeu = [], semTexto = [], rolouNaVertical = [], rolouNaHorizontal = [], tapouPorCima = [];
+                let instante = 16, combinacoes = 0;
+                const pontoDoMeio = function (caixa) { return { x: (caixa.left + caixa.right) / 2, y: (caixa.top + caixa.bottom) / 2 }; };
+
+                DIAS_DA_AMOSTRA.forEach(function (dia) {
+                    for (let giro = 0; giro < 4; giro++) {
+                        janela.eval("if (depuracaoLigada) depuracaoLigada = false; rotacao = 0; ponteiro = null;");
+                        janela.iniciarDia(dia);
+                        for (let giros = 0; giros < giro; giros++) janela.girarVista(1);
+                        instante += 16; darQuadro(janela, instante);
+                        const antes = acimaDela.map(textoDaCaixa).join(" ");
+                        const rolagemSemH = documento.documentElement.scrollHeight;
+                        teclaNaJanela(janela, "h");
+                        janela.eval("ponteiro = { x: 192, y: 126 };");
+                        instante += 16; darQuadro(janela, instante);
+                        const rotulo = "dia " + (dia + 1) + " giro " + giro * 90 + "°";
+                        combinacoes++;
+                        const depois = acimaDela.map(textoDaCaixa).join(" ");
+                        if (antes !== depois) mexeu.push(rotulo);
+                        const caixaDaLeitura = leituraDoIframe.getBoundingClientRect();
+                        if (leituraDoIframe.textContent.length < 20 || caixaDaLeitura.height === 0) semTexto.push(rotulo);
+                        if (seCruzam(caixaDaLeitura, avisoDoIframe.getBoundingClientRect())) cobriuOAviso.push(rotulo);
+                        setas.forEach(function (seta) { if (seCruzam(caixaDaLeitura, seta.getBoundingClientRect())) cobriuAsSetas.push(rotulo + " " + seta.dataset.acao); });
+                        [avisoDoIframe].concat(setas).forEach(function (alvo) {
+                            const centro = pontoDoMeio(alvo.getBoundingClientRect());
+                            const topo = centro.y < janela.innerHeight ? documento.elementFromPoint(centro.x, centro.y) : null;
+                            if (topo === leituraDoIframe) tapouPorCima.push(rotulo + " " + (alvo.dataset.acao || alvo.id));
+                        });
+                        if (documento.documentElement.scrollWidth > janela.innerWidth) rolouNaHorizontal.push(rotulo + " (" + documento.documentElement.scrollWidth + ")");
+                        if (altura === 750 && documento.documentElement.scrollHeight > janela.innerHeight) rolouNaVertical.push(rotulo + " (" + documento.documentElement.scrollHeight + ")");
+                        if (altura === 750 && rolagemSemH > janela.innerHeight) rolouNaVertical.push(rotulo + " sem H (" + rolagemSemH + ")");
+                        teclaNaJanela(janela, "h");
+                        instante += 16; darQuadro(janela, instante);
+                    }
+                });
+                conferirIgual(nome + ": foram " + combinacoes + " combinações de dia × giro com o H ligado", combinacoes, DIAS_DA_AMOSTRA.length * 4);
+                conferir(nome + ": com H a leitura tem texto e ocupa lugar (" + semTexto.slice(0, 3).join(", ") + ")", semTexto.length === 0);
+                conferir(nome + ": a leitura nunca cobre o #aviso (cobriu em " + cobriuOAviso.length + " de " + combinacoes + ": " + cobriuOAviso.slice(0, 3).join(", ") + ")", cobriuOAviso.length === 0);
+                conferir(nome + ": a leitura nunca cobre as setas (" + cobriuAsSetas.slice(0, 3).join(", ") + ")", cobriuAsSetas.length === 0);
+                conferir(nome + ": nada do que é tocado (aviso e setas) fica por baixo da leitura no ponto do meio (" + tapouPorCima.slice(0, 3).join(", ") + ")", tapouPorCima.length === 0);
+                conferir(nome + ": ligar o H não mexe em nada acima da leitura (mexeu em " + mexeu.slice(0, 3).join(", ") + ")", mexeu.length === 0);
+                conferir(nome + ": com H, sem rolagem horizontal (" + rolouNaHorizontal.slice(0, 3).join(", ") + ")", rolouNaHorizontal.length === 0);
+                if (altura === 750) conferir(nome + ": com H e sem H, a página não rola na vertical (" + rolouNaVertical.slice(0, 3).join(", ") + ")", rolouNaVertical.length === 0);
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function conferirAlvosDeToqueNoIframe(largura, altura) {
+            const quadro = await abrirPassoNoIframe("08-celular", MARCACAO_DO_PASSO, "", largura, altura);
+            try {
+                const janela = quadro.contentWindow, documento = janela.document, nome = largura + "×" + altura;
+                darQuadro(janela, 16);
+                const alvos = Array.from(documento.querySelectorAll("button, a[href], input, select, textarea, [role=button], [data-acao]"));
+                const pequenos = alvos.filter(function (alvo) {
+                    const caixa = alvo.getBoundingClientRect();
+                    return caixa.width < LADO_MINIMO_DO_ALVO - 0.01 || caixa.height < LADO_MINIMO_DO_ALVO - 0.01;
+                }).map(function (alvo) { const caixa = alvo.getBoundingClientRect(); return rotuloDoFocavel(alvo) + " " + caixa.width.toFixed(1) + "×" + caixa.height.toFixed(1); });
+                conferir(nome + ": " + alvos.length + " alvos de toque, todos com pelo menos 48×48 px (pequenos: " + pequenos.join(", ") + ")", alvos.length === 16 && pequenos.length === 0);
+                const canvas = documento.getElementById("jogo").getBoundingClientRect();
+                conferir(nome + ": o mapa, que é o alvo do toque em dois passos, mede " + Math.round(canvas.width) + "×" + Math.round(canvas.height) + " (o bloco é pequeno de propósito)", canvas.width >= 300 && canvas.height >= 190);
+            } finally {
+                quadro.remove();
+            }
+        }
+
+        async function principal() {
+            await testarNoIframe("movimento reduzido segue o sistema", conferirMovimentoSegueOSistema);
+            await testarNoIframe("teclado", conferirTecladoNoIframe);
+            await testarNoIframe("alvos de toque 390×750", function () { return conferirAlvosDeToqueNoIframe(390, 750); });
+            await testarNoIframe("alvos de toque 360×640", function () { return conferirAlvosDeToqueNoIframe(360, 640); });
+            await testarNoIframe("layout 390×750", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 390, 750); });
+            await testarNoIframe("layout 360×640", function () { return conferirLayoutDoPasso(CONFIGURACAO_DO_LAYOUT, 360, 640); });
+            await testarNoIframe("leitura do H 390×750", function () { return conferirALeituraDoHNoIframe(390, 750); });
+            await testarNoIframe("leitura do H 360×640", function () { return conferirALeituraDoHNoIframe(360, 640); });
+            testar("sem erro de console e com o estado restaurado", function () {
+                prepararODia(0, false);
+                conferirIgual("a carga não registrou console.error", errosNaCarga.join(" | "), "");
+                conferirIgual("nenhum console.error durante os casos", errosDeConsole.join(" | "), "");
+                conferirIgual("o dia carregado é o 1", diaCarregado === DIAS[0], true);
+                conferirIgual("o giro final é 0", rotacao, 0);
+                conferir("o laço segue vivo", avancarQuadro(16));
+            });
+        }
+
+        principal().finally(finalizar);
+    </script>
+</body>
+
+</html>
