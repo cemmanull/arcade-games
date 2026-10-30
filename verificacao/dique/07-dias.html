@@ -76,6 +76,7 @@
         const PLANOS_DE_5_JOGADAS_DO_DIA_10 = 55;
         const TETO_DO_GUIA = 2000000, LIMITE_DO_GUIA = 6;
         const CASA_CHAVE_ESCONDIDA = { x: 2, y: 5 };
+        const CASA_CHAVE_DO_CENTRO = { x: 4, y: 4 };      // GUIA 7 §5: nenhum giro a mostra ao dedo; só as setas chegam
         const NOMES_DAS_VARIAVEIS_DO_ROBO = ["diaCarregado", "alturasEmTexto", "objetosEmTexto", "alturasIniciais", "alturas", "casasDoMar", "casasComCasa", "casasDeNascente", "tabuaDeMares", "metaDoDia"];
 
         /* Um plano que vence cada dia, achado FORA do jogo (uma busca própria em node que lista os planos do tamanho do par) e jogado aqui pelo teclado.
@@ -364,20 +365,6 @@
         // ------------------------------------------------------------
         // O pixel sob a casa-chave
         // ------------------------------------------------------------
-        function pixelsDaCasa(casa, deslocamento) {       // varre o canvas inteiro; deslocamento 0.5 = o centro de cada pixel, 0 = o canto
-            let achados = 0, somaX = 0, somaY = 0;
-            const pixels = [];
-            for (let y = 0; y < ALTURA_DA_VISTA; y++) {
-                for (let x = 0; x < LARGURA_DA_VISTA; x++) {
-                    const acerto = casaSobOPixel({ x: x + deslocamento, y: y + deslocamento });
-                    if (acerto && acerto.x === casa.x && acerto.y === casa.y) { achados++; somaX += x; somaY += y; pixels.push({ x: x, y: y }); }
-                }
-            }
-            const meio = { x: somaX / Math.max(1, achados), y: somaY / Math.max(1, achados) };
-            const maisPerto = pixels.slice().sort(function (a, b) { return Math.hypot(a.x - meio.x, a.y - meio.y) - Math.hypot(b.x - meio.x, b.y - meio.y); })[0] || null;
-            return { achados: achados, maisPertoDoMeio: maisPerto };
-        }
-
         function tocarNoPixel(pixel) {                    // pointerdown no canvas e pointerup na janela, como o dedo
             const caixa = tela.getBoundingClientRect();
             const opcoes = { button: 0, pointerId: 11, bubbles: true, clientX: caixa.left + pixel.x * caixa.width / tela.width, clientY: caixa.top + pixel.y * caixa.height / tela.height };
@@ -622,6 +609,23 @@
             conferir("[ESCONDIDA] e o aviso pede o segundo toque: " + aviso.textContent, /^Marcada: casa 2, 5.*Toque de novo para erguer/.test(aviso.textContent));
             tocarNoPixel(pixel);
             conferirIgual("[ESCONDIDA] o segundo toque ergue (2, 5): 1 → 2, uma jogada, desmarcada", alturas[5][2] + "/" + jogadas + "/" + marcada, "2/1/false");
+            prepararDia(0);
+        });
+
+        testar("[CENTRO] dia 10: a casa-chave (4, 4) não tem pixel em nenhum dos quatro giros; as setas chegam a ela, o aviso diz que está escondida e Enter a ergue", function () {
+            prepararDia(9);
+            conferirIgual("[CENTRO] a vista de partida: dia 10, giro 0, zoom " + camera.zoom + ", rolagem (" + camera.desvioX + ", " + camera.desvioY + ")", [indiceDoDia, rotacao, camera.zoom, camera.desvioX, camera.desvioY].join("/"), "9/0/1/0/0");
+            conferir("[CENTRO] a (4, 4) começa na altura " + alturas[4][4] + " (esperado 0), é moldável e o estoque tem blocos (" + estadoAtual.blocos + ")", alturas[4][4] === 0 && motivoDaRecusa(estadoAtual, "erguer", 4, 4) === "" && estadoAtual.blocos >= 1);
+            rodarNosQuatroGiros(function (giro) {
+                const centro = pixelsDaCasa(CASA_CHAVE_DO_CENTRO, 0.5), canto = pixelsDaCasa(CASA_CHAVE_DO_CENTRO, 0);
+                conferir("[CENTRO] giro " + giro + ": " + centro.achados + " pixels (centro de cada pixel) e " + canto.achados + " (canto inteiro) acertam (4, 4), esperado 0 e 0", centro.achados === 0 && canto.achados === 0);
+            });
+            cursor = { x: 2, y: 5 };
+            apertarTecla("ArrowRight"); apertarTecla("ArrowRight"); apertarTecla("ArrowUp");
+            conferirIgual("[CENTRO] as setas levam o cursor de (2, 5) à (4, 4)", cursor.x + "," + cursor.y, "4,4");
+            conferir("[CENTRO] e o aviso diz que ela está escondida: " + aviso.textContent, /casa 4, 4, altura 0, escondida atrás de um bloco/.test(aviso.textContent));
+            apertarTecla("Enter");
+            conferirIgual("[CENTRO] erguer pelo cursor funciona: 0 → 1, uma jogada", alturas[4][4] + "/" + jogadas, "1/1");
             prepararDia(0);
         });
 

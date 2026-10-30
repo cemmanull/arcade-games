@@ -462,6 +462,36 @@
             prepararODia(0, false);
         });
 
+        testar("CENTRO DO DIA 10 (GUIA 8 §1): nenhum giro deixa o toque achar a (4, 4); tocar perto, andar pelos botões de seta e tocar Aplicar a ergue", function () {
+            prepararODia(9, false);
+            try {
+                conferir("a vista de partida: zoom 1, sem rolagem, e a (4, 4) na altura 0", camera.zoom === 1 && camera.desvioX === 0 && camera.desvioY === 0 && alturas[4][4] === 0);
+                for (let giro = 0; giro < 4; giro++) {     // o regras.js deste passo é cópia do 7, mas nada as amarra: a varredura vale para esta cópia
+                    rotacao = giro;
+                    listaDeDesenho = montarListaDeDesenho();
+                    const centro = pixelsDaCasa({ x: 4, y: 4 }, 0.5), canto = pixelsDaCasa({ x: 4, y: 4 }, 0);
+                    conferir("giro " + giro + ": " + centro.achados + " pixels (centro de cada pixel) e " + canto.achados + " (canto inteiro) acertam (4, 4), esperado 0 e 0", centro.achados === 0 && canto.achados === 0);
+                }
+                rotacao = 0;
+                listaDeDesenho = montarListaDeDesenho();
+                const perto = casasQueOPickingAcha().sort(function (a, b) { return (Math.abs(a.x - 4) + Math.abs(a.y - 4)) - (Math.abs(b.x - 4) + Math.abs(b.y - 4)); })[0];
+                conferir("há uma casa que o dedo acha para começar", perto !== undefined);
+                if (!perto) return;
+                toqueNoPixel(pixelDaCasa(perto.x, perto.y));
+                conferirIgual("o toque marca a casa mais perto da (4, 4) que o dedo acha", cursor.x + "," + cursor.y + "/" + marcada, perto.x + "," + perto.y + "/true");
+                for (let passos = 0; passos < 20 && (cursor.x !== 4 || cursor.y !== 4); passos++) {
+                    if (cursor.x !== 4) clicarNoBotao(cursor.x < 4 ? "cursorParaDireita" : "cursorParaEsquerda");
+                    else clicarNoBotao(cursor.y < 4 ? "cursorParaBaixo" : "cursorParaCima");
+                }
+                conferirIgual("os botões de seta levam o cursor à (4, 4) e desmarcam o toque", cursor.x + "," + cursor.y + "/" + marcada, "4,4/false");
+                conferirIgual("o aviso é o que o GUIA cita", aviso.textContent, "Cursor no bloco 4,4, altura 0, escondido atrás de outro bloco");
+                clicarNoBotao("aplicar");
+                conferirIgual("Aplicar ergue a casa do cursor, não a do toque: (4, 4) 0 → 1, " + perto.x + ", " + perto.y + " como estava, uma jogada", alturas[4][4] + "/" + alturas[perto.y][perto.x] + "/" + jogadas, "1/" + alturasIniciais[perto.y][perto.x] + "/1");
+            } finally {
+                prepararODia(0, false);
+            }
+        });
+
         testar("TOQUE × ARRASTO: mais de 8 px de caminho é arrasto (rola o mapa, não marca nem aplica, mesmo voltando ao ponto); até 8 px é toque", function () {
             prepararODia(0, false);
             conferirIgual("a regra do GDD: o limite do toque é de 8 px", LIMITE_DO_TOQUE, LIMITE_DO_TOQUE_ESPERADO);

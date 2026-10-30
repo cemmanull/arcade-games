@@ -1,5 +1,5 @@
 /*
-  APOIO DO DIQUE: o que as páginas dos passos 4 a 6 repartem.
+  APOIO DO DIQUE: o que as páginas dos passos repartem.
 
   Carregue DEPOIS de ../apoio.js e ANTES dos scripts do jogo. Só declara funções e constantes de nome próprio: os nomes do jogo
   (alturas, agua, cantosDoBloco, avancarQuadro...) são lidos quando a função é CHAMADA, nunca ao carregar. Cada função usa o
@@ -7,7 +7,8 @@
 
   1. A conta de enchente do teste, escrita de outro jeito que a do jogo (ponto fixo sobre a grade inteira, e distância por relaxamento).
   2. A projeção do teste (fórmula escrita à mão: o mapa tem 10×10 casas de 36 px) e o gravador de polígonos do canvas.
-     Mais o pintor de trás para a frente do teste e o caso ARESTAS COMPARTILHADAS dos passos 5 e 6.
+     Mais o pintor de trás para a frente do teste, o caso ARESTAS COMPARTILHADAS dos passos 5 e 6 e a varredura do canvas
+     atrás dos pixels de uma casa (passos 7 e 8).
   3. Os botões [data-acao]: clicar de verdade e conferir o efeito.
   4. O passo inteiro num iframe (srcdoc, com o style.css de verdade): tamanhos de tela, movimento reduzido.
 */
@@ -330,6 +331,20 @@ function conferirArestasComunsComCamera(config) {
     conferir("e pelo pixel da janela (zoom e rolagem desfeitos em ponto flutuante): casaSobOPixel = " + nomeDaReferencia, divergenciasDaCamera === 0, divergenciasDaCamera + " divergências; " + exemplosDaCamera.join(" | "));
     conferir("a amostra usou os " + config.zooms.length + " zooms e " + rolagensVistas.size + " rolagens, com cova seca em " + comCovaSeca + " empates e bloco alto (≥ 3) em " + comAlturaAlta,
         zoomsVistos.size === config.zooms.length && rolagensVistas.size >= 20 && (!exigirCovaSeca || comCovaSeca > 200) && comAlturaAlta > 200);
+}
+
+function pixelsDaCasa(casa, deslocamento) {       // varre o canvas inteiro; deslocamento 0.5 = o centro de cada pixel, 0 = o canto
+    let achados = 0, somaX = 0, somaY = 0;
+    const pixels = [];
+    for (let y = 0; y < ALTURA_DA_VISTA; y++) {
+        for (let x = 0; x < LARGURA_DA_VISTA; x++) {
+            const acerto = casaSobOPixel({ x: x + deslocamento, y: y + deslocamento });
+            if (acerto && acerto.x === casa.x && acerto.y === casa.y) { achados++; somaX += x; somaY += y; pixels.push({ x: x, y: y }); }
+        }
+    }
+    const meio = { x: somaX / Math.max(1, achados), y: somaY / Math.max(1, achados) };
+    const maisPerto = pixels.slice().sort(function (a, b) { return Math.hypot(a.x - meio.x, a.y - meio.y) - Math.hypot(b.x - meio.x, b.y - meio.y); })[0] || null;
+    return { achados: achados, maisPertoDoMeio: maisPerto };
 }
 
 function alfaDoEstilo(estilo) {                   // "rgba(42, 111, 219, 0.55)" → 0.55; cor sem alfa → 1

@@ -25,6 +25,8 @@ O losango de um bloco, em "Longe", tem 36×18 px: pequeno para um dedo. O jogo n
 1. **O primeiro toque marca**, o segundo, no mesmo bloco, **aplica** (a regra do passo 3, `tocar`). Quem erra o bloco marca outro e não estraga nada.
 2. **O cursor anda por botões de 48 px** (← ↑ ↓ →), e o zoom **Perto** dobra o bloco para 72×36.
 
+No dia 10 as setas deixam de ser conforto. O centro, (4, 4), fica atrás das quinas de altura 3 em **todos** os giros, e nenhum toque no mapa o acerta. Toque num bloco perto dele e ande com as setas até lá: atrás do bloco o cursor fica tracejado, e o aviso diz "Cursor no bloco 4,4, altura 0, escondido atrás de outro bloco". Então toque **Aplicar**: ele age na casa do cursor, não na do último toque.
+
 ```css
 button { min-width: 48px; min-height: 48px; }
 ```
@@ -155,7 +157,8 @@ No computador de desenvolvimento, em Chrome sem placa de vídeo, o desenho custo
 6. Tire `min-height: 48px` do `button` e olhe a página em 360 de largura. Que botões ficam pequenos? (A página de teste os pegaria.)
 7. Abra `verificacao/medicao/dique-08.html` no computador e aperte **Medir**. Qual cenário custa mais? Por quê (conte as casas com água e o H)?
 8. Com o jogo aberto, ligue e desligue "reduzir animações" no sistema (no Chrome, o painel Rendering do DevTools emula isso). O Calmo acompanha? E depois que você toca no Calmo?
-9. **Quebre de propósito:** em `avisar`, escreva também no `#resumo`. O leitor de tela fica falando? Por que o aviso é uma frase e o resumo, uma lista que só se reescreve quando muda?
+9. No dia 10, jogue só tocando, sem teclado, e erga o centro, (4, 4). Toque onde ele estaria, em cada giro: que bloco o toque marca? Depois chegue a ele pelos botões de seta (o que o aviso diz?) e toque **Aplicar**.
+10. **Quebre de propósito:** em `avisar`, escreva também no `#resumo`. O leitor de tela fica falando? Por que o aviso é uma frase e o resumo, uma lista que só se reescreve quando muda?
 
 ---
 
